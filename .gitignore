@@ -57,3 +57,8 @@ android/local.properties
 android/key.properties
 ios/.generated/
 ios/Pods/
+
+# ==============================================================================
+# Claude Code - Local Overrides (não commitar)
+# ==============================================================================
+.claude/settings.local.json
