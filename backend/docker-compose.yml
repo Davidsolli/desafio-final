@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  # Container da nossa API (Backend FastAPI)
+  api:
+    build: .
+    container_name: omniconnect-api
+    ports:
+      - "8000:8000"
+    # O volume abaixo sincroniza a pasta local com o container, pra você não precisar dar "docker build" a toda hora que salvar o código
+    volumes:
+      - .:/app
+    environment:
+      - DATABASE_URL=postgresql://omni_user:omni_pass@db:5432/omniconnect_db
+      # Futuramente outras variáveis (OPENAI_API_KEY) ficarão no arquivo .env
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # Container do nosso Banco de Dados com pgvector integrado para RAG 
+  db:
+    image: ankane/pgvector:latest
+    container_name: omniconnect-db
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=omni_user
+      - POSTGRES_PASSWORD=omni_pass
+      - POSTGRES_DB=omniconnect_db
+    # Criamos um volume para que os dados do banco não sumam quando o container cair
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U omni_user -d omniconnect_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  # Armazena nossa base de dados (Inclusive os Vetores) na máquina local
+  postgres_data:

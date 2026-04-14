@@ -1,0 +1,27 @@
+# versioning
+.git/
+.gitignore
+
+# Ambiente virtual local
+.venv/
+venv/
+env/
+
+# Python caching
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Arquivos de ambiente e segredos locais NUNCA devem ir para a imagem
+.env
+.env.*
+*.json
+
+# Volumes de banco de dados locais
+postgres_data/
+
+# OS/IDEs
+.idea/
+.vscode/
+.DS_Store

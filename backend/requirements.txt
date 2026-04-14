@@ -1,0 +1,9 @@
+# FastAPI base
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+
+# As equipes podem ir inserindo abaixo outras bilbiotecas que venham a usar, ex:
+# pydantic>=2.7.1
+# sqlalchemy>=2.0.30
+# langchain>=0.2.0
+# psycopg2-binary>=2.9.9

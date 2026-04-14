@@ -1,0 +1,59 @@
+# ==============================================================================
+# OmniConnect - Root .gitignore
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# IDEs e Editores
+# ------------------------------------------------------------------------------
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# ------------------------------------------------------------------------------
+# Backend (Python / FastAPI)
+# ------------------------------------------------------------------------------
+# Arquivos de byte-compiled / Caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Ambientes virtuais (Isso é muito importante barrar no Git)
+.venv/
+venv/
+env/
+
+# Segredos, Senhas e Variáveis Locais
+.env
+.env.*
+!.env.example
+firebase-credentials.json
+firebase-*.json
+
+# Volumes Locais do Docker
+postgres_data/
+
+# Banco de Dados SQLite (Caso venham a usar para testes locas)
+*.db
+*.sqlite3
+
+# ------------------------------------------------------------------------------
+# Frontend (Flutter / Dart) - Para prevenir no futuro
+# ------------------------------------------------------------------------------
+.dart_tool/
+.packages
+build/
+.pub-cache/
+.pub/
+/build/
+
+# Android/iOS configs
+android/local.properties
+android/key.properties
+ios/.generated/
+ios/Pods/
