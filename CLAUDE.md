@@ -47,15 +47,21 @@ gh pr create --title "feat: sua feature"
 
 ---
 
-## 🎯 Padrão de Commits
+## 📝 Padrão de Commits
+
+**📖 LER COMPLETO em: [`COMMIT_GUIDE.md`](./COMMIT_GUIDE.md)** ← OBRIGATÓRIO!
 
 **Use Conventional Commits em Português:**
 
 ```
-feat: implementar CRUD de usuários
-fix: corrigir validação de email
-docs: atualizar README
+feat(usuarios): implementar CRUD de usuários
+fix(auth): corrigir validação de email
+docs(api): atualizar README
 chore: adicionar bcrypt ao requirements
+
+Corpo detalhado (opcional):
+- Explique POR QUÊ, não O QUÊ
+- Use bullet points se necessário
 ```
 
 **Sem Co-Author** (removido via settings.json)
