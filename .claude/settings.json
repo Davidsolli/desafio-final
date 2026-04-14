@@ -1,0 +1,19 @@
+{
+  "attribution": {
+    "commit": ""
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Verificar se o usuário está tentando fazer push na main branch. Input: $ARGUMENTS. Se o comando contém 'push' E a branch atual é 'main', rejeitar com mensagem: 'ERRO: Push direto na main é proibido! Crie uma branch: git checkout -b feat/seu-recurso'. Caso contrário, permitir. Resposta em JSON com decision: allow ou deny.",
+            "if": "Bash(git push*)"
+          }
+        ]
+      }
+    ]
+  }
+}
