@@ -85,29 +85,62 @@ backend/app/
 
 ---
 
+## 🤖 Como Pedir pra IA Fazer (IMPORTANTE!)
+
+**Leia PRIMEIRO:** [`IA_WORKFLOW.md`](./IA_WORKFLOW.md) ← OBRIGATÓRIO!
+
+**Exemplo rápido:**
+```
+Claude, implemente o módulo de treinos conforme PRD em docs/PRD_TREINOS.md
+
+Stack: FastAPI + SQLAlchemy + PostgreSQL
+Requisitos:
+- 5 endpoints CRUD funcionando
+- Validações com Pydantic
+- ≥8 testes de integração (≥80% cobertura)
+- Sem Co-Author nos commits
+
+Padrão: arquitetura em camadas, async/await, sem hardcodes
+Output: código funcional, testes passando, commit feito, branch feat/treinos-crud
+```
+
+**Resultado:** Feature completa em 20 minutos! ⚡
+
+---
+
 ## 🚀 Como Começar Uma Nova Feature
 
+### Com Claude (Recomendado!) 🤖
+```
+1. Crie um PRD (30 min)
+2. Passe pro Claude com prompt específico (5 min)
+3. Claude implementa tudo (10 min)
+4. Você revisa e aprova (15 min)
+TOTAL: 1 hora ⚡
+```
+
+### Manual (Se Precisar)
 ```bash
-# 1. Ler PRD (vê em docs/PRD_*.md)
+# 1. Ler PRD
 cat docs/PRD_USUARIOS.md
 
 # 2. Criar branch
 git checkout -b feat/sua-feature
 
-# 3. Implementar
+# 3. Implementar (seguir arquitetura em camadas)
 # (estará automática padronizado pela estrutura)
 
 # 4. Testes
 docker compose up
-pytest tests/
+pytest tests/ -v --cov
 
 # 5. Commit + Push
 git add .
-git commit -m "feat: sua feature"
+git commit -m "feat(modulo): sua feature"
 git push -u origin feat/sua-feature
 
 # 6. Criar PR
-gh pr create --title "feat: sua feature"
+gh pr create --title "feat(modulo): sua feature"
 ```
 
 ---
