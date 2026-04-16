@@ -6,7 +6,20 @@ uvicorn[standard]>=0.29.0
 sqlalchemy>=2.0.30
 asyncpg>=0.29.0
 pgvector>=0.2.5
+psycopg2-binary>=2.9.0
+
+# Para testes
+aiosqlite>=0.17.0
 
 # Validadores e Env
 pydantic-settings>=2.2.1
+pydantic>=2.0.0
+
+# Segurança
+bcrypt>=4.1.0
+
+# Testes
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+httpx>=0.24.0
 
