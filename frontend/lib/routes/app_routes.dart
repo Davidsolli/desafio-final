@@ -11,6 +11,11 @@ import '../screens/student/metrics_screen.dart';
 import '../screens/student/goals_screen.dart';
 import '../screens/student/chat_screen.dart';
 import '../screens/student/profile_screen.dart';
+import '../screens/notifications_screen.dart';
+import '../screens/trainer/trainer_dashboard.dart';
+import '../screens/trainer/trainer_student_detail.dart';
+import '../screens/trainer/trainer_sheets.dart';
+import '../screens/trainer/trainer_profile.dart';
 
 class AppRoutes {
   static const String splash = '/';
@@ -24,6 +29,7 @@ class AppRoutes {
   static const String goals = '/goals';
   static const String chat = '/chat';
   static const String profile = '/profile';
+  static const String notifications = '/notifications';
 
   static final GoRouter router = GoRouter(
     initialLocation: splash,
@@ -71,6 +77,28 @@ class AppRoutes {
       GoRoute(
         path: profile,
         builder: (context, state) => const ProfileScreen(),
+      ),
+      GoRoute(
+        path: notifications,
+        builder: (context, state) => const NotificationsScreen(),
+      ),
+      GoRoute(
+        path: '/trainer/dashboard',
+        builder: (context, state) => const TrainerDashboard(),
+      ),
+      GoRoute(
+        path: '/trainer/student/:studentId',
+        builder: (context, state) => TrainerStudentDetail(
+          studentId: state.pathParameters['studentId'] ?? 's1',
+        ),
+      ),
+      GoRoute(
+        path: '/trainer/sheets',
+        builder: (context, state) => const TrainerSheets(),
+      ),
+      GoRoute(
+        path: '/trainer/profile',
+        builder: (context, state) => const TrainerProfile(),
       ),
     ],
   );
