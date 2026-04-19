@@ -8,6 +8,8 @@ Backend do aplicativo OmniConnect Fitness construído com **FastAPI + SQLAlchemy
 
 ## 🎯 Para Começar (Rápido!)
 
+### Opção 1: Com Docker (Recomendado)
+
 **Pré-requisito único:** Tenha o [Docker](https://www.docker.com/products/docker-desktop) instalado.
 
 ```bash
@@ -23,6 +25,40 @@ docker compose up --build
 ```
 
 **Próxima vez:** Basta rodar `docker compose up` (sem `--build`)
+
+### Opção 2: Localmente (Sem Docker)
+
+**Pré-requisitos:** Python 3.9+, PostgreSQL 14+, pip
+
+```bash
+# 1. Criar banco de dados PostgreSQL
+psql -U postgres
+# CREATE USER omni_user WITH PASSWORD 'omni_pass';
+# CREATE DATABASE omniconnect_db OWNER omni_user;
+# \q
+
+# 2. Configurar .env
+cd backend
+cp .env.example .env
+# Editar: DATABASE_URL="postgresql://omni_user:omni_pass@localhost:5432/omniconnect_db"
+
+# 3. Criar virtual environment
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+# ou venv\Scripts\activate  # Windows
+
+# 4. Instalar dependências
+pip install -r requirements.txt
+
+# 5. Rodar servidor
+uvicorn main:app --reload --port 8000
+
+# 6. Acesse:
+# - API: http://localhost:8000
+# - Swagger: http://localhost:8000/docs
+```
+
+**Para mais detalhes, veja a seção "🛠️ Desenvolvimento Local" abaixo.**
 
 ---
 
@@ -110,7 +146,9 @@ docker exec -it omniconnect-db psql -U omni_user -d omniconnect_db
 
 ## 🧪 Testando a API
 
-Após rodar `docker compose up`, a API estará disponível em:
+### Acessar endpoints (com Docker ou local)
+
+Após rodar a API, estará disponível em:
 
 | Recurso | URL |
 |---------|-----|
@@ -133,63 +171,161 @@ Você verá:
 }
 ```
 
+### Rodar Test Suite
+
+**Com Docker:**
+```bash
+docker exec omniconnect-api pytest tests/ -v
+```
+
+**Localmente:**
+```bash
+# Com venv ativado
+pytest tests/ -v
+
+# Com cobertura
+pytest tests/ -v --cov=app --cov-report=html
+
+# Apenas testes de autenticação (novo!)
+pytest tests/test_auth.py -v
+
+# Apenas testes de usuários
+pytest tests/test_users.py -v
+```
+
+**Resultado esperado:**
+```
+32 passed in 5.42s ✅
+```
+
 ---
 
 ## 🛠️ Desenvolvimento Local
 
-### Editar Código
+### Com Docker
+
+**Editar Código:**
 1. Abra qualquer arquivo em `backend/app/`
 2. Salve o arquivo
 3. A API recarrega automaticamente (Live Reload via volume Docker)
 4. Teste a mudança em http://localhost:8000/docs
 
-### Adicionar Dependências
+**Adicionar Dependências:**
 1. Edite `backend/requirements.txt`
 2. Rode: `docker compose up --build` (recria o container)
 
-### Variáveis de Ambiente
+### Sem Docker (Python Local)
+
+**Editar Código:**
+1. Abra qualquer arquivo em `backend/app/`
+2. Salve o arquivo
+3. Uvicorn recarrega automaticamente (`--reload`)
+4. Teste em http://localhost:8000/docs
+
+**Adicionar Dependências:**
+```bash
+# Com venv ativado
+pip install nova-dependencia
+pip freeze > requirements.txt
+```
+
+**Variáveis de Ambiente:**
 - Arquivo: `backend/.env` (crie se não existir)
-- Ou configure em `docker-compose.yml` (seção `environment`)
+- Copiar template: `cp .env.example .env`
+- Editar com suas credenciais PostgreSQL e JWT SECRET_KEY
 - Exemplo:
   ```env
-  DATABASE_URL=postgresql://omni_user:omni_pass@db:5432/omniconnect_db
+  DATABASE_URL=postgresql://omni_user:omni_pass@localhost:5432/omniconnect_db
+  SECRET_KEY=sua-chave-segura-minimo-32-caracteres
   OPENAI_API_KEY=seu-token-aqui
   ```
+
 
 ---
 
 ## ❌ Troubleshooting
 
-### "Porta 8000 já está em uso"
-```bash
-# Ver qual processo está usando
-lsof -i :8000
+### Com Docker
 
-# Ou parar todos os containers Docker
+**"Porta 8000 já está em uso"**
+```bash
+# Parar todos os containers
 docker compose down
+
+# Ou usar porta diferente
+docker compose up -d -e PORT=8001
 ```
 
-### "Não consigo conectar ao banco"
+**"Não consigo conectar ao banco"**
 ```bash
-# Verificar logs do DB
 docker compose logs db
-
-# Reiniciar DB
 docker compose restart db
 ```
 
-### "Mudei o código mas a API não recarregou"
+**"Mudei o código mas a API não recarregou"**
 ```bash
-# Reiniciar container API
 docker compose restart api
 ```
 
-### "Erro ao buildar: 'requirements.txt não encontrado'"
+### Sem Docker (Local)
+
+**"ModuleNotFoundError: No module named 'jose'"**
 ```bash
-# Certifique-se de que está na pasta backend/
-pwd
-# Deve retornar: .../projeto-final/backend
+pip install python-jose[cryptography]
 ```
+
+**"psycopg2: connection to server at 'localhost' failed"**
+```bash
+# Verificar se PostgreSQL está rodando
+# Linux/Mac
+brew services list | grep postgres
+
+# Reiniciar PostgreSQL
+brew services restart postgresql@14
+
+# Verificar conexão
+psql -U omni_user -d omniconnect_db -c "SELECT 1"
+```
+
+**"DATABASE_URL not set"**
+```bash
+# Criar .env a partir do template
+cp .env.example .env
+
+# Editar com credenciais reais
+nano .env
+```
+
+**"Porta 8000 já está em uso"**
+```bash
+# Usar porta diferente
+uvicorn main:app --reload --port 8001
+
+# Ou matar processo
+lsof -i :8000 | grep LISTEN | awk '{print $2}' | xargs kill -9
+```
+
+**"FATAL: password authentication failed"**
+```bash
+# Verificar senha no .env
+# Ou resetar no PostgreSQL
+sudo -u postgres psql -c "ALTER USER omni_user WITH PASSWORD 'nova_senha';"
+```
+
+**"Testes falhando com erro de banco"**
+```bash
+# Limpar cache pytest
+rm -rf .pytest_cache
+pytest tests/ -v
+```
+
+---
+
+## 📚 Documentação Adicional
+
+- **Arquitetura:** Ver seção "📁 Arquitetura do Projeto" abaixo
+- **Padrão de Commits:** [`COMMIT_GUIDE.md`](../COMMIT_GUIDE.md)
+- **Uso com IA:** [`IA_WORKFLOW.md`](../IA_WORKFLOW.md)
 
 ---
 
