@@ -1,16 +1,17 @@
 # 🌳 Estratégia de Branches - OmniConnect Fitness
 
-**Padrão:** GitHub Flow (Simples e Eficiente)
+**Padrão:** Git Flow com `develop` como base de desenvolvimento
 
 ---
 
 ## 📌 Regras Obrigatórias
 
-1. ✅ **NUNCA fazer commit direto na `main`**
+1. ✅ **NUNCA fazer commit direto na `main` ou `develop`**
 2. ✅ **Sempre criar uma branch antes de começar**
 3. ✅ **Nome da branch deve seguir o padrão**
-4. ✅ **Pull Request obrigatório antes de merge na main**
-5. ✅ **Sem push direto na main** (hook de proteção ativo)
+4. ✅ **Pull Request obrigatório contra `develop` antes de merge**
+5. ✅ **Sem push direto na main/develop** (hook de proteção ativo)
+6. ✅ **`main` só recebe merges de `develop` (releases)**
 
 ---
 
@@ -61,6 +62,30 @@ wip                             ❌ Sem tipo
 
 ---
 
+## 🌿 Fluxo de Branches (Git Flow)
+
+```
+main (releases)
+  ↑
+  └─ develop (base de desenvolvimento)
+      ↑
+      ├─ feat/usuarios-crud
+      ├─ fix/email-validation
+      ├─ docs/readme-update
+      └─ ...outras features
+```
+
+**Fluxo de versões:**
+```
+1. Você cria: feat/usuarios-crud
+2. Você faz PR → develop
+3. Time revisa e aprova
+4. Merge em develop ✅
+5. Quando pronto para release: merge develop → main com tag de versão
+```
+
+---
+
 ## 🔄 Fluxo de Trabalho (Passo a Passo)
 
 ### 1️⃣ Começar Nova Feature
@@ -94,23 +119,25 @@ git push -u origin feat/usuarios-crud
 git push
 ```
 
-### 4️⃣ Criar Pull Request
+### 4️⃣ Criar Pull Request (Contra `develop`)
 
 ```bash
-# GitHub CLI (recomendado)
+# GitHub CLI (recomendado) - SEMPRE contra develop!
 gh pr create --title "feat: implementar CRUD de usuários" \
-  --body "Implementa criação, leitura, atualização e deleção de usuários"
+  --body "Implementa criação, leitura, atualização e deleção de usuários" \
+  --base develop
 
 # Ou via web: https://github.com/seu-repo/pulls
+# ⚠️ IMPORTANTE: Mude a base para 'develop' na interface web!
 ```
 
 ### 5️⃣ Merge e Cleanup
 
 ```bash
-# Depois que PR for aprovada e mergeada:
+# Depois que PR for aprovada e mergeada em develop:
 
-# Volta pra main
-git checkout main
+# Volta pra develop
+git checkout develop
 
 # Atualiza local
 git pull
@@ -128,14 +155,17 @@ git push origin --delete feat/usuarios-crud
 
 ### Hooks Locais
 - ❌ Impede `git push` na main
+- ❌ Impede `git push` na develop
 - ❌ Valida nomenclatura de branch
 - ✅ Permite força com flag especial (admin only)
 
-### Regras GitHub (quando ativar)
+### Regras GitHub
 - ❌ Proíbe push direto na main
-- ✅ Requer PRs para merge
+- ❌ Proíbe push direto na develop
+- ✅ PRs obrigatórios CONTRA `develop`
 - ✅ Requer 1+ reviewers
 - ✅ Requer testes passando
+- ✅ `main` só recebe merges de `develop` (releases)
 
 ---
 
@@ -159,12 +189,13 @@ Commit: feat(usuarios): implementar CRUD de usuários
 
 ## 🎯 Checklist Antes de Fazer Push
 
-- [ ] Estou em uma branch (não em `main`)
+- [ ] Estou em uma branch (não em `main` ou `develop`)
 - [ ] Nome segue padrão: `feat/`, `fix/`, `docs/`, etc
 - [ ] Comittei com conventional commits
 - [ ] Rodei testes localmente
 - [ ] Código segue padrão do projeto
 - [ ] Sem `Co-Authored-By` (removido em settings.json)
+- [ ] PR será criado CONTRA `develop` (não main)
 
 ---
 

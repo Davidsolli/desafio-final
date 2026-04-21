@@ -213,10 +213,12 @@ git push -u origin feat/usuarios-crud
 git push
 ```
 
-### Passo 5: Criar PR no GitHub
+### Passo 5: Criar PR no GitHub (CONTRA `develop`)
 ```bash
+# ⚠️ IMPORTANTE: SEMPRE usar --base develop!
 gh pr create --title "feat(usuarios): implementar CRUD de usuários" \
-  --body "Implementa endpoints CRUD completos com validações e testes"
+  --body "Implementa endpoints CRUD completos com validações e testes" \
+  --base develop
 ```
 
 ---
@@ -281,7 +283,7 @@ git diff HEAD
 
 ## 🚨 Checklist Antes de Fazer Commit
 
-- [ ] Estou em uma branch específica (não main)
+- [ ] Estou em uma branch específica (não main, não develop)
 - [ ] Branch segue padrão: `feat/`, `fix/`, `docs/`, etc
 - [ ] Rodei testes localmente e passaram
 - [ ] Revisei o código antes de commitar
@@ -291,6 +293,7 @@ git diff HEAD
 - [ ] Sem Co-Author na mensagem (removido automaticamente)
 - [ ] Não há secrets ou .env na mudança
 - [ ] Commitei apenas o relevante (não arquivos temporários)
+- [ ] PR será criado contra `develop` (--base develop)
 
 ---
 
@@ -305,8 +308,10 @@ git diff HEAD
 └─ Commit 4: test(usuarios): adicionar testes
    │
    └─ PR Title: "feat(usuarios): implementar CRUD de usuários"
-      └─ Body: "Implementa endpoints CRUD completos..."
-         └─ Merge na main ✅
+      └─ Base: develop (NÃO main!)
+         └─ Body: "Implementa endpoints CRUD completos..."
+            └─ Merge em develop ✅
+               └─ Depois: develop → main (release)
 ```
 
 ---
@@ -427,8 +432,8 @@ git commit -m "feat(modulo): sua mensagem concisa"
 # Push
 git push -u origin feat/seu-recurso
 
-# PR (opcional)
-gh pr create --title "feat(modulo): seu título"
+# PR (SEMPRE contra develop!)
+gh pr create --title "feat(modulo): seu título" --base develop
 ```
 
 ---
