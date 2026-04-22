@@ -3,7 +3,7 @@
 **Versão:** 1.0  
 **Data:** 2026-04-19  
 **Status:** 📋 Em Revisão  
-**Responsável:** David Oliveira
+**Responsável:** José Henrique.
 
 ---
 

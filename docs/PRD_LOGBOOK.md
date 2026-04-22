@@ -2,8 +2,8 @@
 
 **Versão:** 1.0  
 **Data:** 2026-04-21  
-**Status:** 📋 Em Especificação  
-**Responsável:** David Oliveira
+**Status:** 📋 Em Especificação
+**Responsável:** José Henrique.
 
 ---
 
