@@ -1,5 +1,6 @@
 """Service de metas com lógica de progresso e conclusão automática."""
 
+import logging
 from datetime import datetime
 from typing import Optional
 from uuid import UUID
@@ -16,9 +17,21 @@ from app.dtos.goal_dto import (
 from app.models.goal import Goal, GoalProgressEntry
 from app.repositories.goal_repository import GoalRepository
 
+logger = logging.getLogger(__name__)
+
 
 class GoalNotFoundError(Exception):
     """Exceção para meta não encontrada."""
+    pass
+
+
+class GoalAccessDeniedError(Exception):
+    """Exceção para acesso não autorizado a uma meta."""
+    pass
+
+
+class BusinessRuleError(Exception):
+    """Exceção para violação de regra de negócio."""
     pass
 
 
@@ -100,21 +113,74 @@ class GoalService:
             raise GoalNotFoundError(f"Meta {goal_id} não encontrada")
         return self._to_detail_response(goal)
 
-    async def update_goal(self, goal_id: UUID, dto: UpdateGoalDTO) -> GoalResponseDTO:
-        """Atualizar progresso e verificar conclusão automática."""
+    @staticmethod
+    def _assert_owner(goal: Goal, requesting_user_id: UUID) -> None:
+        """Verifica se o usuário tem permissão para modificar a meta.
+
+        Atualmente aceita: dono da meta (user_id) ou criador (created_by_id).
+        TODO: ampliar para personal_trainer e admin quando roles forem implementados.
+        """
+        if goal.user_id != requesting_user_id and goal.created_by_id != requesting_user_id:
+            raise GoalAccessDeniedError(
+                "Acesso negado: apenas o dono ou criador da meta pode modificá-la"
+            )
+
+    @staticmethod
+    def _assert_not_completed(goal: Goal) -> None:
+        """Garante que uma meta já concluída não seja editada."""
+        if goal.status == "completed":
+            raise BusinessRuleError("Meta já concluída não pode ser alterada")
+
+    @staticmethod
+    def _assert_progress_direction(goal: Goal, new_value: float) -> None:
+        """Garante que o novo valor avança em direção ao target (nunca retrocede).
+
+        Para metas de aumento (target > initial): new_value >= current_value.
+        Para metas de redução (target < initial): new_value <= current_value.
+        """
+        is_reduction_goal = goal.target_value < goal.initial_value
+        if is_reduction_goal:
+            if new_value > goal.current_value:
+                raise BusinessRuleError(
+                    f"Para metas de redução, current_value não pode aumentar "
+                    f"(atual: {goal.current_value}, informado: {new_value})"
+                )
+        else:
+            if new_value < goal.current_value:
+                raise BusinessRuleError(
+                    f"current_value não pode diminuir "
+                    f"(atual: {goal.current_value}, informado: {new_value})"
+                )
+
+    def _maybe_complete(self, goal: Goal) -> None:
+        """Marca meta como concluída se progresso atingiu 100%. Idempotente."""
+        if goal.progress_percentage >= 100.0 and goal.status != "completed":
+            goal.status = "completed"
+            goal.completed_at = datetime.utcnow()
+            # TODO: disparar notificação comemorativa via serviço de notificações
+            logger.info("Meta concluída: goal_id=%s user_id=%s", goal.id, goal.user_id)
+
+    async def update_goal(
+        self,
+        goal_id: UUID,
+        dto: UpdateGoalDTO,
+        requesting_user_id: UUID,
+    ) -> GoalResponseDTO:
+        """Atualizar progresso com validação de acesso e regras de negócio."""
         goal = await self.repository.get_by_id(goal_id)
         if not goal:
             raise GoalNotFoundError(f"Meta {goal_id} não encontrada")
 
+        self._assert_owner(goal, requesting_user_id)
+        self._assert_not_completed(goal)
+
         if dto.current_value is not None:
+            self._assert_progress_direction(goal, dto.current_value)
             goal.current_value = dto.current_value
             goal.progress_percentage = self._calculate_progress(
                 goal.initial_value, goal.target_value, dto.current_value
             )
-
-            if goal.progress_percentage >= 100.0 and goal.status != "completed":
-                goal.status = "completed"
-                goal.completed_at = datetime.utcnow()
+            self._maybe_complete(goal)
 
             entry = GoalProgressEntry(
                 goal_id=goal.id,
@@ -133,9 +199,16 @@ class GoalService:
 
         return self._to_response(updated)
 
-    async def delete_goal(self, goal_id: UUID) -> None:
-        """Deletar meta e todo seu histórico."""
-        deleted = await self.repository.delete(goal_id)
-        if not deleted:
+    async def delete_goal(
+        self,
+        goal_id: UUID,
+        requesting_user_id: UUID,
+    ) -> None:
+        """Deletar meta com validação de acesso."""
+        goal = await self.repository.get_by_id(goal_id)
+        if not goal:
             raise GoalNotFoundError(f"Meta {goal_id} não encontrada")
+        self._assert_owner(goal, requesting_user_id)
+
+        await self.repository.delete(goal_id)
         await self.repository.commit()
