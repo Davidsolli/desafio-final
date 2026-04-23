@@ -69,8 +69,10 @@ async def init_db() -> None:
     Inicializar banco: criar todas as tabelas.
 
     Chamar uma vez na inicialização da aplicação.
+    Importar todos os models para que o metadata inclua todas as tabelas.
     """
-    from app.models.user import Base
+    from app.models.user import Base  # noqa: F401
+    import app.models.logbook  # noqa: F401 — registra WorkoutSession e SessionExercise no Base
 
     engine = _get_engine()
     async with engine.begin() as conn:
