@@ -3,6 +3,8 @@
 from typing import Optional
 from uuid import UUID
 
+from app.models.user import User
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dtos.goal_dto import (
@@ -36,8 +38,17 @@ class GoalController:
     async def get_goal_by_id(self, goal_id: UUID) -> GoalDetailResponseDTO:
         return await self.service.get_goal_by_id(goal_id)
 
-    async def update_goal(self, goal_id: UUID, dto: UpdateGoalDTO) -> GoalResponseDTO:
-        return await self.service.update_goal(goal_id, dto)
+    async def update_goal(
+        self,
+        goal_id: UUID,
+        dto: UpdateGoalDTO,
+        current_user: User,
+    ) -> GoalResponseDTO:
+        return await self.service.update_goal(goal_id, dto, current_user.id)
 
-    async def delete_goal(self, goal_id: UUID) -> None:
-        await self.service.delete_goal(goal_id)
+    async def delete_goal(
+        self,
+        goal_id: UUID,
+        current_user: User,
+    ) -> None:
+        await self.service.delete_goal(goal_id, current_user.id)
