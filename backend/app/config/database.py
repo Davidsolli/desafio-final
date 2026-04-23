@@ -70,8 +70,10 @@ async def init_db() -> None:
 
     Chamar uma vez na inicialização da aplicação.
     """
-    from app.models.user import Base
+    from app.models.user import Base  # noqa: F401 — registra User
+    import app.models.chatbot  # noqa: F401 — registra KnowledgeBase, ChatConversation, etc.
 
     engine = _get_engine()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
