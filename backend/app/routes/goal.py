@@ -22,8 +22,10 @@ from app.dtos.goal_dto import (
     PaginatedGoalsResponseDTO,
 )
 from app.controllers.goal_controller import GoalController
-from app.services.goal_service import GoalNotFoundError
+from app.services.goal_service import GoalNotFoundError, GoalAccessDeniedError, BusinessRuleError
 from app.config.database import get_db
+from app.dependencies.auth import get_current_user
+from app.models.user import User
 
 router = APIRouter(
     prefix="/api/v1/goals",
@@ -42,6 +44,7 @@ router = APIRouter(
     summary="Criar nova meta",
     responses={
         201: {"description": "Meta criada com sucesso"},
+        400: {"description": "Regra de negócio violada"},
         422: {"description": "Validação falhou"},
     },
 )
@@ -56,13 +59,7 @@ async def create_goal(
     de progresso é registrada no histórico.
     """
     controller = GoalController(session)
-    try:
-        return await controller.create_goal(dto)
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Erro ao criar meta",
-        )
+    return await controller.create_goal(dto)
 
 
 @router.get(
@@ -85,13 +82,7 @@ async def list_goals(
     Listar metas com filtros opcionais por usuário e status.
     """
     controller = GoalController(session)
-    try:
-        return await controller.list_goals(user_id, status_filter, page, limit)
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Erro ao listar metas",
-        )
+    return await controller.list_goals(user_id, status_filter, page, limit)
 
 
 @router.get(
@@ -116,11 +107,6 @@ async def get_goal(
         return await controller.get_goal_by_id(goal_id)
     except GoalNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Erro ao buscar meta",
-        )
 
 
 @router.put(
@@ -130,6 +116,8 @@ async def get_goal(
     summary="Atualizar progresso da meta",
     responses={
         200: {"description": "Meta atualizada"},
+        400: {"description": "Regra de negócio violada"},
+        403: {"description": "Acesso negado"},
         404: {"description": "Meta não encontrada"},
         422: {"description": "Validação falhou"},
     },
@@ -137,24 +125,29 @@ async def get_goal(
 async def update_goal(
     goal_id: UUID,
     dto: UpdateGoalDTO,
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ) -> GoalResponseDTO:
     """
-    Atualizar o progresso de uma meta.
+    Atualizar o progresso de uma meta. Requer autenticação via Bearer token.
 
     Se `current_value >= target_value`, o status muda automaticamente para "completed".
     Cada atualização de `current_value` gera uma nova entrada no histórico.
+
+    **Regras de negócio:**
+    - current_value não pode retroceder (só avançar em direção ao target)
+    - Meta já concluída não pode ser alterada
+    - Apenas o dono ou criador pode atualizar
     """
     controller = GoalController(session)
     try:
-        return await controller.update_goal(goal_id, dto)
+        return await controller.update_goal(goal_id, dto, current_user)
     except GoalNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Erro ao atualizar meta",
-        )
+    except GoalAccessDeniedError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    except BusinessRuleError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.delete(
@@ -163,23 +156,23 @@ async def update_goal(
     summary="Deletar meta",
     responses={
         204: {"description": "Meta deletada com sucesso"},
+        403: {"description": "Acesso negado"},
         404: {"description": "Meta não encontrada"},
     },
 )
 async def delete_goal(
     goal_id: UUID,
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ) -> None:
     """
-    Deletar uma meta e todo o seu histórico de progresso.
+    Deletar uma meta e todo o seu histórico de progresso. Requer autenticação.
+    Apenas o dono ou criador da meta pode excluí-la.
     """
     controller = GoalController(session)
     try:
-        await controller.delete_goal(goal_id)
+        await controller.delete_goal(goal_id, current_user)
     except GoalNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Erro ao deletar meta",
-        )
+    except GoalAccessDeniedError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
