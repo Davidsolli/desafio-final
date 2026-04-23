@@ -18,6 +18,7 @@ from httpx import ASGITransport
 from main import app
 from app.config.database import get_db
 from app.models.user import Base, User
+import app.models.goal  # noqa: F401 — registra tabelas Goal no metadata
 from app.services.user_service import UserService
 
 
