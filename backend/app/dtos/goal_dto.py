@@ -4,7 +4,7 @@ from datetime import date, datetime
 from typing import Optional, List
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator, ConfigDict
+from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 
 VALID_CATEGORIES = {"strength", "endurance", "composition", "frequency"}
 VALID_STATUSES = {"active", "paused", "failed"}
@@ -36,6 +36,15 @@ class CreateGoalDTO(BaseModel):
         if v <= date.today():
             raise ValueError("Data alvo deve ser uma data futura")
         return v
+
+    @model_validator(mode="after")
+    def validate_target_differs_from_current(self) -> "CreateGoalDTO":
+        if self.target_value == self.current_value:
+            raise ValueError(
+                "target_value deve ser diferente de current_value — "
+                "defina um valor alvo maior (aumento) ou menor (redução)"
+            )
+        return self
 
     model_config = ConfigDict(
         json_schema_extra={
