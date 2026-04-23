@@ -13,7 +13,7 @@ aiosqlite>=0.17.0
 
 # Validadores e Env
 pydantic-settings>=2.2.1
-pydantic>=2.0.0
+pydantic[email]>=2.0.0
 
 # Segurança
 bcrypt>=4.1.0

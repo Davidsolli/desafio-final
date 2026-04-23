@@ -11,7 +11,7 @@ services:
     volumes:
       - .:/app
     environment:
-      - DATABASE_URL=postgresql://omni_user:omni_pass@db:5432/omniconnect_db
+      - DATABASE_URL=postgresql+asyncpg://omni_user:omni_pass@db:5432/omniconnect_db
       # Futuramente outras variáveis (OPENAI_API_KEY) ficarão no arquivo .env
     depends_on:
       db:
