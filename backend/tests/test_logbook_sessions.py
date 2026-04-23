@@ -14,10 +14,11 @@ from httpx import ASGITransport
 import httpx
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 
-from main import app
+import main as main_module
+from main import app as fastapi_app
 from app.config.database import get_db
-from app.models.user import Base as UserBase
-from app.models.logbook import WorkoutSession, SessionExercise  # noqa: F401
+from app.models.user import Base  # inclui logbook via import em conftest
+import app.models.logbook  # noqa: F401 — garante tabelas no metadata
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -35,10 +36,10 @@ async def test_engine_logbook():
         connect_args={"check_same_thread": False},
     )
     async with engine.begin() as conn:
-        await conn.run_sync(UserBase.metadata.create_all)
+        await conn.run_sync(Base.metadata.create_all)
     yield engine
     async with engine.begin() as conn:
-        await conn.run_sync(UserBase.metadata.drop_all)
+        await conn.run_sync(Base.metadata.drop_all)
 
 
 @pytest_asyncio.fixture
@@ -61,11 +62,11 @@ async def async_client_logbook(test_db_logbook):
     async def override_get_db():
         yield test_db_logbook
 
-    app.dependency_overrides[get_db] = override_get_db
-    transport = ASGITransport(app=app)
+    fastapi_app.dependency_overrides[get_db] = override_get_db
+    transport = ASGITransport(app=fastapi_app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
-    app.dependency_overrides.clear()
+    fastapi_app.dependency_overrides.clear()
 
 
 # IDs fixos para os testes

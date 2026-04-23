@@ -4,6 +4,11 @@ Modelos SQLAlchemy para o módulo Logbook (Diário de Treino).
 Define as tabelas:
   - workout_sessions: Sessão de treino registrada pelo aluno
   - session_exercises: Exercício executado dentro de uma sessão
+
+Nota sobre FKs externas:
+  - user_id → users.id: FK declarada (tabela já existe)
+  - workout_sheet_id → workout_sheets.id: UUID sem FK constraint (PRD_FICHA_TREINO pendente)
+  - exercise_id → exercises.id: UUID sem FK constraint (PRD_FICHA_TREINO pendente)
 """
 
 from datetime import datetime
@@ -14,6 +19,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     Float,
+    ForeignKey,
     Integer,
     String,
     Text,
@@ -30,8 +36,8 @@ class WorkoutSession(Base):
 
     Atributos:
         id: UUID único da sessão
-        user_id: Aluno que realizou (FK users)
-        workout_sheet_id: Ficha de treino usada (UUID — sem FK até PRD_FICHA_TREINO)
+        user_id: Aluno que realizou (FK users.id)
+        workout_sheet_id: Ficha de treino usada (UUID sem FK — PRD_FICHA_TREINO pendente)
         session_date: Data/hora em que treinou
         status: 'in_progress' | 'completed' | 'incomplete' | 'skipped' | 'deleted'
         general_notes: Notas gerais da sessão
@@ -53,14 +59,15 @@ class WorkoutSession(Base):
         nullable=False,
     )
 
-    # FK para User (sem FK explícita para permitir UUID em testes com SQLite)
+    # FK para users (constraint real — tabela já existe)
     user_id = Column(
         PG_UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
 
-    # FK para WorkoutSheet — sem constraint até PRD_FICHA_TREINO ser implementado
+    # UUID sem FK constraint — workout_sheets ainda não implementado
     workout_sheet_id = Column(
         PG_UUID(as_uuid=True),
         nullable=False,
@@ -118,8 +125,8 @@ class SessionExercise(Base):
 
     Atributos:
         id: UUID único
-        session_id: Sessão a que pertence (FK workout_sessions)
-        exercise_id: Exercício (UUID — sem FK até PRD_FICHA_TREINO)
+        session_id: Sessão a que pertence (FK workout_sessions.id)
+        exercise_id: Exercício (UUID sem FK — PRD_FICHA_TREINO pendente)
         planned_series / planned_repetitions / planned_load_kg: Valores planejados
         actual_series / actual_repetitions / actual_load_kg: Valores reais executados
         series_details: JSON com detalhes por série [{series, reps, load}]
@@ -139,13 +146,15 @@ class SessionExercise(Base):
         nullable=False,
     )
 
+    # FK para workout_sessions (constraint real)
     session_id = Column(
         PG_UUID(as_uuid=True),
+        ForeignKey("workout_sessions.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
 
-    # FK para Exercise — sem constraint até PRD_FICHA_TREINO ser implementado
+    # UUID sem FK constraint — exercises ainda não implementado
     exercise_id = Column(
         PG_UUID(as_uuid=True),
         nullable=False,

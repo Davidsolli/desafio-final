@@ -34,11 +34,15 @@ class TestCreateSessionDTO:
         assert dto.workout_sheet_id == VALID_SHEET_ID
 
     def test_rejeita_data_futura(self):
-        with pytest.raises(ValueError, match="futuro"):
+        from pydantic import ValidationError
+        with pytest.raises(ValidationError) as exc_info:
             CreateSessionDTO(
                 workout_sheet_id=VALID_SHEET_ID,
                 session_date=datetime.utcnow() + timedelta(days=1),
             )
+        # Verificar que a mensagem menciona data futura
+        errors = exc_info.value.errors()
+        assert any("futuro" in str(e.get("msg", "")).lower() or "futura" in str(e.get("msg", "")).lower() for e in errors)
 
     def test_rejeita_workout_sheet_id_invalido(self):
         with pytest.raises(Exception):

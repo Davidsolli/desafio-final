@@ -5,7 +5,7 @@ Define esquemas Pydantic para validação de entrada e saída dos endpoints
 de logbook/diário de treino.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
@@ -36,7 +36,10 @@ class CreateSessionDTO(BaseModel):
     @field_validator("session_date")
     @classmethod
     def session_date_not_future(cls, v: datetime) -> datetime:
-        if v > datetime.utcnow():
+        # Normalizar para naive UTC para comparação consistente
+        v_naive = v.replace(tzinfo=None) if v.tzinfo else v
+        now = datetime.utcnow()
+        if v_naive > now + timedelta(seconds=5):  # 5s de tolerância para latência
             raise ValueError("session_date não pode ser uma data futura")
         return v
 
