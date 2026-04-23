@@ -71,6 +71,7 @@ async def init_db() -> None:
     Chamar uma vez na inicialização da aplicação.
     """
     from app.models.user import Base
+    import app.models.goal  # noqa: F401 — registra Goal e GoalProgressEntry no metadata
 
     engine = _get_engine()
     async with engine.begin() as conn:
