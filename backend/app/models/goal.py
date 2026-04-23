@@ -41,7 +41,11 @@ class Goal(Base):
     )
 
     progress_entries = relationship(
-        "GoalProgressEntry", back_populates="goal", lazy="selectin", order_by="GoalProgressEntry.recorded_at"
+        "GoalProgressEntry",
+        back_populates="goal",
+        lazy="selectin",
+        order_by="GoalProgressEntry.recorded_at",
+        cascade="all, delete-orphan",
     )
 
     @property
