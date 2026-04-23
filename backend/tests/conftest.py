@@ -20,6 +20,7 @@ from app.config.database import get_db
 from app.models.user import Base, User
 from app.models.goal import Goal as _Goal, GoalProgressEntry as _GoalProgressEntry  # noqa: F401 — registra tabelas no metadata
 from app.services.user_service import UserService
+from app.dependencies.auth import get_current_user
 
 
 # Usar banco em memória para testes
@@ -77,7 +78,7 @@ def client(test_db_session):
 
 @pytest_asyncio.fixture
 async def async_client(test_db_session):
-    """Cliente HTTP assíncrono para testes async."""
+    """Cliente HTTP assíncrono para testes que não precisam de autenticação."""
 
     async def override_get_db():
         yield test_db_session
@@ -88,6 +89,49 @@ async def async_client(test_db_session):
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
 
+    app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture
+async def auth_client(test_db_session, sample_user):
+    """Cliente HTTP assíncrono autenticado como sample_user (para testes de goals)."""
+
+    async def override_get_db():
+        yield test_db_session
+
+    # Sobrescreve get_current_user para retornar sample_user sem validar token JWT.
+    # Isso isola os testes de regras de negócio da infraestrutura de autenticação.
+    async def override_get_current_user():
+        return sample_user
+
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_current_user] = override_get_current_user
+
+    transport = ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac
+
+    app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture
+async def async_client_as(test_db_session):
+    """Fábrica: retorna função que cria async_client autenticado como um usuário específico."""
+
+    async def _make_client(user: User):
+        async def override_get_db():
+            yield test_db_session
+
+        async def override_get_current_user():
+            return user
+
+        app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_user] = override_get_current_user
+
+        transport = ASGITransport(app=app)
+        return httpx.AsyncClient(transport=transport, base_url="http://test")
+
+    yield _make_client
     app.dependency_overrides.clear()
 
 
