@@ -37,7 +37,7 @@ class AuthService:
             TokenResponseDTO com access_token
 
         Raises:
-            InvalidCredentialsError: Se email/senha inválidos
+            InvalidCredentialsError: Se email/senha inválidos ou usuário inativo
         """
         user = await self.repository.get_by_email(dto.email)
         if not user:
@@ -45,6 +45,9 @@ class AuthService:
 
         if not UserService.verify_password(dto.password, user.password):
             raise InvalidCredentialsError("Email ou senha incorretos")
+
+        if not user.is_active:
+            raise InvalidCredentialsError("Esta conta foi desativada")
 
         # Gerar token
         token = self.create_access_token({"sub": str(user.id)})
