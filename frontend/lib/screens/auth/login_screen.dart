@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 import '../../theme/app_colors.dart';
 import '../../routes/app_routes.dart';
+import '../../providers/auth_provider.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -24,14 +26,47 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _handleLogin() async {
-    setState(() => _isLoading = true);
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
 
-    // Simula login
-    await Future.delayed(const Duration(milliseconds: 1500));
-
-    if (mounted) {
-      context.go(AppRoutes.home);
+    // Validação básica
+    if (email.isEmpty || password.isEmpty) {
+      _showError('Email e senha são obrigatórios');
+      return;
     }
+
+    try {
+      setState(() => _isLoading = true);
+
+      // Faz login usando AuthProvider
+      final authProvider = context.read<AuthProvider>();
+      await authProvider.login(
+        email: email,
+        password: password,
+      );
+
+      if (mounted) {
+        context.go(AppRoutes.home);
+      }
+    } catch (e) {
+      if (mounted) {
+        _showError(e.toString());
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 3),
+      ),
+    );
   }
 
   @override
