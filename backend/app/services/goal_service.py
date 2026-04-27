@@ -114,15 +114,20 @@ class GoalService:
         return self._to_detail_response(goal)
 
     @staticmethod
-    def _assert_owner(goal: Goal, requesting_user_id: UUID) -> None:
+    def _assert_owner_or_privileged(goal: Goal, requesting_user_id: UUID, user_role: str) -> None:
         """Verifica se o usuário tem permissão para modificar a meta.
 
-        Atualmente aceita: dono da meta (user_id) ou criador (created_by_id).
-        TODO: ampliar para personal_trainer e admin quando roles forem implementados.
+        Aceita:
+        - Dono da meta (user_id)
+        - Criador da meta (created_by_id)
+        - Personal trainer ou admin (qualquer meta)
         """
-        if goal.user_id != requesting_user_id and goal.created_by_id != requesting_user_id:
+        is_owner = goal.user_id == requesting_user_id or goal.created_by_id == requesting_user_id
+        is_privileged = user_role in ["personal_trainer", "admin"]
+
+        if not (is_owner or is_privileged):
             raise GoalAccessDeniedError(
-                "Acesso negado: apenas o dono ou criador da meta pode modificá-la"
+                "Acesso negado: apenas o dono, criador da meta, personal trainer ou admin podem modificá-la"
             )
 
     @staticmethod
@@ -165,13 +170,14 @@ class GoalService:
         goal_id: UUID,
         dto: UpdateGoalDTO,
         requesting_user_id: UUID,
+        user_role: str = "client",
     ) -> GoalResponseDTO:
         """Atualizar progresso com validação de acesso e regras de negócio."""
         goal = await self.repository.get_by_id(goal_id)
         if not goal:
             raise GoalNotFoundError(f"Meta {goal_id} não encontrada")
 
-        self._assert_owner(goal, requesting_user_id)
+        self._assert_owner_or_privileged(goal, requesting_user_id, user_role)
         self._assert_not_completed(goal)
 
         if dto.current_value is not None:
@@ -203,12 +209,13 @@ class GoalService:
         self,
         goal_id: UUID,
         requesting_user_id: UUID,
+        user_role: str = "client",
     ) -> None:
         """Deletar meta com validação de acesso."""
         goal = await self.repository.get_by_id(goal_id)
         if not goal:
             raise GoalNotFoundError(f"Meta {goal_id} não encontrada")
-        self._assert_owner(goal, requesting_user_id)
+        self._assert_owner_or_privileged(goal, requesting_user_id, user_role)
 
         await self.repository.delete(goal_id)
         await self.repository.commit()
