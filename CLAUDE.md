@@ -9,7 +9,7 @@ Bem-vindo! Aqui estão as guias para trabalhar com esse projeto.
 ### ✅ SEMPRE Seguir Este Padrão
 
 ```bash
-# 1. NUNCA comita direto na main
+# 1. NUNCA comita direto na main ou develop
 # 2. Crie uma branch com este padrão:
 git checkout -b feat/sua-feature      # Nova feature
 git checkout -b fix/seu-bug            # Bug fix
@@ -23,13 +23,15 @@ git commit -m "feat: descrição"        # Use conventional commits
 # 4. Faça push APENAS da sua branch
 git push -u origin feat/sua-feature
 
-# 5. Crie PR no GitHub (manual ou CLI)
-gh pr create --title "feat: sua feature"
+# 5. Crie PR no GitHub CONTRA develop (não main!)
+gh pr create --title "feat: sua feature" --base develop
 ```
 
 ### ❌ PROIBIDO
 
 - ❌ `git push` na `main` (bloqueado por settings.json)
+- ❌ `git push` na `develop` (bloqueado por settings.json)
+- ❌ PRs contra `main` (devem ser contra `develop`)
 - ❌ Commits com `Co-Authored-By` (removido automaticamente)
 - ❌ Branches sem tipo: `fix-usuarios`, `my-feature` (use `feat/`, `fix/`, etc)
 
