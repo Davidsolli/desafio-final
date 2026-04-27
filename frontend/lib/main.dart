@@ -4,7 +4,13 @@ import 'theme/app_theme.dart';
 import 'routes/app_routes.dart';
 import 'services/api_client.dart';
 import 'services/auth_service.dart';
+import 'services/user_service.dart';
+import 'services/goal_service.dart';
+import 'services/logbook_service.dart';
 import 'providers/auth_provider.dart';
+import 'providers/user_provider.dart';
+import 'providers/goal_provider.dart';
+import 'providers/logbook_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -33,7 +39,22 @@ class OmniConnectApp extends StatelessWidget {
 
         // Auth Service (depende de ApiClient)
         ProxyProvider<ApiClient, AuthService>(
-          update: (_, apiClient, __) => AuthService(apiClient: apiClient),
+          update: (_, apiClient, _) => AuthService(apiClient: apiClient),
+        ),
+
+        // User Service (depende de ApiClient)
+        ProxyProvider<ApiClient, UserService>(
+          update: (_, apiClient, _) => UserService(apiClient: apiClient),
+        ),
+
+        // Goal Service (depende de ApiClient)
+        ProxyProvider<ApiClient, GoalService>(
+          update: (_, apiClient, _) => GoalService(apiClient: apiClient),
+        ),
+
+        // Logbook Service (depende de ApiClient)
+        ProxyProvider<ApiClient, LogbookService>(
+          update: (_, apiClient, _) => LogbookService(apiClient: apiClient),
         ),
 
         // Auth Provider (depende de AuthService)
@@ -43,6 +64,36 @@ class OmniConnectApp extends StatelessWidget {
           ),
           update: (_, authService, previous) {
             return previous ?? AuthProvider(authService: authService);
+          },
+        ),
+
+        // User Provider (depende de UserService)
+        ChangeNotifierProxyProvider<UserService, UserProvider>(
+          create: (context) => UserProvider(
+            userService: context.read<UserService>(),
+          ),
+          update: (_, userService, previous) {
+            return previous ?? UserProvider(userService: userService);
+          },
+        ),
+
+        // Goal Provider (depende de GoalService)
+        ChangeNotifierProxyProvider<GoalService, GoalProvider>(
+          create: (context) => GoalProvider(
+            goalService: context.read<GoalService>(),
+          ),
+          update: (_, goalService, previous) {
+            return previous ?? GoalProvider(goalService: goalService);
+          },
+        ),
+
+        // Logbook Provider (depende de LogbookService)
+        ChangeNotifierProxyProvider<LogbookService, LogbookProvider>(
+          create: (context) => LogbookProvider(
+            logbookService: context.read<LogbookService>(),
+          ),
+          update: (_, logbookService, previous) {
+            return previous ?? LogbookProvider(logbookService: logbookService);
           },
         ),
       ],
