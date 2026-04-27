@@ -100,7 +100,16 @@ class GoalService {
         queryParameters: queryParameters,
         fromJson: (data) {
           if (data is List) {
-            return data.map((item) => GoalResponse.fromJson(item as Map<String, dynamic>)).toList();
+            return data
+                .whereType<Map<String, dynamic>>()
+                .map((item) => GoalResponse.fromJson(item))
+                .toList();
+          } else if (data is Map && data.containsKey('data')) {
+            final items = data['data'] as List;
+            return items
+                .whereType<Map<String, dynamic>>()
+                .map((item) => GoalResponse.fromJson(item))
+                .toList();
           }
           return [];
         },
@@ -157,7 +166,7 @@ class GoalService {
     try {
       await _apiClient.delete<void>(
         '/goals/$goalId',
-        fromJson: (_) => null,
+        fromJson: (_) {},
       );
     } catch (e) {
       rethrow;

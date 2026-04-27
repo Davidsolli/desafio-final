@@ -7,10 +7,12 @@ import 'services/auth_service.dart';
 import 'services/user_service.dart';
 import 'services/goal_service.dart';
 import 'services/logbook_service.dart';
+import 'services/nutrition_service.dart';
 import 'providers/auth_provider.dart';
 import 'providers/user_provider.dart';
 import 'providers/goal_provider.dart';
 import 'providers/logbook_provider.dart';
+import 'providers/nutrition_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -57,6 +59,11 @@ class OmniConnectApp extends StatelessWidget {
           update: (_, apiClient, _) => LogbookService(apiClient: apiClient),
         ),
 
+        // Nutrition Service (depende de ApiClient)
+        ProxyProvider<ApiClient, NutritionService>(
+          update: (_, apiClient, _) => NutritionService(apiClient: apiClient),
+        ),
+
         // Auth Provider (depende de AuthService)
         ChangeNotifierProxyProvider<AuthService, AuthProvider>(
           create: (context) => AuthProvider(
@@ -94,6 +101,16 @@ class OmniConnectApp extends StatelessWidget {
           ),
           update: (_, logbookService, previous) {
             return previous ?? LogbookProvider(logbookService: logbookService);
+          },
+        ),
+
+        // Nutrition Provider (depende de NutritionService)
+        ChangeNotifierProxyProvider<NutritionService, NutritionProvider>(
+          create: (context) => NutritionProvider(
+            nutritionService: context.read<NutritionService>(),
+          ),
+          update: (_, nutritionService, previous) {
+            return previous ?? NutritionProvider(nutritionService: nutritionService);
           },
         ),
       ],
