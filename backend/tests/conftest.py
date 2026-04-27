@@ -18,6 +18,7 @@ from httpx import ASGITransport
 from main import app
 from app.config.database import get_db
 from app.models.user import Base, User
+import app.models.logbook  # noqa: F401 — garante que workout_sessions/session_exercises entram no Base.metadata
 from app.models.goal import Goal as _Goal, GoalProgressEntry as _GoalProgressEntry  # noqa: F401 — registra tabelas no metadata
 from app.services.user_service import UserService
 from app.dependencies.auth import get_current_user
