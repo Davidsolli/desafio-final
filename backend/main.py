@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.config.database import init_db
 from app.routes import user, auth, logbook, goal
@@ -24,6 +25,15 @@ app = FastAPI(
     version="1.0.0",
     description="Backend do sistema OmniConnect Fitness",
     lifespan=lifespan,
+)
+
+# Configurar CORS para permitir requisições do Flutter web (desenvolvimento)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Permitir todas as origens em desenvolvimento
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Health Check

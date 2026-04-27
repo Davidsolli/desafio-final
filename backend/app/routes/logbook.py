@@ -10,20 +10,18 @@ Endpoints:
 - GET    /api/v1/logbook/calendar                       → Calendário mensal (200)
 - GET    /api/v1/logbook/progression/{exercise_id}      → Evolução de carga (200)
 - DELETE /api/v1/logbook/sessions/{id}                  → Soft delete (204)
-
-Nota: Autenticação JWT é simulada via header X-User-Id e X-User-Role
-até o módulo de auth emitir tokens com claims adequadas.
 """
 
 from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.database import get_db
 from app.controllers.logbook_controller import LogbookController
+from app.dependencies.auth import get_current_user
 from app.dtos.logbook_dto import (
     CalendarResponseDTO,
     CreateSessionDTO,
@@ -34,6 +32,7 @@ from app.dtos.logbook_dto import (
     SessionResponseDTO,
     UpdateSessionDTO,
 )
+from app.models.user import User
 from app.services.logbook_service import (
     SessionAlreadyInProgressError,
     SessionForbiddenError,
@@ -52,38 +51,6 @@ router = APIRouter(
 
 
 # ---------------------------------------------------------------------------
-# Dependency helpers
-# ---------------------------------------------------------------------------
-
-
-def _get_current_user(
-    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
-    x_user_role: Optional[str] = Header(None, alias="X-User-Role"),
-) -> tuple[UUID, str]:
-    """
-    Extrai user_id e role dos headers HTTP.
-
-    Em produção, isso será substituído pela decodificação do JWT.
-    Headers esperados:
-      - X-User-Id:   UUID do usuário autenticado
-      - X-User-Role: role do usuário (client | personal_trainer | admin)
-    """
-    if not x_user_id or not x_user_role:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Autenticação necessária. Forneça X-User-Id e X-User-Role.",
-        )
-    try:
-        user_uuid = UUID(x_user_id)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="X-User-Id inválido (deve ser UUID).",
-        )
-    return user_uuid, x_user_role
-
-
-# ---------------------------------------------------------------------------
 # POST /sessions — Iniciar Sessão
 # ---------------------------------------------------------------------------
 
@@ -95,13 +62,14 @@ def _get_current_user(
     summary="Iniciar sessão de treino",
     responses={
         201: {"description": "Sessão criada com sucesso"},
+        401: {"description": "Não autenticado"},
         409: {"description": "Já existe sessão em progresso"},
         422: {"description": "Dados inválidos"},
     },
 )
 async def create_session(
     dto: CreateSessionDTO,
-    auth: tuple = Depends(_get_current_user),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ) -> SessionResponseDTO:
     """
@@ -111,10 +79,9 @@ async def create_session(
     - Aluno só pode ter 1 sessão `in_progress` por vez.
     - `session_date` não pode ser data futura.
     """
-    user_id, role = auth
     controller = LogbookController(session)
     try:
-        return await controller.create_session(user_id, dto)
+        return await controller.create_session(current_user.id, dto)
     except SessionAlreadyInProgressError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
     except Exception:
@@ -144,7 +111,7 @@ async def create_session(
 async def add_exercise(
     session_id: UUID,
     dto: SessionExerciseDTO,
-    auth: tuple = Depends(_get_current_user),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ) -> SessionExerciseResponseDTO:
     """
@@ -196,7 +163,7 @@ async def add_exercise(
 async def update_session(
     session_id: UUID,
     dto: UpdateSessionDTO,
-    auth: tuple = Depends(_get_current_user),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ) -> SessionResponseDTO:
     """
@@ -249,7 +216,7 @@ async def list_sessions(
     ),
     page: int = Query(1, ge=1, description="Número da página"),
     limit: int = Query(10, ge=1, le=100, description="Itens por página (máx. 100)"),
-    auth: tuple = Depends(_get_current_user),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ) -> PaginatedSessionsDTO:
     """
@@ -296,7 +263,7 @@ async def list_sessions(
 )
 async def get_session(
     session_id: UUID,
-    auth: tuple = Depends(_get_current_user),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ) -> SessionResponseDTO:
     """
@@ -337,7 +304,7 @@ async def get_calendar(
     year: int = Query(..., ge=2000, le=2100, description="Ano"),
     month: int = Query(..., ge=1, le=12, description="Mês (1–12)"),
     user_id: Optional[UUID] = Query(None, description="Filtrar por aluno (admin/personal)"),
-    auth: tuple = Depends(_get_current_user),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ) -> CalendarResponseDTO:
     """
@@ -382,7 +349,7 @@ async def get_progression(
     weeks: Optional[int] = Query(4, ge=1, le=52, description="Últimas N semanas (padrão: 4)"),
     start_date: Optional[datetime] = Query(None, description="Data inicial (ISO 8601)"),
     end_date: Optional[datetime] = Query(None, description="Data final (ISO 8601)"),
-    auth: tuple = Depends(_get_current_user),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ) -> ProgressionResponseDTO:
     """
@@ -427,7 +394,7 @@ async def get_progression(
 )
 async def delete_session(
     session_id: UUID,
-    auth: tuple = Depends(_get_current_user),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ) -> None:
     """
