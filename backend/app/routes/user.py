@@ -23,6 +23,8 @@ from app.dtos.user_dto import (
 from app.controllers.user_controller import UserController
 from app.services.user_service import UserAlreadyExistsError, UserNotFoundError
 from app.config.database import get_db
+from app.dependencies.auth import get_current_user
+from app.models.user import User
 
 router = APIRouter(
     prefix="/api/v1/users",
@@ -87,15 +89,20 @@ async def create_user(
     summary="Listar usuários com paginação",
     responses={
         200: {"description": "Lista de usuários retornada"},
+        401: {"description": "Não autenticado"},
+        403: {"description": "Acesso negado (requer admin ou personal_trainer)"},
     },
 )
 async def list_users(
     page: int = Query(1, ge=1, description="Número da página"),
     limit: int = Query(10, ge=1, le=100, description="Itens por página"),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ) -> PaginatedUsersResponseDTO:
     """
     Listar todos os usuários com suporte a paginação.
+
+    **Requer autenticação:** Apenas admin ou personal_trainer.
 
     **Query parameters:**
     - page: Página (padrão: 1)
@@ -107,6 +114,12 @@ async def list_users(
     - limit: Itens por página
     - data: Lista de usuários
     """
+    if current_user.role not in ["admin", "personal_trainer"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Apenas admin ou personal_trainer podem listar usuários",
+        )
+
     controller = UserController(session)
 
     try:
@@ -125,15 +138,22 @@ async def list_users(
     summary="Buscar usuário por ID",
     responses={
         200: {"description": "Usuário encontrado"},
+        401: {"description": "Não autenticado"},
+        403: {"description": "Acesso negado"},
         404: {"description": "Usuário não encontrado"},
     },
 )
 async def get_user(
     user_id: UUID,
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ) -> UserResponseDTO:
     """
     Buscar dados de um usuário específico.
+
+    **Requer autenticação:**
+    - Usuário autenticado vê apenas seus próprios dados
+    - Admin ou personal_trainer veem dados de qualquer usuário
 
     **Path parameters:**
     - user_id: UUID do usuário
@@ -141,6 +161,15 @@ async def get_user(
     **Response:**
     - Dados completos do usuário (sem senha)
     """
+    is_owner = user_id == current_user.id
+    is_privileged = current_user.role in ["admin", "personal_trainer"]
+
+    if not (is_owner or is_privileged):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Você só pode visualizar seus próprios dados",
+        )
+
     controller = UserController(session)
 
     try:
@@ -165,16 +194,23 @@ async def get_user(
     responses={
         200: {"description": "Usuário atualizado"},
         400: {"description": "Validação falhou"},
+        401: {"description": "Não autenticado"},
+        403: {"description": "Acesso negado"},
         404: {"description": "Usuário não encontrado"},
     },
 )
 async def update_user(
     user_id: UUID,
     dto: UpdateUserDTO,
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ) -> UserResponseDTO:
     """
     Atualizar dados de um usuário (campos opcionais).
+
+    **Requer autenticação:**
+    - Usuário autenticado pode editar apenas sua própria conta
+    - Admin pode editar qualquer usuário
 
     **Path parameters:**
     - user_id: UUID do usuário
@@ -190,6 +226,15 @@ async def update_user(
     - password (endpoint separado no futuro)
     - created_at (imutável)
     """
+    is_owner = user_id == current_user.id
+    is_admin = current_user.role == "admin"
+
+    if not (is_owner or is_admin):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Você só pode editar sua própria conta",
+        )
+
     controller = UserController(session)
 
     try:
@@ -212,15 +257,22 @@ async def update_user(
     summary="Deletar usuário",
     responses={
         204: {"description": "Usuário deletado com sucesso"},
+        401: {"description": "Não autenticado"},
+        403: {"description": "Acesso negado"},
         404: {"description": "Usuário não encontrado"},
     },
 )
 async def delete_user(
     user_id: UUID,
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ) -> None:
     """
     Deletar um usuário (soft delete - marcar como inativo).
+
+    **Requer autenticação:**
+    - Usuário autenticado pode deletar apenas sua própria conta
+    - Admin pode deletar qualquer usuário
 
     **Path parameters:**
     - user_id: UUID do usuário
@@ -228,6 +280,15 @@ async def delete_user(
     **Note:** Usa soft delete. O usuário é marcado como inativo,
     mas não é permanentemente removido do banco.
     """
+    is_owner = user_id == current_user.id
+    is_admin = current_user.role == "admin"
+
+    if not (is_owner or is_admin):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Você só pode deletar sua própria conta",
+        )
+
     controller = UserController(session)
 
     try:

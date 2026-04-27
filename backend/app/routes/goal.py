@@ -45,11 +45,13 @@ router = APIRouter(
     responses={
         201: {"description": "Meta criada com sucesso"},
         400: {"description": "Regra de negócio violada"},
+        401: {"description": "Não autenticado"},
         422: {"description": "Validação falhou"},
     },
 )
 async def create_goal(
     dto: CreateGoalDTO,
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ) -> GoalResponseDTO:
     """
@@ -72,6 +74,7 @@ async def create_goal(
     },
 )
 async def list_goals(
+    current_user: User = Depends(get_current_user),
     user_id: Optional[UUID] = Query(None, description="Filtrar por aluno"),
     status_filter: Optional[str] = Query(None, alias="status", description="Filtrar por status: active, completed, failed, paused"),
     page: int = Query(1, ge=1, description="Número da página"),
@@ -97,6 +100,7 @@ async def list_goals(
 )
 async def get_goal(
     goal_id: UUID,
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ) -> GoalDetailResponseDTO:
     """
