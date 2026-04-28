@@ -5,10 +5,15 @@ Define engine assíncrono, sessionmaker e função de dependency injection
 para obter sessões de banco.
 """
 
+import logging
+
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.pool import NullPool
 
 from app.config.settings import settings
+
+logger = logging.getLogger(__name__)
 
 # Engine e sessionmaker serão inicializados lazily
 _engine = None
@@ -51,10 +56,13 @@ async def get_db() -> AsyncSession:
 
 async def init_db() -> None:
     """
-    Inicializar banco: criar todas as tabelas.
+    Inicializar banco: criar extensões e tabelas.
 
     Chamar uma vez na inicialização da aplicação.
-    Importar todos os models para que o metadata inclua todas as tabelas.
+    Steps:
+        1. Habilitar extensão pgvector (para busca vetorial no RAG)
+        2. Importar todos os models para que o metadata inclua todas as tabelas
+        3. Criar todas as tabelas via SQLAlchemy ORM
     """
     from app.models.user import Base  # noqa: F401 — registra User
     import app.models.chatbot  # noqa: F401 — registra KnowledgeBase, ChatConversation, etc.
@@ -63,5 +71,15 @@ async def init_db() -> None:
 
     engine = _get_engine()
     async with engine.begin() as conn:
+        # ── 1. Habilitar extensão pgvector ────────────────────────────────────
+        # Necessária para criar coluna VECTOR na knowledge_base (RAG embeddings)
+        try:
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
+            logger.info("✓ Extensão pgvector habilitada com sucesso")
+        except Exception as exc:
+            logger.warning("Erro ao habilitar pgvector (pode já estar ativo): %s", exc)
+
+        # ── 2. Criar todas as tabelas ──────────────────────────────────────────
         await conn.run_sync(Base.metadata.create_all)
+        logger.info("✓ Todas as tabelas criadas/verificadas com sucesso")
 
