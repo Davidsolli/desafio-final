@@ -57,9 +57,11 @@ async def init_db() -> None:
     Importar todos os models para que o metadata inclua todas as tabelas.
     """
     from app.models.user import Base  # noqa: F401 — registra User
+    import app.models.chatbot  # noqa: F401 — registra KnowledgeBase, ChatConversation, etc.
     from app.models.goal import Goal, GoalProgressEntry  # noqa: F401 — registra Goals
     import app.models.logbook  # noqa: F401 — registra WorkoutSession e SessionExercise no Base
 
     engine = _get_engine()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
