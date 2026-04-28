@@ -1,10 +1,10 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.config.database import init_db
-from app.routes import user, auth
-from app.routes import chat
+from app.routes import user, auth, chat, logbook, goal
 
 # Rota básica de Health Check
 @asynccontextmanager
@@ -27,6 +27,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Configurar CORS para permitir requisições do Flutter web (desenvolvimento)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Permitir todas as origens em desenvolvimento
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Health Check
 @app.get("/")
 async def health_check():
@@ -41,4 +50,5 @@ async def health_check():
 app.include_router(auth.router)
 app.include_router(user.router)
 app.include_router(chat.router)
-
+app.include_router(logbook.router)
+app.include_router(goal.router)

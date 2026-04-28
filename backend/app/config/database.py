@@ -43,25 +43,10 @@ def _get_async_session_local():
 
 
 async def get_db() -> AsyncSession:
-    """
-    Dependency injection para obter sessão de banco.
-
-    Uso em FastAPI:
-    ```python
-    @app.get("/users")
-    async def list_users(session: AsyncSession = Depends(get_db)):
-        ...
-    ```
-
-    Yields:
-        AsyncSession: Sessão de banco
-    """
+    """Dependency injection para obter sessão de banco."""
     session_local = _get_async_session_local()
     async with session_local() as session:
-        try:
-            yield session
-        finally:
-            await session.close()
+        yield session
 
 
 async def init_db() -> None:
@@ -69,9 +54,12 @@ async def init_db() -> None:
     Inicializar banco: criar todas as tabelas.
 
     Chamar uma vez na inicialização da aplicação.
+    Importar todos os models para que o metadata inclua todas as tabelas.
     """
     from app.models.user import Base  # noqa: F401 — registra User
     import app.models.chatbot  # noqa: F401 — registra KnowledgeBase, ChatConversation, etc.
+    from app.models.goal import Goal, GoalProgressEntry  # noqa: F401 — registra Goals
+    import app.models.logbook  # noqa: F401 — registra WorkoutSession e SessionExercise no Base
 
     engine = _get_engine()
     async with engine.begin() as conn:

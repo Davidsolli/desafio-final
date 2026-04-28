@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:animate_do/animate_do.dart';
 import '../../theme/app_colors.dart';
-import '../../routes/app_routes.dart';
 import '../../models/mock_data.dart';
 
 class TrainerDashboard extends StatefulWidget {

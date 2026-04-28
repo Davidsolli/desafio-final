@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 import '../../theme/app_colors.dart';
 import '../../routes/app_routes.dart';
+import '../../providers/auth_provider.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({Key? key}) : super(key: key);
@@ -50,9 +52,39 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (_currentStep < 2) {
       setState(() => _currentStep++);
     } else {
-      setState(() => _isLoading = true);
-      await Future.delayed(const Duration(milliseconds: 1200));
-      if (mounted) context.go(AppRoutes.home);
+      final name = _nameController.text.trim();
+      final email = _emailController.text.trim();
+      final password = _passwordController.text;
+
+      if (name.isEmpty || email.isEmpty || password.isEmpty) {
+        _showError('Nome, email e senha são obrigatórios');
+        return;
+      }
+
+      try {
+        setState(() => _isLoading = true);
+
+        final authProvider = context.read<AuthProvider>();
+        await authProvider.register(
+          name: name,
+          email: email,
+          password: password,
+          role: 'client',
+          phoneWhatsapp: null,
+        );
+
+        if (mounted) {
+          context.go(AppRoutes.home);
+        }
+      } catch (e) {
+        if (mounted) {
+          _showError(e.toString());
+        }
+      } finally {
+        if (mounted) {
+          setState(() => _isLoading = false);
+        }
+      }
     }
   }
 
@@ -62,6 +94,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
     } else {
       context.pop();
     }
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 3),
+      ),
+    );
   }
 
   @override
