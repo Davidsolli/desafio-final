@@ -73,6 +73,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
           phoneWhatsapp: null,
         );
 
+        // Faz login automático após registro
+        await authProvider.login(
+          email: email,
+          password: password,
+        );
+
         if (mounted) {
           context.go(AppRoutes.home);
         }
