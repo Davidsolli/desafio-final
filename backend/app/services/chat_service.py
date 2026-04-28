@@ -186,11 +186,24 @@ class ChatService:
         self, conversation: ChatConversation
     ) -> list[dict[str, str]]:
         """Obter histórico de mensagens formatado para o pipeline RAG."""
-        if not conversation.messages:
+        # Para evitar lazy loading, buscar messages explicitamente do banco
+        from sqlalchemy import and_
+        stmt = (
+            select(ChatMessage)
+            .where(ChatMessage.conversation_id == conversation.id)
+            .order_by(ChatMessage.created_at.desc())
+            .limit(10)
+        )
+        result = await self.session.execute(stmt)
+        messages = result.scalars().all()
+
+        if not messages:
             return []
+
+        # Reverter ordre para histórico cronológico
         return [
             {"role": msg.role, "content": msg.content}
-            for msg in conversation.messages[-10:]  # últimas 10 mensagens
+            for msg in reversed(messages)
         ]
 
     async def _build_user_context(self, user_id: UUID) -> dict[str, Any]:
