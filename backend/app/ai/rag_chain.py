@@ -30,14 +30,15 @@ from app.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
-# ─── Constantes do Pipeline ────────────────────────────────────────────────────
-EMBEDDING_DIM = 768
-MIN_RELEVANCE_SCORE = 0.70       # RN-06: score mínimo para usar documento
-ESCALATE_THRESHOLD = 0.60        # RN-07: score abaixo disso → escalar
-TOP_K_DOCS = 5                   # Máximo de documentos recuperados
-LLM_MAX_TOKENS = 500             # RN PRD: max tokens na resposta
-LLM_TEMPERATURE = 0.3            # RN PRD: temperatura baixa para consistência
-HISTORY_MAX_TOKENS = 80          # RN-05: máximo de tokens do histórico
+# Aliases para as constantes do settings (centralizadas)
+EMBEDDING_DIM = settings.RAG_EMBEDDING_DIM
+MIN_RELEVANCE_SCORE = settings.RAG_MIN_RELEVANCE_SCORE
+ESCALATE_THRESHOLD = settings.RAG_ESCALATE_THRESHOLD
+TOP_K_DOCS = settings.RAG_TOP_K_DOCS
+MAX_DOC_CONTENT_LENGTH = settings.RAG_MAX_DOC_CONTENT_LENGTH
+LLM_MAX_TOKENS = settings.RAG_LLM_MAX_TOKENS
+LLM_TEMPERATURE = settings.RAG_LLM_TEMPERATURE
+HISTORY_MAX_TOKENS = settings.RAG_HISTORY_MAX_TOKENS
 
 # Palavras-chave que forçam escalação imediata (RN-12)
 ESCALATION_KEYWORDS = [
@@ -119,6 +120,13 @@ class RAGChain:
     """
 
     def __init__(self) -> None:
+        """
+        Inicializar RAG chain.
+
+        Side effects:
+            - Inicializa clients do Gemini (lazy, apenas no primeiro uso)
+            - Prepara embeddings model e LLM para posterior utilização
+        """
         self._embeddings: GoogleGenerativeAIEmbeddings | None = None
         self._llm: ChatGoogleGenerativeAI | None = None
 
@@ -217,11 +225,15 @@ class RAGChain:
         for row in rows:
             score = float(row.relevance_score or 0)
             if score >= MIN_RELEVANCE_SCORE:
+                # Validação de conteúdo: truncar se muito longo (melhoria de segurança)
+                content = str(row.content)
+                if len(content) > MAX_DOC_CONTENT_LENGTH:
+                    content = content[:MAX_DOC_CONTENT_LENGTH] + "..."
                 docs.append(
                     RetrievedDocument(
                         id=str(row.id),
                         title=str(row.title),
-                        content=str(row.content),
+                        content=content,
                         relevance_score=round(score, 4),
                         category=str(row.category or ""),
                         muscle_group=str(row.muscle_group or ""),
@@ -390,9 +402,16 @@ class RAGChain:
 
             return answer, int(tokens_used), settings.GEMINI_MODEL
 
+        except AttributeError as exc:
+            logger.error("Erro de atributo (possível incompatibilidade LangChain): %s", exc)
+            raise RuntimeError(f"LangChain compatibility error: {exc}") from exc
         except Exception as exc:
-            logger.error("Erro na geração LLM: %s", exc)
-            raise
+            logger.error(
+                "Erro na geração LLM: %s | type=%s",
+                exc,
+                type(exc).__name__,
+            )
+            raise RuntimeError(f"LLM generation failed: {exc}") from exc
 
     # ── Etapa 4: VALIDATE ─────────────────────────────────────────────────
 

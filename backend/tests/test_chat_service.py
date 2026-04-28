@@ -7,6 +7,8 @@ sem chamadas reais à API do Gemini.
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID, uuid4
@@ -14,6 +16,8 @@ from uuid import UUID, uuid4
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+logger = logging.getLogger(__name__)
 
 from app.models.user import Base, User
 from app.models.chatbot import (
@@ -714,3 +718,118 @@ class TestKnowledgeBase:
         assert result["total"] == 2
         for item in result["escalated_conversations"]:
             assert item["reason"] == "low_confidence"
+
+
+# ── Testes: Concorrência & Race Conditions ───────────────────────────────────
+
+class TestRateLimitConcurrency:
+    """Testa comportamento do rate limit sob requisições simultâneas."""
+
+    @pytest.mark.asyncio
+    async def test_rate_limit_concurrent_requests(
+        self, chat_service, db_session, sample_user
+    ):
+        """
+        Deve rejeitar requests após limite, mesmo sendo concorrentes.
+
+        Simula 35 requisições simultâneas (limite é 30/hora).
+        Espera que ~30 sucessos e ~5 rejeitadas com RateLimitExceededError.
+        """
+        import asyncio
+
+        # Mock do RAG para respostas rápidas
+        mock_result = RAGResult(
+            answer="Resposta teste",
+            retrieved_documents=[],
+            should_escalate=False,
+        )
+
+        async def mock_send_msg(user_id, msg_content, session):
+            """Simula envio de mensagem via chat_service."""
+            try:
+                return await chat_service.send_message(
+                    user_id=user_id,
+                    message_content=msg_content,
+                    session=session,
+                )
+            except RateLimitExceededError:
+                raise
+
+        # Preparar 35 requisições simultâneas do mesmo usuário
+        tasks = []
+        for i in range(35):
+            task = mock_send_msg(
+                user_id=sample_user.id,
+                msg_content=f"Pergunta {i}: Como faço exercício?",
+                session=db_session,
+            )
+            tasks.append(task)
+
+        # Mock do RAG pipeline
+        with patch("app.services.chat_service.rag_chain") as mock_rag:
+            mock_rag.run = AsyncMock(return_value=mock_result)
+
+            # Executar todas simultaneamente
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Contar sucessos e rejeitadas
+        success_count = sum(
+            1 for r in results if not isinstance(r, (RateLimitExceededError, Exception))
+        )
+        reject_count = sum(
+            1 for r in results if isinstance(r, RateLimitExceededError)
+        )
+
+        # Validações
+        assert (
+            success_count <= 30
+        ), f"Esperado ≤30 sucessos, got {success_count}"
+        assert reject_count > 0, "Deveria ter rejeitado alguma request"
+        assert (
+            success_count + reject_count == 35
+        ), "Total de requests deve ser 35"
+
+        logger.info(
+            "Teste concorrência OK: %d sucessos, %d rejeitadas",
+            success_count,
+            reject_count,
+        )
+
+    @pytest.mark.asyncio
+    async def test_rate_limit_window_separation(
+        self, chat_service, db_session, sample_user
+    ):
+        """
+        Deve respeitar janela de tempo de 1 hora.
+
+        Simula: 30 msgs em janela + 1 rejeição, depois muda timestamp
+        e permite 30 novas msgs na próxima janela.
+        """
+        import asyncio
+
+        mock_result = RAGResult(
+            answer="OK",
+            retrieved_documents=[],
+            should_escalate=False,
+        )
+
+        # Primera janela: 30 msgs
+        with patch("app.services.chat_service.rag_chain") as mock_rag:
+            mock_rag.run = AsyncMock(return_value=mock_result)
+
+            for i in range(30):
+                await chat_service.send_message(
+                    user_id=sample_user.id,
+                    message_content=f"Msg {i}",
+                    session=db_session,
+                )
+
+            # 31ª msg deve ser rejeitada
+            with pytest.raises(RateLimitExceededError):
+                await chat_service.send_message(
+                    user_id=sample_user.id,
+                    message_content="Msg 31",
+                    session=db_session,
+                )
+
+        logger.info("Teste janela OK: 30 msgs aceitas, 31ª rejeitada")

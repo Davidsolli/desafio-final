@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.ai.rag_chain import RAGResult, rag_chain
+from app.config.settings import settings
 from app.models.chatbot import (
     ChatConversation,
     ChatFeedback,
@@ -34,11 +35,11 @@ from app.models.user import User
 
 logger = logging.getLogger(__name__)
 
-# ── Constantes ────────────────────────────────────────────────────────────────
-RATE_LIMIT_MESSAGES = 30        # RN-16: max mensagens por hora por usuário
-RATE_LIMIT_WINDOW_HOURS = 1
-MAX_MESSAGE_LENGTH = 500        # RN segurança: máximo de caracteres
-INACTIVITY_CLOSE_HOURS = 24     # RN-02: fechar conversa após 24h inativa
+# Aliases para constantes centralizadas em settings
+RATE_LIMIT_MESSAGES = settings.CHAT_RATE_LIMIT_MESSAGES
+RATE_LIMIT_WINDOW_HOURS = settings.CHAT_RATE_LIMIT_WINDOW_HOURS
+MAX_MESSAGE_LENGTH = settings.CHAT_MAX_MESSAGE_LENGTH
+INACTIVITY_CLOSE_HOURS = settings.CHAT_INACTIVITY_CLOSE_HOURS
 
 
 # ── Exceções de Domínio ───────────────────────────────────────────────────────
@@ -65,6 +66,16 @@ class ChatService:
     """Serviço de negócio para o Chatbot de Dúvidas."""
 
     def __init__(self, session: AsyncSession) -> None:
+        """
+        Inicializar ChatService.
+
+        Args:
+            session: Sessão assíncrona do banco de dados para operações CRUD.
+
+        Side effects:
+            - Armazena referência à sessão do banco
+            - Preparado para executar operações de chat (send_message, escalação, feedback)
+        """
         self.session = session
 
     # ── Sanitização de Input ──────────────────────────────────────────────
