@@ -23,6 +23,13 @@ from app.models.user import User
 import app.models.workout_sheet  # noqa: F401 — registra tabelas
 import app.models.exercise_catalog  # noqa: F401 — registra tabela
 
+from app.dependencies.auth import get_current_user
+from main import app as fastapi_app
+
+def login_as(user: User):
+    """Sobrescreve a dependência de usuário atual para simular login."""
+    fastapi_app.dependency_overrides[get_current_user] = lambda: user
+
 
 # ---------------------------------------------------------------------------
 # Fixtures específicas deste módulo
@@ -111,10 +118,11 @@ async def sheet_payload(client_user):
 
 
 @pytest.mark.asyncio
-async def test_create_workout_sheet_success(personal_client, sheet_payload):
+async def test_create_workout_sheet_success(async_client, personal_user, sheet_payload):
     """Personal cria ficha com exercícios válidos — deve retornar 201."""
-    async with personal_client as client:
-        response = await client.post("/api/v1/workout-sheets", json=sheet_payload)
+    login_as(personal_user)
+    client = async_client
+    response = await client.post("/api/v1/workout-sheets", json=sheet_payload)
 
     assert response.status_code == 201
     data = response.json()
@@ -135,16 +143,17 @@ async def test_create_workout_sheet_success(personal_client, sheet_payload):
 
 
 @pytest.mark.asyncio
-async def test_list_workout_sheets(personal_client, sheet_payload):
+async def test_list_workout_sheets(async_client, personal_user, sheet_payload):
     """Listar fichas deve retornar paginação com total e data."""
-    async with personal_client as client:
-        # Criar 2 fichas (dias diferentes para evitar conflito RN-01)
-        await client.post("/api/v1/workout-sheets", json=sheet_payload)
+    login_as(personal_user)
+    client = async_client
+    # Criar 2 fichas (dias diferentes para evitar conflito RN-01)
+    await client.post("/api/v1/workout-sheets", json=sheet_payload)
 
-        sheet2 = {**sheet_payload, "day_of_week": 1, "name": "Treino B - Costa"}
-        await client.post("/api/v1/workout-sheets", json=sheet2)
+    sheet2 = {**sheet_payload, "day_of_week": 1, "name": "Treino B - Costa"}
+    await client.post("/api/v1/workout-sheets", json=sheet2)
 
-        response = await client.get("/api/v1/workout-sheets?page=1&limit=10")
+    response = await client.get("/api/v1/workout-sheets?page=1&limit=10")
 
     assert response.status_code == 200
     data = response.json()
@@ -164,13 +173,14 @@ async def test_list_workout_sheets(personal_client, sheet_payload):
 
 
 @pytest.mark.asyncio
-async def test_get_workout_sheet_by_id(personal_client, sheet_payload):
+async def test_get_workout_sheet_by_id(async_client, personal_user, sheet_payload):
     """Buscar ficha por ID deve retornar 200 com exercícios em ordem."""
-    async with personal_client as client:
-        create_resp = await client.post("/api/v1/workout-sheets", json=sheet_payload)
-        sheet_id = create_resp.json()["id"]
+    login_as(personal_user)
+    client = async_client
+    create_resp = await client.post("/api/v1/workout-sheets", json=sheet_payload)
+    sheet_id = create_resp.json()["id"]
 
-        response = await client.get(f"/api/v1/workout-sheets/{sheet_id}")
+    response = await client.get(f"/api/v1/workout-sheets/{sheet_id}")
 
     assert response.status_code == 200
     data = response.json()
@@ -185,36 +195,37 @@ async def test_get_workout_sheet_by_id(personal_client, sheet_payload):
 
 
 @pytest.mark.asyncio
-async def test_update_workout_sheet(personal_client, sheet_payload):
+async def test_update_workout_sheet(async_client, personal_user, sheet_payload):
     """Atualizar ficha deve substituir exercícios e retornar 200."""
-    async with personal_client as client:
-        create_resp = await client.post("/api/v1/workout-sheets", json=sheet_payload)
-        sheet_id = create_resp.json()["id"]
+    login_as(personal_user)
+    client = async_client
+    create_resp = await client.post("/api/v1/workout-sheets", json=sheet_payload)
+    sheet_id = create_resp.json()["id"]
 
-        update_payload = {
-            "name": "Treino A - Peito (Modificado)",
-            "exercises": [
-                {
-                    "name": "Supino Inclinado",
-                    "muscle_group": "peito",
-                    "series": 3,
-                    "repetitions": 10,
-                    "load_kg": 60.0,
-                    "rest_seconds": 90,
-                    "order": 1,
-                },
-                {
-                    "name": "Crucifixo",
-                    "muscle_group": "peito",
-                    "series": 3,
-                    "repetitions": 12,
-                    "load_kg": 20.0,
-                    "rest_seconds": 60,
-                    "order": 2,
-                },
-            ],
-        }
-        response = await client.put(f"/api/v1/workout-sheets/{sheet_id}", json=update_payload)
+    update_payload = {
+        "name": "Treino A - Peito (Modificado)",
+        "exercises": [
+            {
+                "name": "Supino Inclinado",
+                "muscle_group": "peito",
+                "series": 3,
+                "repetitions": 10,
+                "load_kg": 60.0,
+                "rest_seconds": 90,
+                "order": 1,
+            },
+            {
+                "name": "Crucifixo",
+                "muscle_group": "peito",
+                "series": 3,
+                "repetitions": 12,
+                "load_kg": 20.0,
+                "rest_seconds": 60,
+                "order": 2,
+            },
+        ],
+    }
+    response = await client.put(f"/api/v1/workout-sheets/{sheet_id}", json=update_payload)
 
     assert response.status_code == 200
     data = response.json()
@@ -232,18 +243,19 @@ async def test_update_workout_sheet(personal_client, sheet_payload):
 
 
 @pytest.mark.asyncio
-async def test_delete_workout_sheet(personal_client, sheet_payload):
+async def test_delete_workout_sheet(async_client, personal_user, sheet_payload):
     """Deletar ficha deve retornar 204 e a ficha não deve aparecer em listagens."""
-    async with personal_client as client:
-        create_resp = await client.post("/api/v1/workout-sheets", json=sheet_payload)
-        sheet_id = create_resp.json()["id"]
+    login_as(personal_user)
+    client = async_client
+    create_resp = await client.post("/api/v1/workout-sheets", json=sheet_payload)
+    sheet_id = create_resp.json()["id"]
 
-        delete_resp = await client.delete(f"/api/v1/workout-sheets/{sheet_id}")
-        assert delete_resp.status_code == 204
+    delete_resp = await client.delete(f"/api/v1/workout-sheets/{sheet_id}")
+    assert delete_resp.status_code == 204
 
-        # Ficha não deve aparecer em GET /{id}
-        get_resp = await client.get(f"/api/v1/workout-sheets/{sheet_id}")
-        assert get_resp.status_code == 404
+    # Ficha não deve aparecer em GET /{id}
+    get_resp = await client.get(f"/api/v1/workout-sheets/{sheet_id}")
+    assert get_resp.status_code == 404
 
 
 # ---------------------------------------------------------------------------
@@ -252,81 +264,24 @@ async def test_delete_workout_sheet(personal_client, sheet_payload):
 
 
 @pytest.mark.asyncio
-async def test_duplicate_workout_sheet(personal_client, sheet_payload):
-    """Duplicar ficha deve criar nova ficha com mesmos exercícios e novo ID."""
-    async with personal_client as client:
-        create_resp = await client.post("/api/v1/workout-sheets", json=sheet_payload)
-        original = create_resp.json()
+async def test_duplicate_deleted_workout_sheet_returns_404(async_client, personal_user, sheet_payload):
+    """Tentar duplicar ficha deletada deve retornar 404."""
+    login_as(personal_user)
+    client = async_client
+    
+    create_resp = await client.post("/api/v1/workout-sheets", json=sheet_payload)
+    assert create_resp.status_code == 201
+    src_id = create_resp.json()["id"]
 
-        # Para duplicar sem conflito RN-01, mudar para dia diferente
-        # Não podemos duplicar no mesmo dia — precisamos de outro dia
-        # Criamos em dia 0, então a cópia vai no dia 1
-        dup_payload = {"name": "Treino A - Peito (Cópia)"}
-        # Para não haver conflito, vamos para dia 2 primeiro mudando a original
-        update_resp = await client.put(
-            f"/api/v1/workout-sheets/{original['id']}",
-            json={"day_of_week": 2},
-        )
-        assert update_resp.status_code == 200
+    await client.delete(f"/api/v1/workout-sheets/{src_id}")
 
-        # Agora duplicar (dia 2 ocupado, vai gerar conflito — testar sem conflito)
-        # Forçar um nome diferente; não há como evitar conflito RN-01 no mesmo aluno+dia
-        # Melhor: criar sheet em dia 3, depois duplicar
-        sheet_day3 = {**sheet_payload, "day_of_week": 3, "name": "Treino D"}
-        create_d3 = await client.post("/api/v1/workout-sheets", json=sheet_day3)
-        assert create_d3.status_code == 201
-        d3_id = create_d3.json()["id"]
-
-        # Mover original para dia 4 (para liberar dia 3)
-        await client.put(f"/api/v1/workout-sheets/{d3_id}", json={"day_of_week": 4})
-
-        # Agora duplicar sheet dia 2 para o aluno (dia 2 ainda está ocupado)
-        # Usar outro aluno para evitar conflito — a duplicação para o mesmo aluno+dia vai dar 409
-        # Teste simples: duplicar a ficha em dia 3 (movida para dia 4) — vai para dia 4... mesma situação
-        # Conclusão: Precisamos de um endpoint com user_id diferente ou usar dia livre
-        # Por simplicidade do teste, usamos request sem user_id (usa mesmo aluno)
-        # e verificamos que se o dia estiver livre funciona
-
-        # Criar sheet no dia 5 para duplicar
-        sheet_d5 = {**sheet_payload, "day_of_week": 5, "name": "Treino F"}
-        cr5 = await client.post("/api/v1/workout-sheets", json=sheet_d5)
-        d5_id = cr5.json()["id"]
-
-        # Mover para dia 6 (libera dia 5)
-        await client.put(f"/api/v1/workout-sheets/{d5_id}", json={"day_of_week": 6})
-
-        # Agora duplicar d5 — dia 6 ocupado. Deletar d5 (agora em dia 6) e recriar no 5
-        await client.delete(f"/api/v1/workout-sheets/{d5_id}")
-
-        cr5_clean = await client.post("/api/v1/workout-sheets", json=sheet_d5)
-        src_id = cr5_clean.json()["id"]
-
-        # Mover para dia 4 (para liberar dia 5 para cópia)
-        await client.put(f"/api/v1/workout-sheets/{src_id}", json={"day_of_week": 4})
-        await client.delete(f"/api/v1/workout-sheets/{d3_id}")  # libera dia 4... complexo
-
-        # Abordagem mais simples: usar sheet já deletada
-        # Crie uma ficha específica para duplicar, depois delete-a para liberar o dia
-        # e use outro user_id ao duplicar
-
-    # Teste principal de duplicação: verificar que o endpoint retorna 201
-    # e que a nova ficha tem novo ID mas mesmos exercícios
-    async with personal_client as client:
-        # Setup limpo
-        sheet_source = {**sheet_payload, "day_of_week": 5, "name": "Fonte Duplicação"}
-        src_resp = await client.post("/api/v1/workout-sheets", json=sheet_source)
-        assert src_resp.status_code == 201
-        src_id = src_resp.json()["id"]
-
-        # Deletar a ficha de origem para liberar o dia para a cópia do mesmo aluno
-        await client.delete(f"/api/v1/workout-sheets/{src_id}")
-
-        # Tentar duplicar (mas a ficha foi deletada, portanto 404)
-        dup_resp = await client.post(
-            f"/api/v1/workout-sheets/{src_id}/duplicate",
-            json={"name": "Fonte Duplicação (Cópia)"},
-        )
-        assert dup_resp.status_code == 404  # Esperado: ficha deletada não encontrada
+    dup_payload = {"name": "Treino A - Peito (Cópia)"}
+    dup_resp = await client.post(
+        f"/api/v1/workout-sheets/{src_id}/duplicate",
+        json=dup_payload,
+    )
+    
+    assert dup_resp.status_code == 404
 
 
 # ---------------------------------------------------------------------------
@@ -336,7 +291,7 @@ async def test_duplicate_workout_sheet(personal_client, sheet_payload):
 
 @pytest.mark.asyncio
 async def test_duplicate_workout_sheet_to_other_user(
-    personal_client, sheet_payload, client_user, test_db_session
+    async_client, personal_user, sheet_payload, client_user, test_db_session
 ):
     """Duplicar ficha atribuindo a outro aluno deve funcionar."""
     from app.services.user_service import UserService
@@ -353,16 +308,17 @@ async def test_duplicate_workout_sheet_to_other_user(
     )
     second_resp = await service.create(second_dto)
 
-    async with personal_client as client:
-        create_resp = await client.post("/api/v1/workout-sheets", json=sheet_payload)
-        src_id = create_resp.json()["id"]
-        src_exercises = create_resp.json()["exercises"]
+    login_as(personal_user)
+    client = async_client
+    create_resp = await client.post("/api/v1/workout-sheets", json=sheet_payload)
+    src_id = create_resp.json()["id"]
+    src_exercises = create_resp.json()["exercises"]
 
-        # Duplicar para segundo aluno
-        dup_resp = await client.post(
-            f"/api/v1/workout-sheets/{src_id}/duplicate",
-            json={"name": "Cópia para Segundo Aluno", "user_id": str(second_resp.id)},
-        )
+    # Duplicar para segundo aluno
+    dup_resp = await client.post(
+        f"/api/v1/workout-sheets/{src_id}/duplicate",
+        json={"name": "Cópia para Segundo Aluno", "user_id": str(second_resp.id)},
+    )
 
     assert dup_resp.status_code == 201
     dup_data = dup_resp.json()
@@ -379,7 +335,7 @@ async def test_duplicate_workout_sheet_to_other_user(
 
 
 @pytest.mark.asyncio
-async def test_create_sheet_invalid_muscle_group(personal_client, client_user):
+async def test_create_sheet_invalid_muscle_group(async_client, personal_user, client_user):
     """Grupo muscular inválido deve retornar 422."""
     payload = {
         "user_id": str(client_user.id),
@@ -396,8 +352,9 @@ async def test_create_sheet_invalid_muscle_group(personal_client, client_user):
             }
         ],
     }
-    async with personal_client as client:
-        response = await client.post("/api/v1/workout-sheets", json=payload)
+    login_as(personal_user)
+    client = async_client
+    response = await client.post("/api/v1/workout-sheets", json=payload)
 
     assert response.status_code == 422
 
@@ -408,7 +365,7 @@ async def test_create_sheet_invalid_muscle_group(personal_client, client_user):
 
 
 @pytest.mark.asyncio
-async def test_create_sheet_invalid_series(personal_client, client_user):
+async def test_create_sheet_invalid_series(async_client, personal_user, client_user):
     """Séries <= 0 deve retornar 422."""
     payload = {
         "user_id": str(client_user.id),
@@ -425,14 +382,15 @@ async def test_create_sheet_invalid_series(personal_client, client_user):
             }
         ],
     }
-    async with personal_client as client:
-        response = await client.post("/api/v1/workout-sheets", json=payload)
+    login_as(personal_user)
+    client = async_client
+    response = await client.post("/api/v1/workout-sheets", json=payload)
 
     assert response.status_code == 422
 
 
 @pytest.mark.asyncio
-async def test_create_sheet_invalid_load(personal_client, client_user):
+async def test_create_sheet_invalid_load(async_client, personal_user, client_user):
     """Carga <= 0 deve retornar 422."""
     payload = {
         "user_id": str(client_user.id),
@@ -449,8 +407,9 @@ async def test_create_sheet_invalid_load(personal_client, client_user):
             }
         ],
     }
-    async with personal_client as client:
-        response = await client.post("/api/v1/workout-sheets", json=payload)
+    login_as(personal_user)
+    client = async_client
+    response = await client.post("/api/v1/workout-sheets", json=payload)
 
     assert response.status_code == 422
 
@@ -461,7 +420,7 @@ async def test_create_sheet_invalid_load(personal_client, client_user):
 
 
 @pytest.mark.asyncio
-async def test_student_cannot_create_sheet(student_client, client_user):
+async def test_student_cannot_create_sheet(async_client, client_user):
     """Aluno não pode criar fichas — deve retornar 403."""
     payload = {
         "user_id": str(client_user.id),
@@ -469,37 +428,42 @@ async def test_student_cannot_create_sheet(student_client, client_user):
         "day_of_week": 0,
         "exercises": [],
     }
-    async with student_client as client:
-        response = await client.post("/api/v1/workout-sheets", json=payload)
+    login_as(client_user)
+    client = async_client
+    response = await client.post("/api/v1/workout-sheets", json=payload)
 
     assert response.status_code == 403
 
 
 @pytest.mark.asyncio
-async def test_student_cannot_edit_sheet(personal_client, student_client, sheet_payload):
+async def test_student_cannot_edit_sheet(async_client, personal_user, client_user, sheet_payload):
     """Aluno não pode editar fichas — deve retornar 403."""
-    async with personal_client as client:
-        create_resp = await client.post("/api/v1/workout-sheets", json=sheet_payload)
-        sheet_id = create_resp.json()["id"]
+    login_as(personal_user)
+    client = async_client
+    create_resp = await client.post("/api/v1/workout-sheets", json=sheet_payload)
+    sheet_id = create_resp.json()["id"]
 
-    async with student_client as client:
-        response = await client.put(
-            f"/api/v1/workout-sheets/{sheet_id}",
-            json={"name": "Tentativa de edição"},
-        )
+    login_as(client_user)
+    client = async_client
+    response = await client.put(
+        f"/api/v1/workout-sheets/{sheet_id}",
+        json={"name": "Tentativa de edição"},
+    )
 
     assert response.status_code == 403
 
 
 @pytest.mark.asyncio
-async def test_student_can_view_own_sheet(personal_client, student_client, sheet_payload):
+async def test_student_can_view_own_sheet(async_client, personal_user, client_user, sheet_payload):
     """Aluno pode visualizar suas próprias fichas — deve retornar 200."""
-    async with personal_client as client:
-        create_resp = await client.post("/api/v1/workout-sheets", json=sheet_payload)
-        sheet_id = create_resp.json()["id"]
+    login_as(personal_user)
+    client = async_client
+    create_resp = await client.post("/api/v1/workout-sheets", json=sheet_payload)
+    sheet_id = create_resp.json()["id"]
 
-    async with student_client as client:
-        response = await client.get(f"/api/v1/workout-sheets/{sheet_id}")
+    login_as(client_user)
+    client = async_client
+    response = await client.get(f"/api/v1/workout-sheets/{sheet_id}")
 
     assert response.status_code == 200
 
@@ -510,15 +474,16 @@ async def test_student_can_view_own_sheet(personal_client, student_client, sheet
 
 
 @pytest.mark.asyncio
-async def test_list_sheets_filter_by_day(personal_client, sheet_payload):
+async def test_list_sheets_filter_by_day(async_client, personal_user, sheet_payload):
     """Listar fichas filtrado por day_of_week deve retornar apenas fichas do dia."""
-    async with personal_client as client:
-        # Criar fichas em dias diferentes
-        await client.post("/api/v1/workout-sheets", json={**sheet_payload, "day_of_week": 0})
-        await client.post("/api/v1/workout-sheets", json={**sheet_payload, "day_of_week": 1, "name": "Treino B"})
+    login_as(personal_user)
+    client = async_client
+    # Criar fichas em dias diferentes
+    await client.post("/api/v1/workout-sheets", json={**sheet_payload, "day_of_week": 0})
+    await client.post("/api/v1/workout-sheets", json={**sheet_payload, "day_of_week": 1, "name": "Treino B"})
 
-        # Filtrar por segunda-feira (0)
-        response = await client.get("/api/v1/workout-sheets?day_of_week=0")
+    # Filtrar por segunda-feira (0)
+    response = await client.get("/api/v1/workout-sheets?day_of_week=0")
 
     assert response.status_code == 200
     data = response.json()
@@ -532,11 +497,12 @@ async def test_list_sheets_filter_by_day(personal_client, sheet_payload):
 
 
 @pytest.mark.asyncio
-async def test_get_nonexistent_sheet(personal_client):
+async def test_get_nonexistent_sheet(async_client, personal_user):
     """Buscar ficha com ID inexistente deve retornar 404."""
     fake_id = str(uuid4())
-    async with personal_client as client:
-        response = await client.get(f"/api/v1/workout-sheets/{fake_id}")
+    login_as(personal_user)
+    client = async_client
+    response = await client.get(f"/api/v1/workout-sheets/{fake_id}")
 
     assert response.status_code == 404
     assert "não encontrada" in response.json()["detail"].lower()
@@ -548,14 +514,15 @@ async def test_get_nonexistent_sheet(personal_client):
 
 
 @pytest.mark.asyncio
-async def test_rn01_one_sheet_per_day(personal_client, sheet_payload):
+async def test_rn01_one_sheet_per_day(async_client, personal_user, sheet_payload):
     """RN-01: Segunda ficha no mesmo aluno+dia deve retornar 409."""
-    async with personal_client as client:
-        first_resp = await client.post("/api/v1/workout-sheets", json=sheet_payload)
-        assert first_resp.status_code == 201
+    login_as(personal_user)
+    client = async_client
+    first_resp = await client.post("/api/v1/workout-sheets", json=sheet_payload)
+    assert first_resp.status_code == 201
 
-        second_resp = await client.post(
-            "/api/v1/workout-sheets",
-            json={**sheet_payload, "name": "Segunda Ficha no Mesmo Dia"},
-        )
-        assert second_resp.status_code == 409
+    second_resp = await client.post(
+        "/api/v1/workout-sheets",
+        json={**sheet_payload, "name": "Segunda Ficha no Mesmo Dia"},
+    )
+    assert second_resp.status_code == 409

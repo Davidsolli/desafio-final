@@ -15,13 +15,13 @@ from fastapi.testclient import TestClient
 import httpx
 from httpx import ASGITransport
 
-from main import app
+from main import app as fastapi_app
 from app.config.database import get_db
 from app.models.user import Base, User
 import app.models.logbook  # noqa: F401 — garante que workout_sessions/session_exercises entram no Base.metadata
-from app.models.goal import Goal as _Goal, GoalProgressEntry as _GoalProgressEntry  # noqa: F401 — registra tabelas no metadata
-import app.models.workout_sheet  # noqa: F401 — registra workout_sheets/exercises no Base.metadata
-import app.models.exercise_catalog  # noqa: F401 — registra exercise_catalog no Base.metadata
+from app.models.goal import Goal as _Goal, GoalProgressEntry as _GoalProgressEntry  # noqa: F401
+from app.models import workout_sheet  # noqa: F401 — registra workout_sheets/exercises no Base.metadata
+from app.models import exercise_catalog  # noqa: F401 — registra exercise_catalog no Base.metadata
 from app.services.user_service import UserService
 from app.dependencies.auth import get_current_user
 
@@ -71,12 +71,12 @@ def client(test_db_session):
     async def override_get_db():
         yield test_db_session
 
-    app.dependency_overrides[get_db] = override_get_db
+    fastapi_app.dependency_overrides[get_db] = override_get_db
 
-    with TestClient(app) as test_client:
+    with TestClient(fastapi_app) as test_client:
         yield test_client
 
-    app.dependency_overrides.clear()
+    fastapi_app.dependency_overrides.clear()
 
 
 @pytest_asyncio.fixture
@@ -86,13 +86,13 @@ async def async_client(test_db_session):
     async def override_get_db():
         yield test_db_session
 
-    app.dependency_overrides[get_db] = override_get_db
+    fastapi_app.dependency_overrides[get_db] = override_get_db
 
-    transport = ASGITransport(app=app)
+    transport = ASGITransport(app=fastapi_app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
 
-    app.dependency_overrides.clear()
+    fastapi_app.dependency_overrides.clear()
 
 
 @pytest_asyncio.fixture
@@ -107,14 +107,14 @@ async def auth_client(test_db_session, sample_user):
     async def override_get_current_user():
         return sample_user
 
-    app.dependency_overrides[get_db] = override_get_db
-    app.dependency_overrides[get_current_user] = override_get_current_user
+    fastapi_app.dependency_overrides[get_db] = override_get_db
+    fastapi_app.dependency_overrides[get_current_user] = override_get_current_user
 
-    transport = ASGITransport(app=app)
+    transport = ASGITransport(app=fastapi_app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
 
-    app.dependency_overrides.clear()
+    fastapi_app.dependency_overrides.clear()
 
 
 @pytest_asyncio.fixture
@@ -128,14 +128,14 @@ async def async_client_as(test_db_session):
         async def override_get_current_user():
             return user
 
-        app.dependency_overrides[get_db] = override_get_db
-        app.dependency_overrides[get_current_user] = override_get_current_user
+        fastapi_app.dependency_overrides[get_db] = override_get_db
+        fastapi_app.dependency_overrides[get_current_user] = override_get_current_user
 
-        transport = ASGITransport(app=app)
+        transport = ASGITransport(app=fastapi_app)
         return httpx.AsyncClient(transport=transport, base_url="http://test")
 
     yield _make_client
-    app.dependency_overrides.clear()
+    fastapi_app.dependency_overrides.clear()
 
 
 @pytest_asyncio.fixture
