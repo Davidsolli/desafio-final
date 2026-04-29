@@ -20,6 +20,8 @@ from app.config.database import get_db
 from app.models.user import Base, User
 import app.models.logbook  # noqa: F401 — garante que workout_sessions/session_exercises entram no Base.metadata
 from app.models.goal import Goal as _Goal, GoalProgressEntry as _GoalProgressEntry  # noqa: F401 — registra tabelas no metadata
+import app.models.workout_sheet  # noqa: F401 — registra workout_sheets/exercises no Base.metadata
+import app.models.exercise_catalog  # noqa: F401 — registra exercise_catalog no Base.metadata
 from app.services.user_service import UserService
 from app.dependencies.auth import get_current_user
 

@@ -7,6 +7,8 @@ from app.models.chatbot import (  # noqa: F401
     ChatMessage,
     ChatFeedback,
 )
+from app.models.workout_sheet import WorkoutSheet, Exercise  # noqa: F401
+from app.models.exercise_catalog import ExerciseCatalog  # noqa: F401
 
 __all__ = [
     "Base",
@@ -15,4 +17,7 @@ __all__ = [
     "ChatConversation",
     "ChatMessage",
     "ChatFeedback",
+    "WorkoutSheet",
+    "Exercise",
+    "ExerciseCatalog",
 ]
