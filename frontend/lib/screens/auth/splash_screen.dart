@@ -32,19 +32,7 @@ class _SplashScreenState extends State<SplashScreen> {
           children: [
             BounceInDown(
               duration: const Duration(milliseconds: 600),
-              child: Container(
-                width: 100,
-                height: 100,
-                decoration: BoxDecoration(
-                  gradient: AppColors.gradientPrimary,
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                child: const Icon(
-                  Icons.fitness_center,
-                  size: 50,
-                  color: Colors.white,
-                ),
-              ),
+              child: Image.asset('assets/images/logo-2.png'),
             ),
             const SizedBox(height: 32),
             FadeInDown(
