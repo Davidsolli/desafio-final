@@ -8,7 +8,7 @@ Define validações com Pydantic para:
 """
 
 import re
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional
 from uuid import UUID
 
@@ -120,6 +120,23 @@ class UpdateUserDTO(BaseModel):
         None,
         description="Status ativo/inativo do usuário",
     )
+    gender: Optional[str] = Field(
+        None,
+        description="Sexo biológico: male ou female (necessário para cálculo de TMB)",
+    )
+    birth_date: Optional[date] = Field(
+        None,
+        description="Data de nascimento (necessária para cálculo de TMB)",
+    )
+
+    @field_validator("gender")
+    @classmethod
+    def validate_gender(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        if v not in {"male", "female"}:
+            raise ValueError("gender deve ser 'male' ou 'female'")
+        return v
 
     @field_validator("name")
     @classmethod
@@ -176,6 +193,8 @@ class UserResponseDTO(BaseModel):
     role: str
     phone_whatsapp: str
     is_active: bool
+    gender: Optional[str] = None
+    birth_date: Optional[date] = None
     created_at: datetime
     updated_at: datetime
 

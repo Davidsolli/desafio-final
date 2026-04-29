@@ -9,6 +9,7 @@ from app.models.chatbot import (  # noqa: F401
 )
 from app.models.workout_sheet import WorkoutSheet, Exercise  # noqa: F401
 from app.models.exercise_catalog import ExerciseCatalog  # noqa: F401
+from app.models.body_measurement import BodyMeasurement  # noqa: F401
 
 __all__ = [
     "Base",
@@ -20,4 +21,5 @@ __all__ = [
     "WorkoutSheet",
     "Exercise",
     "ExerciseCatalog",
+    "BodyMeasurement",
 ]

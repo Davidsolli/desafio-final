@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config.database import init_db
-from app.routes import user, auth, chat, logbook, goal
+from app.routes import user, auth, chat, logbook, goal, measurement
 from app.routes.workout_sheet import router as workout_sheet_router, catalog_router as exercise_catalog_router
 
 # Rota básica de Health Check
@@ -53,5 +53,6 @@ app.include_router(user.router)
 app.include_router(chat.router)
 app.include_router(logbook.router)
 app.include_router(goal.router)
+app.include_router(measurement.router)
 app.include_router(workout_sheet_router)
 app.include_router(exercise_catalog_router)

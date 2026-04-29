@@ -7,7 +7,7 @@ role, phone_whatsapp, is_active, created_at, updated_at.
 
 from datetime import datetime
 from uuid import uuid4
-from sqlalchemy import Column, String, Boolean, DateTime
+from sqlalchemy import Column, String, Boolean, DateTime, Date
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import declarative_base
 
@@ -60,6 +60,10 @@ class User(Base):
     phone_whatsapp = Column(String(20), nullable=False)
 
     is_active = Column(Boolean, nullable=False, default=True, index=True)
+
+    gender = Column(String(10), nullable=True)
+
+    birth_date = Column(Date, nullable=True)
 
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
