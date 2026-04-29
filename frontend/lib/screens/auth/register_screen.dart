@@ -178,22 +178,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: 24),
+        const SizedBox(height: 4),
         const Text('Dados Pessoais',
             style: TextStyle(color: AppColors.textPrimary, fontSize: 22, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 6),
+        const SizedBox(height: 2),
         const Text('Vamos começar com o básico',
             style: TextStyle(color: AppColors.primary, fontSize: 14)),
-        const SizedBox(height: 28),
+        const SizedBox(height: 8),
         _label('Nome completo'),
         _input(_nameController, 'Seu nome'),
-        const SizedBox(height: 16),
+        const SizedBox(height: 8),
         _label('Email'),
         _input(_emailController, 'seu@email.com', keyboardType: TextInputType.emailAddress),
-        const SizedBox(height: 16),
+        const SizedBox(height: 8),
         _label('Senha'),
         _inputPassword(),
-        const SizedBox(height: 32),
+        const SizedBox(height: 8),
       ],
     );
   }
@@ -202,22 +202,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: 24),
+        const SizedBox(height: 4),
         const Text('Dados Corporais',
             style: TextStyle(color: AppColors.textPrimary, fontSize: 22, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 6),
+        const SizedBox(height: 2),
         const Text('Para cálculos personalizados',
             style: TextStyle(color: AppColors.primary, fontSize: 14)),
-        const SizedBox(height: 28),
+        const SizedBox(height: 8),
         _label('Peso (kg)'),
         _input(_weightController, '78', keyboardType: TextInputType.number),
-        const SizedBox(height: 16),
+        const SizedBox(height: 8),
         _label('Altura (cm)'),
         _input(_heightController, '175', keyboardType: TextInputType.number),
-        const SizedBox(height: 16),
+        const SizedBox(height: 8),
         _label('Idade'),
         _input(_ageController, '27', keyboardType: TextInputType.number),
-        const SizedBox(height: 32),
+        const SizedBox(height: 8),
       ],
     );
   }
@@ -226,15 +226,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: 24),
+        const SizedBox(height: 4),
         const Text('Seu Objetivo',
             style: TextStyle(color: AppColors.textPrimary, fontSize: 22, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 6),
+        const SizedBox(height: 2),
         const Text('Escolha seu foco principal',
             style: TextStyle(color: AppColors.primary, fontSize: 14)),
-        const SizedBox(height: 24),
+        const SizedBox(height: 8),
         ...(_goals.map((g) => _buildGoalOption(g)).toList()),
-        const SizedBox(height: 32),
+        const SizedBox(height: 8),
       ],
     );
   }
