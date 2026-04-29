@@ -59,7 +59,7 @@ async def create_user(
     - email: Email válido e único
     - password: Senha forte (8+ chars, maiúscula, minúscula, número, caractere especial)
     - role: admin, personal_trainer ou client
-    - phone_whatsapp: +55 XX XXXXX-XXXX
+    - phone_whatsapp: +55 XX XXXXX-XXXX (opcional)
 
     **Responses:**
     - 201: Usuário criado

@@ -43,7 +43,8 @@ async def health_check():
     return {
         "status": "online",
         "message": "Servidor OmniConnect rodando com sucesso!",
-        "docs": "Acesse http://localhost:8000/docs para ver a documentação interativa."
+        "docs": "Acesse http://localhost:8000/docs para ver a documentação interativa.",
+        "version": "1.0.1"
     }
 
 # Registrar rotas

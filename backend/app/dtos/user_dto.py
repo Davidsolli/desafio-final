@@ -24,17 +24,14 @@ class CreateUserDTO(BaseModel):
     """DTO para criação de novo usuário."""
 
     name: str = Field(
-        ...,
         min_length=3,
         max_length=255,
         description="Nome completo do usuário",
     )
     email: EmailStr = Field(
-        ...,
         description="Email único do usuário",
     )
     password: str = Field(
-        ...,
         min_length=8,
         description="Senha (mín. 8 chars, maiúscula, minúscula, número, caractere especial)",
     )
@@ -42,9 +39,9 @@ class CreateUserDTO(BaseModel):
         default="client",
         description="Papel do usuário: admin, personal_trainer ou client",
     )
-    phone_whatsapp: str = Field(
-        ...,
-        description="Número WhatsApp no formato +55 XX XXXXX-XXXX",
+    phone_whatsapp: Optional[str] = Field(
+        default=None,
+        description="Número WhatsApp no formato +55 XX XXXXX-XXXX (opcional)",
     )
 
     @field_validator("name")
@@ -78,8 +75,10 @@ class CreateUserDTO(BaseModel):
 
     @field_validator("phone_whatsapp")
     @classmethod
-    def validate_phone(cls, v: str) -> str:
+    def validate_phone(cls, v: Optional[str]) -> Optional[str]:
         """Validar telefone: formato +55 XX XXXXX-XXXX."""
+        if v is None:
+            return v
         if not re.match(PHONE_REGEX, v):
             raise ValueError(
                 "Telefone WhatsApp deve estar no formato +55 XX XXXXX-XXXX"
@@ -93,7 +92,7 @@ class CreateUserDTO(BaseModel):
                 "email": "joao@example.com",
                 "password": "SenhaForte123!",
                 "role": "client",
-                "phone_whatsapp": "+55 11 99999-9999",
+                "phone_whatsapp": None,
             }
         }
     )
@@ -174,7 +173,7 @@ class UserResponseDTO(BaseModel):
     name: str
     email: str
     role: str
-    phone_whatsapp: str
+    phone_whatsapp: Optional[str]
     is_active: bool
     created_at: datetime
     updated_at: datetime

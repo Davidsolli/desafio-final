@@ -57,7 +57,7 @@ class User(Base):
         index=True,
     )
 
-    phone_whatsapp = Column(String(20), nullable=False)
+    phone_whatsapp = Column(String(20), nullable=True)
 
     is_active = Column(Boolean, nullable=False, default=True, index=True)
 
