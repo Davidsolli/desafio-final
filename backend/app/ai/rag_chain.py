@@ -45,8 +45,8 @@ ESCALATION_KEYWORDS = [
     "falar com personal", "chamar personal", "quero personal",
     "não entendi", "nao entendi", "ainda com dúvida", "ainda com duvida",
     "me ajuda pessoalmente", "suporte humano", "personal trainer",
-    "lesão", "lesao", "dor no peito", "dor no peito", "dor forte",
-    "médico", "medico", "emergência", "emergencia",
+    "lesão", "lesao", "dor no peito", "dor forte",
+    "médico", "medico", "emergência", "emergencia", "dor",
 ]
 
 # System prompt base do chatbot
@@ -63,6 +63,13 @@ Se a resposta não estiver nos documentos, diga claramente que não sabe.
 5. Se identificar risco de saúde ("dor no peito", "lesão grave"), \
 responda: "Por segurança, recomendo consultar um profissional de saúde."
 6. Não invente exercícios, cargas ou recomendações que não estejam documentadas.
+
+FAQ (Dúvidas Gerais e Operacionais):
+- Horário: Segunda a sexta, das 06:00 às 23:00, e sábados das 08:00 às 18:00.
+- Avaliação física: Agende na aba 'Avaliações' no aplicativo ou na recepção.
+- Toalhas: Fornecidas na recepção. Uso obrigatório.
+- Falha concêntrica: Ocorre quando não é possível completar a fase de subida do peso.
+- Cardio e Musculação: Fazer cardio DEPOIS da musculação se o objetivo for força/hipertrofia.
 
 Perfil do Aluno:
 {user_profile}
@@ -479,13 +486,13 @@ class RAGChain:
         # ── 1. RETRIEVE ────────────────────────────────────────────────────
         retrieved_docs = await self.retrieve(query, session, academy_id)
 
-        # ── Verificar necessidade de escalação ANTES de gerar ──────────────
+        # ── Verificar necessidade de escalação explícita ANTES de gerar ──────────────
         should_escalate, escalation_reason = self._should_escalate(
             query, retrieved_docs
         )
 
-        if should_escalate and not retrieved_docs:
-            # Sem documentos relevantes → escalar imediatamente
+        if should_escalate and escalation_reason == "user_requested":
+            # Palavra-chave de risco ou pedido explícito → escalar imediatamente
             latency_ms = int((time.monotonic() - start_time) * 1000)
             logger.warning(
                 "RAG: escalando conversa | reason=%s | latency_ms=%d",
@@ -503,6 +510,30 @@ class RAGChain:
                 latency_ms=latency_ms,
                 confidence_score=0.0,
             )
+
+        # ── 1.5. FAST-PATH FAQ (Fallback e Otimização) ─────────────────────
+        query_lower = query.lower()
+        faq_rules = [
+            (["horário", "horas", "aberta", "fecha", "funcionamento"], "A OmniConnect funciona de segunda a sexta, das 06:00 às 23:00, e aos sábados das 08:00 às 18:00. Domingos e feriados não abrimos."),
+            (["toalha"], "Sim, fornecemos toalhas na recepção. O uso de toalha nos equipamentos é obrigatório por questões de higiene."),
+            (["avaliação física", "agendar avaliação","com quem agendo minha avaliação","agendar minha avaliação", "quem é meu personal", "quem é o personal"], "Para agendar sua avaliação física, você pode acessar a aba 'Avaliações' aqui mesmo no aplicativo e escolher um horário disponível com o seu Personal, ou solicitar diretamente na recepção."),
+            (["onde verifico","onde vejo","onde encontro", "lista de treinos", "meu treino", "treino de hoje", "treinos para hoje", "qual meu treino"], "Você pode verificar a sua lista de treinos de hoje e da semana acessando a aba 'Meus Treinos' na tela inicial do aplicativo. Lá seu Personal deixa tudo prescrito!"),
+            (["mensalidade", "pagamento", "pagar", "plano"], "Para detalhes sobre sua assinatura, mensalidade ou planos, acesse a seção 'Assinatura' no menu do seu perfil ou procure a recepção."),
+            (["wi-fi", "wifi", "internet", "senha da internet"], "A rede Wi-Fi para alunos é 'OmniConnect_Alunos' e a senha é: TreinoFocado100"),
+            (["cancelar", "cancelamento", "trancar"], "Para cancelar ou trancar sua matrícula, por favor, entre em contato com a recepção presencialmente. Não é possível fazer isso pelo app no momento.")
+        ]
+
+        for keywords, response in faq_rules:
+            if any(kw in query_lower for kw in keywords):
+                latency_ms = int((time.monotonic() - start_time) * 1000)
+                return RAGResult(
+                    answer=response,
+                    retrieved_documents=[],
+                    should_escalate=False,
+                    latency_ms=latency_ms,
+                    confidence_score=1.0,
+                    model_used="faq_fallback"
+                )
 
         # ── 2. AUGMENT ─────────────────────────────────────────────────────
         system_prompt = self.augment(
@@ -534,6 +565,13 @@ class RAGChain:
             )
             should_escalate = True
             escalation_reason = "validation_failed"
+        elif not retrieved_docs and not should_escalate:
+             # Nao precisa fazer nada
+             pass
+        elif not retrieved_docs and should_escalate:
+            # Respondeu com sucesso (usando FAQ), então podemos cancelar a escalação
+            should_escalate = False
+            escalation_reason = ""
 
         # Calcular confidence como média dos scores recuperados
         confidence = (

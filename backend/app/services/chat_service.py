@@ -89,11 +89,13 @@ class ChatService:
         - Bloqueia padrões de SQL injection
         - Limita a MAX_MESSAGE_LENGTH caracteres
         """
-        # Remover tags HTML
+        # Remover tags script e seu conteúdo
+        text = re.sub(r"<script.*?>.*?</script>", "", text, flags=re.IGNORECASE | re.DOTALL)
+        # Remover tags HTML residuais
         text = re.sub(r"<[^>]+>", "", text)
         # Remover padrões SQL injection básicos
         sql_patterns = [
-            r"(--|;|/\*|\*/|xp_|EXEC\s|UNION\s|SELECT\s|INSERT\s|DROP\s|ALTER\s)",
+            r"(--|;|/\*|\*/|xp_|EXEC\s|UNION\s|SELECT\s|INSERT\s|DROP\s|ALTER\s|TABLE\s)",
         ]
         for pattern in sql_patterns:
             text = re.sub(pattern, "", text, flags=re.IGNORECASE)
@@ -538,6 +540,8 @@ class ChatService:
             for doc_ref in retrieved:
                 doc_id = doc_ref.get("id")
                 if doc_id:
+                    if isinstance(doc_id, str):
+                        doc_id = UUID(doc_id)
                     doc_stmt = select(KnowledgeBase).where(
                         KnowledgeBase.id == doc_id
                     )
