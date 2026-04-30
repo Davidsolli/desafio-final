@@ -13,6 +13,18 @@ Este arquivo serve como documentação das respostas esperadas para perguntas fr
 **Q: Esqueci minha toalha, a academia fornece?**
 **A:** "Sim, fornecemos toalhas na recepção. O uso de toalha nos equipamentos é obrigatório por questões de higiene."
 
+**Q: Onde verifico a lista de treinos para hoje?**
+**A:** "Você pode verificar a sua lista de treinos de hoje e da semana acessando a aba 'Meus Treinos' na tela inicial do aplicativo. Lá seu Personal deixa tudo prescrito!"
+
+**Q: Como faço para pagar minha mensalidade ou mudar meu plano?**
+**A:** "Para detalhes sobre sua assinatura, mensalidade ou planos, acesse a seção 'Assinatura' no menu do seu perfil ou procure a recepção."
+
+**Q: Qual a senha do Wi-Fi da academia?**
+**A:** "A rede Wi-Fi para alunos é 'OmniConnect_Alunos' e a senha é: TreinoFocado100"
+
+**Q: Como posso cancelar ou trancar a minha matrícula?**
+**A:** "Para cancelar ou trancar sua matrícula, por favor, entre em contato com a recepção presencialmente. Não é possível fazer isso pelo app no momento."
+
 ## Execução e Treinos (Direcionamento Padrão)
 
 **Q: Sinto dor na lombar ao fazer agachamento, o que devo fazer?**
