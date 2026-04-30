@@ -45,8 +45,8 @@ ESCALATION_KEYWORDS = [
     "falar com personal", "chamar personal", "quero personal",
     "não entendi", "nao entendi", "ainda com dúvida", "ainda com duvida",
     "me ajuda pessoalmente", "suporte humano", "personal trainer",
-    "lesão", "lesao", "dor no peito", "dor no peito", "dor forte",
-    "médico", "medico", "emergência", "emergencia",
+    "lesão", "lesao", "dor no peito", "dor forte",
+    "médico", "medico", "emergência", "emergencia", "dor",
 ]
 
 # System prompt base do chatbot
@@ -63,6 +63,13 @@ Se a resposta não estiver nos documentos, diga claramente que não sabe.
 5. Se identificar risco de saúde ("dor no peito", "lesão grave"), \
 responda: "Por segurança, recomendo consultar um profissional de saúde."
 6. Não invente exercícios, cargas ou recomendações que não estejam documentadas.
+
+FAQ (Dúvidas Gerais e Operacionais):
+- Horário: Segunda a sexta, das 06:00 às 23:00, e sábados das 08:00 às 18:00.
+- Avaliação física: Agende na aba 'Avaliações' no aplicativo ou na recepção.
+- Toalhas: Fornecidas na recepção. Uso obrigatório.
+- Falha concêntrica: Ocorre quando não é possível completar a fase de subida do peso.
+- Cardio e Musculação: Fazer cardio DEPOIS da musculação se o objetivo for força/hipertrofia.
 
 Perfil do Aluno:
 {user_profile}
@@ -484,7 +491,7 @@ class RAGChain:
             query, retrieved_docs
         )
 
-        if should_escalate and not retrieved_docs:
+        if should_escalate and (not retrieved_docs or escalation_reason == "user_requested"):
             # Sem documentos relevantes → escalar imediatamente
             latency_ms = int((time.monotonic() - start_time) * 1000)
             logger.warning(
