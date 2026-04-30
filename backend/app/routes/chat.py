@@ -20,6 +20,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.database import get_db
+from app.dependencies.auth import get_current_user
+from app.models.user import User
 from app.dtos.chat_dto import (
     ConversationDetailDTO,
     ConversationListResponseDTO,
@@ -48,14 +50,11 @@ async def get_chat_service(session: AsyncSession = Depends(get_db)) -> ChatServi
     return ChatService(session)
 
 
-# ── TODO: substituir por dependency de JWT real quando auth estiver integrado ──
-async def get_current_user_id() -> UUID:
-    """
-    Placeholder: retorna UUID fixo de dev.
-    Substituir por JWT auth dependency na integração real.
-    """
-    from uuid import UUID
-    return UUID("00000000-0000-0000-0000-000000000001")
+async def get_current_user_id(
+    current_user: User = Depends(get_current_user)
+) -> UUID:
+    """Extrai o UUID do usuário autenticado via JWT."""
+    return current_user.id
 
 
 # ── Endpoints do Aluno ────────────────────────────────────────────────────────
