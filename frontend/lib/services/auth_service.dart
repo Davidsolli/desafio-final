@@ -119,17 +119,27 @@ class AuthService {
     required String password,
     required String role,
     String? phoneWhatsapp,
+    double? weightKg,
+    double? heightCm,
+    int? age,
+    String? goalType,
   }) async {
     try {
+      final body = <String, dynamic>{
+        'name': name,
+        'email': email,
+        'password': password,
+        'role': role,
+      };
+      if (phoneWhatsapp != null) body['phone_whatsapp'] = phoneWhatsapp;
+      if (weightKg != null) body['weight_kg'] = weightKg;
+      if (heightCm != null) body['height_cm'] = heightCm;
+      if (age != null) body['age'] = age;
+      if (goalType != null) body['goal_type'] = goalType;
+
       final response = await _apiClient.post<UserResponse>(
         '/users',
-        body: {
-          'name': name,
-          'email': email,
-          'password': password,
-          'role': role,
-          'phone_whatsapp': phoneWhatsapp,
-        },
+        body: body,
         fromJson: (data) => UserResponse.fromJson(data as Map<String, dynamic>),
       );
 

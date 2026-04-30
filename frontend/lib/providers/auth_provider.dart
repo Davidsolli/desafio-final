@@ -107,6 +107,10 @@ class AuthProvider extends ChangeNotifier {
     required String password,
     required String role,
     String? phoneWhatsapp,
+    double? weightKg,
+    double? heightCm,
+    int? age,
+    String? goalType,
   }) async {
     try {
       _setLoading(true);
@@ -118,6 +122,10 @@ class AuthProvider extends ChangeNotifier {
         password: password,
         role: role,
         phoneWhatsapp: phoneWhatsapp,
+        weightKg: weightKg,
+        heightCm: heightCm,
+        age: age,
+        goalType: goalType,
       );
 
       _user = AuthUser.fromUserResponse(response);

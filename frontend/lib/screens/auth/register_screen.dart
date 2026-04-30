@@ -64,13 +64,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
       try {
         setState(() => _isLoading = true);
 
+        final weight = double.tryParse(_weightController.text);
+        final height = double.tryParse(_heightController.text);
+        final userAge = int.tryParse(_ageController.text);
+
         final authProvider = context.read<AuthProvider>();
         await authProvider.register(
           name: name,
           email: email,
           password: password,
           role: 'client',
-          phoneWhatsapp: null,
+          weightKg: weight,
+          heightCm: height,
+          age: userAge,
+          goalType: _selectedGoal,
         );
 
         // Faz login automático após registro
@@ -193,6 +200,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
         const SizedBox(height: 8),
         _label('Senha'),
         _inputPassword(),
+        const SizedBox(height: 4),
+        const Text(
+          'Mín. 8 caracteres: maiúscula, minúscula, número e caractere especial',
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
+        ),
         const SizedBox(height: 8),
       ],
     );

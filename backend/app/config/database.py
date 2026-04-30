@@ -57,6 +57,7 @@ async def init_db() -> None:
     Importar todos os models para que o metadata inclua todas as tabelas.
     """
     from app.models.user import Base  # noqa: F401 — registra User
+    from app.models.user_profile import UserProfile  # noqa: F401 — registra UserProfile
     from app.models.goal import Goal, GoalProgressEntry  # noqa: F401 — registra Goals
     import app.models.logbook  # noqa: F401 — registra WorkoutSession e SessionExercise no Base
 

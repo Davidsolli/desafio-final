@@ -57,8 +57,6 @@ class User(Base):
         index=True,
     )
 
-    phone_whatsapp = Column(String(20), nullable=True)
-
     is_active = Column(Boolean, nullable=False, default=True, index=True)
 
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)

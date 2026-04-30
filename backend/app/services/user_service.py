@@ -13,6 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
+from app.models.user_profile import UserProfile
 from app.dtos.user_dto import CreateUserDTO, UpdateUserDTO, UserResponseDTO
 from app.repositories.user_repository import UserRepository
 
@@ -89,7 +90,6 @@ class UserService:
             email=dto.email,
             password=self.hash_password(dto.password),
             role=dto.role,
-            phone_whatsapp=dto.phone_whatsapp,
             is_active=True,
         )
 
@@ -97,6 +97,18 @@ class UserService:
             # Salvar no banco
             created_user = await self.repository.create(user)
             await self.repository.commit()
+
+            # Se houver dados de perfil, criar UserProfile
+            if any([dto.weight_kg, dto.height_cm, dto.age, dto.goal_type]):
+                profile = UserProfile(
+                    user_id=created_user.id,
+                    weight_kg=dto.weight_kg,
+                    height_cm=dto.height_cm,
+                    age=dto.age,
+                    goal_type=dto.goal_type,
+                )
+                self.session.add(profile)
+                await self.session.commit()
 
             return UserResponseDTO.model_validate(created_user)
         except IntegrityError as e:
@@ -166,8 +178,6 @@ class UserService:
             user.name = dto.name
         if dto.role is not None:
             user.role = dto.role
-        if dto.phone_whatsapp is not None:
-            user.phone_whatsapp = dto.phone_whatsapp
         if dto.is_active is not None:
             user.is_active = dto.is_active
 

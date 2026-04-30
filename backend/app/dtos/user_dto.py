@@ -16,7 +16,6 @@ from pydantic import BaseModel, Field, EmailStr, field_validator, ConfigDict
 
 
 VALID_ROLES = {"admin", "personal_trainer", "client"}
-PHONE_REGEX = r"^\+55\s\d{2}\s\d{5}-\d{4}$"
 PASSWORD_REGEX = r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@!#$%^&*])[a-zA-Z0-9@!#$%^&*]{8,}$"
 
 
@@ -39,9 +38,25 @@ class CreateUserDTO(BaseModel):
         default="client",
         description="Papel do usuário: admin, personal_trainer ou client",
     )
-    phone_whatsapp: Optional[str] = Field(
+    weight_kg: Optional[float] = Field(
         default=None,
-        description="Número WhatsApp no formato +55 XX XXXXX-XXXX (opcional)",
+        gt=0,
+        description="Peso do usuário em kg (opcional)",
+    )
+    height_cm: Optional[float] = Field(
+        default=None,
+        gt=0,
+        description="Altura do usuário em cm (opcional)",
+    )
+    age: Optional[int] = Field(
+        default=None,
+        ge=1,
+        le=150,
+        description="Idade do usuário em anos (opcional)",
+    )
+    goal_type: Optional[str] = Field(
+        default=None,
+        description="Objetivo de treino: gain_mass, lose_weight, maintain, endurance (opcional)",
     )
 
     @field_validator("name")
@@ -73,18 +88,6 @@ class CreateUserDTO(BaseModel):
             )
         return v
 
-    @field_validator("phone_whatsapp")
-    @classmethod
-    def validate_phone(cls, v: Optional[str]) -> Optional[str]:
-        """Validar telefone: formato +55 XX XXXXX-XXXX."""
-        if v is None:
-            return v
-        if not re.match(PHONE_REGEX, v):
-            raise ValueError(
-                "Telefone WhatsApp deve estar no formato +55 XX XXXXX-XXXX"
-            )
-        return v
-
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
@@ -92,7 +95,10 @@ class CreateUserDTO(BaseModel):
                 "email": "joao@example.com",
                 "password": "SenhaForte123!",
                 "role": "client",
-                "phone_whatsapp": None,
+                "weight_kg": 78,
+                "height_cm": 175,
+                "age": 27,
+                "goal_type": "gain_mass",
             }
         }
     )
@@ -110,10 +116,6 @@ class UpdateUserDTO(BaseModel):
     role: Optional[str] = Field(
         None,
         description="Papel do usuário: admin, personal_trainer ou client",
-    )
-    phone_whatsapp: Optional[str] = Field(
-        None,
-        description="Número WhatsApp no formato +55 XX XXXXX-XXXX",
     )
     is_active: Optional[bool] = Field(
         None,
@@ -142,23 +144,10 @@ class UpdateUserDTO(BaseModel):
             )
         return v
 
-    @field_validator("phone_whatsapp")
-    @classmethod
-    def validate_phone(cls, v: Optional[str]) -> Optional[str]:
-        """Validar telefone: formato +55 XX XXXXX-XXXX."""
-        if v is None:
-            return v
-        if not re.match(PHONE_REGEX, v):
-            raise ValueError(
-                "Telefone WhatsApp deve estar no formato +55 XX XXXXX-XXXX"
-            )
-        return v
-
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
                 "name": "João Silva Santos",
-                "phone_whatsapp": "+55 11 98888-8888",
                 "role": "personal_trainer",
                 "is_active": True,
             }
@@ -173,7 +162,6 @@ class UserResponseDTO(BaseModel):
     name: str
     email: str
     role: str
-    phone_whatsapp: Optional[str]
     is_active: bool
     created_at: datetime
     updated_at: datetime
@@ -186,7 +174,6 @@ class UserResponseDTO(BaseModel):
                 "name": "João Silva",
                 "email": "joao@example.com",
                 "role": "client",
-                "phone_whatsapp": "+55 11 99999-9999",
                 "is_active": True,
                 "created_at": "2026-04-14T10:30:00Z",
                 "updated_at": "2026-04-14T10:30:00Z",
