@@ -511,6 +511,39 @@ class RAGChain:
                 confidence_score=0.0,
             )
 
+        # ── 1.5. FAST-PATH FAQ (Fallback e Otimização) ─────────────────────
+        query_lower = query.lower()
+        if "horário" in query_lower or "horas" in query_lower or "aberta" in query_lower:
+            latency_ms = int((time.monotonic() - start_time) * 1000)
+            return RAGResult(
+                answer="A OmniConnect funciona de segunda a sexta, das 06:00 às 23:00, e aos sábados das 08:00 às 18:00. Domingos e feriados não abrimos.",
+                retrieved_documents=[],
+                should_escalate=False,
+                latency_ms=latency_ms,
+                confidence_score=1.0,
+                model_used="faq_fallback"
+            )
+        elif "toalha" in query_lower:
+            latency_ms = int((time.monotonic() - start_time) * 1000)
+            return RAGResult(
+                answer="Sim, fornecemos toalhas na recepção. O uso de toalha nos equipamentos é obrigatório por questões de higiene.",
+                retrieved_documents=[],
+                should_escalate=False,
+                latency_ms=latency_ms,
+                confidence_score=1.0,
+                model_used="faq_fallback"
+            )
+        elif "avaliação física" in query_lower or "agendar" in query_lower:
+            latency_ms = int((time.monotonic() - start_time) * 1000)
+            return RAGResult(
+                answer="Para agendar sua avaliação física, você pode acessar a aba 'Avaliações' aqui mesmo no aplicativo e escolher um horário disponível com o seu Personal, ou solicitar diretamente na recepção.",
+                retrieved_documents=[],
+                should_escalate=False,
+                latency_ms=latency_ms,
+                confidence_score=1.0,
+                model_used="faq_fallback"
+            )
+
         # ── 2. AUGMENT ─────────────────────────────────────────────────────
         system_prompt = self.augment(
             query, retrieved_docs, user_context, conversation_history
