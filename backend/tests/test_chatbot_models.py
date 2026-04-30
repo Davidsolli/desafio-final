@@ -108,7 +108,7 @@ class TestKnowledgeBaseModel:
     @pytest.mark.asyncio
     async def test_knowledge_document_stores_embedding_as_json(self, session: AsyncSession):
         """No SQLite (fallback), embedding deve ser armazenado como JSON/list."""
-        fake_embedding = [0.1, 0.2, 0.3]
+        fake_embedding = [0.1] * 768
         doc = KnowledgeBase(
             id=uuid4(),
             title="Doc com Embedding",
