@@ -486,13 +486,13 @@ class RAGChain:
         # ── 1. RETRIEVE ────────────────────────────────────────────────────
         retrieved_docs = await self.retrieve(query, session, academy_id)
 
-        # ── Verificar necessidade de escalação ANTES de gerar ──────────────
+        # ── Verificar necessidade de escalação explícita ANTES de gerar ──────────────
         should_escalate, escalation_reason = self._should_escalate(
             query, retrieved_docs
         )
 
-        if should_escalate and (not retrieved_docs or escalation_reason == "user_requested"):
-            # Sem documentos relevantes → escalar imediatamente
+        if should_escalate and escalation_reason == "user_requested":
+            # Palavra-chave de risco ou pedido explícito → escalar imediatamente
             latency_ms = int((time.monotonic() - start_time) * 1000)
             logger.warning(
                 "RAG: escalando conversa | reason=%s | latency_ms=%d",
@@ -541,6 +541,13 @@ class RAGChain:
             )
             should_escalate = True
             escalation_reason = "validation_failed"
+        elif not retrieved_docs and not should_escalate:
+             # Nao precisa fazer nada
+             pass
+        elif not retrieved_docs and should_escalate:
+            # Respondeu com sucesso (usando FAQ), então podemos cancelar a escalação
+            should_escalate = False
+            escalation_reason = ""
 
         # Calcular confidence como média dos scores recuperados
         confidence = (

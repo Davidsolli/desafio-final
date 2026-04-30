@@ -446,8 +446,9 @@ class TestRunPipeline:
 
     @pytest.mark.asyncio
     async def test_run_escalates_when_no_docs(self, chain, mock_session):
-        """Deve escalar imediatamente quando retrieve retorna lista vazia."""
+        """Deve escalar imediatamente quando retrieve retorna lista vazia e a IA não sabe responder."""
         chain.retrieve = AsyncMock(return_value=[])
+        chain.generate = AsyncMock(return_value=("Não sei informar", 10, "gemini"))
 
         result = await chain.run(
             query="pergunta sem match na base",
@@ -455,7 +456,7 @@ class TestRunPipeline:
         )
 
         assert result.should_escalate is True
-        assert result.escalation_reason in ("low_confidence", "too_complex")
+        assert result.escalation_reason in ("low_confidence", "too_complex", "validation_failed")
         assert result.retrieved_documents == []
 
     @pytest.mark.asyncio
