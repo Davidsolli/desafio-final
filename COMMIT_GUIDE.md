@@ -204,21 +204,54 @@ git log --oneline feat/usuarios-crud
 # abc1231 feat(usuarios): criar model e DTOs
 ```
 
-### Passo 4: Fazer Push
+### Passo 4: Fazer Push (⚠️ CRÍTICO - VER INSTRUÇÕES COMPLETAS)
 ```bash
-# Primeira vez (com -u)
+# Primeira vez (com -u - OBRIGATÓRIO)
 git push -u origin feat/usuarios-crud
+
+# ⚠️ AGUARDE A RESPOSTA COMPLETA DO GITHUB
+# Você deve ver algo como:
+# * [new branch] feat/usuarios-crud -> feat/usuarios-crud
 
 # Próximas vezes
 git push
 ```
 
-### Passo 5: Criar PR no GitHub (CONTRA `develop`)
+**⚠️ SE O PUSH NÃO FOR RECONHECIDO:**
 ```bash
-# ⚠️ IMPORTANTE: SEMPRE usar --base develop!
+# 1. Verifique se a branch está no remoto:
+git branch -vv
+
+# 2. Se não aparecer [origin/...], faça push explícito:
+git push origin feat/usuarios-crud --verbose
+
+# 3. Aguarde até ver:
+# * [new branch] feat/usuarios-crud -> feat/usuarios-crud
+# updating local tracking ref 'refs/remotes/origin/feat/usuarios-crud'
+```
+
+### Passo 5: Criar PR no GitHub (CONTRA `develop`)
+
+**⚠️ IMPORTANTE: Só crie o PR DEPOIS de confirmar que o push foi sincronizado!**
+
+```bash
+# 1. Verifique que está no remoto:
+git branch -vv
+# Deve aparecer: feat/usuarios-crud [origin/feat/usuarios-crud] ...
+
+# 2. Crie o PR (SEMPRE com --base develop):
 gh pr create --title "feat(usuarios): implementar CRUD de usuários" \
-  --body "Implementa endpoints CRUD completos com validações e testes" \
-  --base develop
+  --base develop \
+  --body "Implementa endpoints CRUD completos com validações e testes"
+```
+
+**Alternativa via Web (se GitHub CLI falhar):**
+```
+1. Acesse: https://github.com/seu-repo/pulls
+2. Clique "New Pull Request"
+3. Selecione: develop ← feat/usuarios-crud
+4. Preencha título e descrição
+5. Clique "Create Pull Request"
 ```
 
 ---
@@ -293,7 +326,15 @@ git diff HEAD
 - [ ] Sem Co-Author na mensagem (removido automaticamente)
 - [ ] Não há secrets ou .env na mudança
 - [ ] Commitei apenas o relevante (não arquivos temporários)
-- [ ] PR será criado contra `develop` (--base develop)
+
+## 🚨 Checklist APÓS Fazer Commit (Antes de Criar PR)
+
+- [ ] Fiz push com: `git push -u origin feat/...` (com -u)
+- [ ] Aguardei mensagem: `[new branch] feat/... -> feat/...`
+- [ ] Verifiquei com: `git branch -vv`
+- [ ] Aparece: `[origin/feat/...]` na minha branch
+- [ ] Se não aparecer, fiz: `git push origin feat/... --verbose` novamente
+- [ ] Só depois criei PR com: `gh pr create --base develop`
 
 ---
 
@@ -429,11 +470,29 @@ git add arquivo.py
 # Commit (padrão!)
 git commit -m "feat(modulo): sua mensagem concisa"
 
-# Push
+# Push (com -u - OBRIGATÓRIO)
 git push -u origin feat/seu-recurso
+
+# ⚠️ AGUARDE A RESPOSTA COMPLETA, depois verifique:
+git branch -vv
+# Deve aparecer: [origin/feat/seu-recurso] na sua branch
+
+# Se não aparecer [origin/...], faça push novamente:
+git push origin feat/seu-recurso --verbose
 
 # PR (SEMPRE contra develop!)
 gh pr create --title "feat(modulo): seu título" --base develop
+```
+
+**⚠️ PROBLEMA COMUM:**
+```
+Se você rodar gh pr create logo após git push -u
+e receber erro "Head sha can't be blank", é porque:
+1. O GitHub ainda não sincronizou a branch
+2. Verifique: git branch -vv
+3. O console do GitHub CLI pode estar desatualizado
+4. Aguarde 5-10 segundos e tente novamente
+5. Ou use a web: https://github.com/seu-repo/pulls
 ```
 
 ---
