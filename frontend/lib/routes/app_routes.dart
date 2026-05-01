@@ -10,7 +10,7 @@ import '../screens/student/logbook_screen.dart';
 import '../screens/student/metrics_screen.dart';
 import '../screens/student/goals_screen.dart';
 import '../screens/student/chat_screen.dart';
-import '../screens/student/profile_screen.dart';
+import '../screens/student/profile_screen_new.dart';
 import '../screens/notifications_screen.dart';
 import '../screens/trainer/trainer_dashboard.dart';
 import '../screens/trainer/trainer_student_detail.dart';
@@ -76,7 +76,7 @@ class AppRoutes {
       ),
       GoRoute(
         path: profile,
-        builder: (context, state) => const ProfileScreen(),
+        builder: (context, state) => const ProfileScreenV2(),
       ),
       GoRoute(
         path: notifications,

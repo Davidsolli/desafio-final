@@ -46,6 +46,26 @@ class CreateUserDTO(BaseModel):
         ...,
         description="Número WhatsApp no formato +55 XX XXXXX-XXXX",
     )
+    weight: Optional[float] = Field(
+        None,
+        gt=0,
+        description="Peso em kg",
+    )
+    height: Optional[float] = Field(
+        None,
+        gt=0,
+        description="Altura em cm",
+    )
+    age: Optional[int] = Field(
+        None,
+        ge=1,
+        le=150,
+        description="Idade em anos",
+    )
+    gender: Optional[str] = Field(
+        None,
+        description="Sexo: male ou female",
+    )
 
     @field_validator("name")
     @classmethod
@@ -94,6 +114,10 @@ class CreateUserDTO(BaseModel):
                 "password": "SenhaForte123!",
                 "role": "client",
                 "phone_whatsapp": "+55 11 99999-9999",
+                "weight": 78.5,
+                "height": 175.0,
+                "age": 27,
+                "gender": "male",
             }
         }
     )
@@ -115,6 +139,26 @@ class UpdateUserDTO(BaseModel):
     phone_whatsapp: Optional[str] = Field(
         None,
         description="Número WhatsApp no formato +55 XX XXXXX-XXXX",
+    )
+    weight: Optional[float] = Field(
+        None,
+        gt=0,
+        description="Peso em kg",
+    )
+    height: Optional[float] = Field(
+        None,
+        gt=0,
+        description="Altura em cm",
+    )
+    age: Optional[int] = Field(
+        None,
+        ge=1,
+        le=150,
+        description="Idade em anos",
+    )
+    gender: Optional[str] = Field(
+        None,
+        description="Sexo: male ou female",
     )
     is_active: Optional[bool] = Field(
         None,
@@ -175,6 +219,10 @@ class UserResponseDTO(BaseModel):
     email: str
     role: str
     phone_whatsapp: str
+    weight: Optional[float] = None
+    height: Optional[float] = None
+    age: Optional[int] = None
+    gender: Optional[str] = None
     is_active: bool
     created_at: datetime
     updated_at: datetime
@@ -188,6 +236,10 @@ class UserResponseDTO(BaseModel):
                 "email": "joao@example.com",
                 "role": "client",
                 "phone_whatsapp": "+55 11 99999-9999",
+                "weight": 78.5,
+                "height": 175.0,
+                "age": 27,
+                "gender": "male",
                 "is_active": True,
                 "created_at": "2026-04-14T10:30:00Z",
                 "updated_at": "2026-04-14T10:30:00Z",

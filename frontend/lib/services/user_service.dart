@@ -9,6 +9,7 @@ class UserResponse {
   final double weight;
   final double height;
   final int age;
+  final String? gender;
   final String? phoneWhatsapp;
   final DateTime createdAt;
 
@@ -20,6 +21,7 @@ class UserResponse {
     required this.weight,
     required this.height,
     required this.age,
+    this.gender,
     this.phoneWhatsapp,
     required this.createdAt,
   });
@@ -30,9 +32,10 @@ class UserResponse {
       name: json['name'] as String,
       email: json['email'] as String,
       role: json['role'] as String,
-      weight: (json['weight'] as num).toDouble(),
-      height: (json['height'] as num).toDouble(),
-      age: json['age'] as int,
+      weight: (json['weight'] as num?)?.toDouble() ?? 0.0,
+      height: (json['height'] as num?)?.toDouble() ?? 0.0,
+      age: json['age'] as int? ?? 0,
+      gender: json['gender'] as String?,
       phoneWhatsapp: json['phone_whatsapp'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String? ?? DateTime.now().toString()),
     );
@@ -78,23 +81,25 @@ class UserService {
     }
   }
 
-  /// Atualiza dados do usuário
   Future<UserResponse> updateUser({
+    required String id,
     required String name,
     required double weight,
     required double height,
     required int age,
+    String? gender,
     String? phoneWhatsapp,
   }) async {
     try {
       final response = await _apiClient.put<UserResponse>(
-        '/users/me',
+        '/users/$id',
         body: {
           'name': name,
           'weight': weight,
           'height': height,
           'age': age,
-          'phone_whatsapp': phoneWhatsapp,
+          if (gender != null) 'gender': gender,
+          if (phoneWhatsapp != null) 'phone_whatsapp': phoneWhatsapp,
         },
         fromJson: (data) => UserResponse.fromJson(data as Map<String, dynamic>),
       );
