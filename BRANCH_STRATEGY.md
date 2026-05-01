@@ -112,24 +112,61 @@ git commit -m "test: adicionar testes de usuários"
 ### 3️⃣ Enviar para Remoto
 
 ```bash
-# Push da sua branch (primeira vez)
+# Push da sua branch (primeira vez) - OBRIGATÓRIO usar -u
 git push -u origin feat/usuarios-crud
+
+# ⚠️ IMPORTANTE: Aguarde a sincronização completa
+# O GitHub leva alguns segundos para reconhecer a branch
 
 # Próximos pushes
 git push
 ```
 
-### 4️⃣ Criar Pull Request (Contra `develop`)
+**⚠️ VERIFICAR SE O PUSH FOI SINCRONIZADO:**
 
 ```bash
-# GitHub CLI (recomendado) - SEMPRE contra develop!
-gh pr create --title "feat: implementar CRUD de usuários" \
-  --body "Implementa criação, leitura, atualização e deleção de usuários" \
-  --base develop
+# Ver se a branch está no remoto
+git branch -vv
 
-# Ou via web: https://github.com/seu-repo/pulls
-# ⚠️ IMPORTANTE: Mude a base para 'develop' na interface web!
+# ✅ Esperado (com [origin/...]):
+# * feat/usuarios-crud  abc1234 [origin/feat/usuarios-crud] feat: sua mensagem
+
+# ❌ ERRADO (sem [origin/...]):
+# * feat/usuarios-crud  abc1234 feat: sua mensagem
+
+# Se não aparecer [origin/...], faça push novamente:
+git push origin feat/usuarios-crud --verbose
 ```
+
+### 4️⃣ Criar Pull Request (Contra `develop`)
+
+**⚠️ ANTES DE CRIAR O PR, VERIFIQUE:**
+
+```bash
+# 1. Confirme que a branch está no remoto
+git branch -vv
+# Deve aparecer: [origin/feat/usuarios-crud] na sua branch
+
+# 2. Se NÃO aparecer, faça push novamente:
+git push origin feat/usuarios-crud --verbose
+# Aguarde a mensagem: "* [new branch] feat/usuarios-crud -> feat/usuarios-crud"
+
+# 3. Após confirmar que está no remoto, crie o PR:
+gh pr create --title "feat: implementar CRUD de usuários" \
+  --base develop \
+  --body "Implementa criação, leitura, atualização e deleção de usuários"
+```
+
+**Alternativa via Web:**
+```
+1. Acesse: https://github.com/seu-repo/pulls
+2. Clique "New Pull Request"
+3. Compare: develop ← feat/usuarios-crud
+4. Preencha título e descrição
+5. Clique "Create Pull Request"
+```
+
+**⚠️ IMPORTANTE: SEMPRE use `--base develop` (não main!)**
 
 ### 5️⃣ Merge e Cleanup
 
@@ -187,15 +224,26 @@ Commit: feat(usuarios): implementar CRUD de usuários
 
 ---
 
-## 🎯 Checklist Antes de Fazer Push
+## 🎯 Checklist Antes de Fazer Push e PR
 
+### Antes do Push
 - [ ] Estou em uma branch (não em `main` ou `develop`)
 - [ ] Nome segue padrão: `feat/`, `fix/`, `docs/`, etc
 - [ ] Comittei com conventional commits
 - [ ] Rodei testes localmente
 - [ ] Código segue padrão do projeto
 - [ ] Sem `Co-Authored-By` (removido em settings.json)
-- [ ] PR será criado CONTRA `develop` (não main)
+
+### Depois do Push (⚠️ OBRIGATÓRIO!)
+- [ ] Digitei: `git push -u origin feat/...` (com -u)
+- [ ] Aguardei a mensagem de sucesso do GitHub
+- [ ] Verifiquei: `git branch -vv` mostra `[origin/feat/...]`
+- [ ] Se não aparecer, fiz: `git push origin feat/... --verbose`
+
+### Antes de Criar o PR
+- [ ] `git branch -vv` confirma: `[origin/...]` na minha branch
+- [ ] Vou criar PR contra `develop` (não main)
+- [ ] Vou usar: `gh pr create --base develop` (com --base develop)
 
 ---
 

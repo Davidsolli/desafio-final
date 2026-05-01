@@ -49,17 +49,26 @@ class UserProvider extends ChangeNotifier {
     required double weight,
     required double height,
     required int age,
+    String? gender,
     String? phoneWhatsapp,
   }) async {
+    if (_user == null) {
+      _error = 'Usuário não autenticado.';
+      notifyListeners();
+      return;
+    }
+
     try {
       _setLoading(true);
       _error = null;
 
       _user = await _userService.updateUser(
+        id: _user!.id,
         name: name,
         weight: weight,
         height: height,
         age: age,
+        gender: gender,
         phoneWhatsapp: phoneWhatsapp,
       );
       notifyListeners();
