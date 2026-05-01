@@ -90,6 +90,10 @@ class UserService:
             password=self.hash_password(dto.password),
             role=dto.role,
             phone_whatsapp=dto.phone_whatsapp,
+            weight=dto.weight,
+            height=dto.height,
+            age=dto.age,
+            gender=dto.gender,
             is_active=True,
         )
 
@@ -168,6 +172,14 @@ class UserService:
             user.role = dto.role
         if dto.phone_whatsapp is not None:
             user.phone_whatsapp = dto.phone_whatsapp
+        if dto.weight is not None:
+            user.weight = dto.weight
+        if dto.height is not None:
+            user.height = dto.height
+        if dto.age is not None:
+            user.age = dto.age
+        if dto.gender is not None:
+            user.gender = dto.gender
         if dto.is_active is not None:
             user.is_active = dto.is_active
 

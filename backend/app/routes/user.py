@@ -83,6 +83,30 @@ async def create_user(
 
 
 @router.get(
+    "/me",
+    response_model=UserResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Obter perfil do usuário autenticado",
+    responses={
+        200: {"description": "Perfil do usuário retornado"},
+        401: {"description": "Não autenticado"},
+    },
+)
+async def get_current_user_profile(
+    current_user: User = Depends(get_current_user),
+) -> UserResponseDTO:
+    """
+    Obter dados do perfil do usuário autenticado.
+
+    **Requer autenticação:** Usuário deve estar logado.
+
+    **Response:**
+    - Dados completos do usuário autenticado (sem senha)
+    """
+    return UserResponseDTO.model_validate(current_user)
+
+
+@router.get(
     "",
     response_model=PaginatedUsersResponseDTO,
     status_code=status.HTTP_200_OK,

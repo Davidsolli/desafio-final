@@ -20,12 +20,25 @@ git checkout -b chore/sua-tarefa       # Tarefas
 git add .
 git commit -m "feat: descrição"        # Use conventional commits
 
-# 4. Faça push APENAS da sua branch
+# 4. Faça push APENAS da sua branch (COM -u!)
 git push -u origin feat/sua-feature
+
+# ⚠️ AGUARDE a sincronização completa do GitHub (5-10 segundos)
+# Verifique se está no remoto:
+git branch -vv
+# Deve aparecer: [origin/feat/sua-feature] na sua branch
+
+# Se não aparecer, faça push de novo:
+git push origin feat/sua-feature --verbose
 
 # 5. Crie PR no GitHub CONTRA develop (não main!)
 gh pr create --title "feat: sua feature" --base develop
 ```
+
+**⚠️ IMPORTANTE: Não crie o PR logo após o push!**
+- O GitHub precisa de alguns segundos para reconhecer a branch
+- Sempre verifique com `git branch -vv` antes de criar PR
+- Se der erro, aguarde e tente novamente
 
 ### ❌ PROIBIDO
 
