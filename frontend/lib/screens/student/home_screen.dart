@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 import 'package:animate_do/animate_do.dart';
 import '../../theme/app_colors.dart';
 import '../../routes/app_routes.dart';
-import '../../models/mock_data.dart';
+import '../../providers/home_provider.dart';
+import '../../services/home_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -25,50 +27,131 @@ class _HomeScreenState extends State<HomeScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<HomeProvider>().fetchHomeData();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                child: _buildHeader(),
+      body: Consumer<HomeProvider>(
+        builder: (context, homeProvider, _) {
+          if (homeProvider.isLoading && !homeProvider.hasData) {
+            return _buildLoadingState();
+          }
+          if (homeProvider.error != null && !homeProvider.hasData) {
+            return _buildErrorState(homeProvider.error!, homeProvider);
+          }
+          final data = homeProvider.data;
+          return SafeArea(
+            child: RefreshIndicator(
+              color: AppColors.primary,
+              backgroundColor: AppColors.surface,
+              onRefresh: homeProvider.fetchHomeData,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      child: _buildHeader(data?.user.name ?? ''),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: _buildStatsRow(data?.metrics),
+                    ),
+                    const SizedBox(height: 12),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: _buildTodayWorkout(data?.todayWorkout),
+                    ),
+                    const SizedBox(height: 20),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: _buildGoalsSection(data?.goals ?? []),
+                    ),
+                    const SizedBox(height: 32),
+                  ],
+                ),
               ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: _buildStatsRow(),
-              ),
-              const SizedBox(height: 12),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: _buildTodayWorkout(),
-              ),
-              const SizedBox(height: 20),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: _buildGoalsSection(),
-              ),
-              const SizedBox(height: 32),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
       bottomNavigationBar: _buildBottomNav(),
     );
   }
 
-  Widget _buildHeader() {
+  // ─── States ────────────────────────────────────────────────────────────────
+
+  Widget _buildLoadingState() {
+    return const SafeArea(
+      child: Center(
+        child: CircularProgressIndicator(color: AppColors.primary),
+      ),
+    );
+  }
+
+  Widget _buildErrorState(String error, HomeProvider homeProvider) {
+    return SafeArea(
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.wifi_off_outlined, color: AppColors.textMuted, size: 48),
+              const SizedBox(height: 16),
+              Text(
+                error,
+                style: Theme.of(context)
+                    .textTheme
+                    .bodyMedium
+                    ?.copyWith(color: AppColors.textSecondary),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: homeProvider.fetchHomeData,
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+                child: const Text('Tentar novamente'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ─── Header ────────────────────────────────────────────────────────────────
+
+  Widget _buildHeader(String fullName) {
+    final firstName = fullName.isNotEmpty ? fullName.split(' ').first : '';
     return Row(
       children: [
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Olá,', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
+            Text(
+              'Olá,',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: AppColors.textSecondary),
+            ),
             Row(
               children: [
-                Text(userName, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+                Text(
+                  firstName,
+                  style: Theme.of(context)
+                      .textTheme
+                      .headlineSmall
+                      ?.copyWith(fontWeight: FontWeight.bold),
+                ),
                 const SizedBox(width: 6),
                 const Text('👋', style: TextStyle(fontSize: 20)),
               ],
@@ -87,8 +170,12 @@ class _HomeScreenState extends State<HomeScreen> {
             value: _userRole,
             onChanged: (value) => setState(() => _userRole = value ?? 'student'),
             items: [
-              DropdownMenuItem(value: 'student', child: Text('Aluno', style: Theme.of(context).textTheme.bodySmall)),
-              DropdownMenuItem(value: 'trainer', child: Text('Personal', style: Theme.of(context).textTheme.bodySmall)),
+              DropdownMenuItem(
+                  value: 'student',
+                  child: Text('Aluno', style: Theme.of(context).textTheme.bodySmall)),
+              DropdownMenuItem(
+                  value: 'trainer',
+                  child: Text('Personal', style: Theme.of(context).textTheme.bodySmall)),
             ],
             underline: const SizedBox(),
             style: const TextStyle(color: AppColors.textPrimary),
@@ -108,7 +195,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   border: Border.all(color: AppColors.border),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(Icons.notifications_outlined, color: AppColors.textMuted, size: 20),
+                child: const Icon(Icons.notifications_outlined,
+                    color: AppColors.textMuted, size: 20),
               ),
               Positioned(
                 top: 4,
@@ -129,11 +217,28 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildStatsRow() {
+  // ─── Stats ─────────────────────────────────────────────────────────────────
+
+  Widget _buildStatsRow(HomeMetrics? metrics) {
     final stats = [
-      {'icon': Icons.trending_up, 'value': '$userIMC', 'label': 'IMC — $userIMCLabel', 'delay': 0},
-      {'icon': Icons.local_fire_department, 'value': '$userTMB', 'label': 'kcal/dia', 'delay': 100},
-      {'icon': Icons.fitness_center, 'value': '$weeklyWorkouts', 'label': 'treinos', 'delay': 200},
+      {
+        'icon': Icons.trending_up,
+        'value': metrics?.imcDisplay ?? '—',
+        'label': 'IMC — ${metrics != null && metrics.imc > 0 ? metrics.imcLabel : '—'}',
+        'delay': 0,
+      },
+      {
+        'icon': Icons.local_fire_department,
+        'value': metrics?.tmbDisplay ?? '—',
+        'label': 'kcal/dia',
+        'delay': 100,
+      },
+      {
+        'icon': Icons.fitness_center,
+        'value': metrics?.weeklyWorkoutsDisplay ?? '—',
+        'label': 'treinos',
+        'delay': 200,
+      },
     ];
 
     return Row(
@@ -152,9 +257,20 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   Icon(s['icon'] as IconData, color: AppColors.primary, size: 18),
                   const SizedBox(height: 6),
-                  Text('${s['value']}', style: Theme.of(context).textTheme.displayMedium?.copyWith(fontSize: 20)),
+                  Text(
+                    '${s['value']}',
+                    style: Theme.of(context)
+                        .textTheme
+                        .displayMedium
+                        ?.copyWith(fontSize: 20),
+                  ),
                   const SizedBox(height: 2),
-                  Text('${s['label']}', style: Theme.of(context).textTheme.bodySmall),
+                  Text(
+                    '${s['label']}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ],
               ),
             ),
@@ -164,8 +280,9 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildTodayWorkout() {
-    final workout = workouts[0];
+  // ─── Today's Workout ───────────────────────────────────────────────────────
+
+  Widget _buildTodayWorkout(HomeWorkout? workout) {
     return FadeInUp(
       delay: const Duration(milliseconds: 300),
       child: GestureDetector(
@@ -177,59 +294,142 @@ class _HomeScreenState extends State<HomeScreen> {
             border: Border.all(color: AppColors.border, width: 1),
             borderRadius: BorderRadius.circular(12),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('TREINO DE HOJE',
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(letterSpacing: 0.5, color: AppColors.textMuted)),
-                  const Icon(Icons.chevron_right, color: AppColors.textMuted, size: 20),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Container(
-                    width: 50,
-                    height: 50,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [AppColors.primary, AppColors.primaryLight],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Center(
-                      child: Text(workout.emoji, style: const TextStyle(fontSize: 24)),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(workout.name,
-                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontSize: 17, fontWeight: FontWeight.bold)),
-                      Text('${workout.label} • ${workout.duration} min',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 6,
-                children: [
-                  ...workout.exercises.take(3).map((ex) => _buildChip(ex.name)).toList(),
-                  if (workout.exercises.length > 3) _buildChip('+${workout.exercises.length - 3}'),
-                ],
-              ),
-            ],
-          ),
+          child: workout != null
+              ? _buildWorkoutContent(workout)
+              : _buildNoWorkoutContent(),
         ),
       ),
+    );
+  }
+
+  Widget _buildWorkoutContent(HomeWorkout workout) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'TREINO DE HOJE',
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    letterSpacing: 0.5,
+                    color: AppColors.textMuted,
+                  ),
+            ),
+            const Icon(Icons.chevron_right, color: AppColors.textMuted, size: 20),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [AppColors.primary, AppColors.primaryLight],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Center(
+                child: Text(workout.emoji, style: const TextStyle(fontSize: 24)),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  workout.name,
+                  style: Theme.of(context)
+                      .textTheme
+                      .headlineSmall
+                      ?.copyWith(fontSize: 17, fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  workout.estimatedDurationMinutes > 0
+                      ? '${workout.label} • ${workout.estimatedDurationMinutes} min'
+                      : workout.label,
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: AppColors.textSecondary),
+                ),
+              ],
+            ),
+          ],
+        ),
+        if (workout.exercises.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 6,
+            children: [
+              ...workout.exercises.take(3).map((ex) => _buildChip(ex.name)),
+              if (workout.exercises.length > 3)
+                _buildChip('+${workout.exercises.length - 3}'),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildNoWorkoutContent() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'TREINO DE HOJE',
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    letterSpacing: 0.5,
+                    color: AppColors.textMuted,
+                  ),
+            ),
+            const Icon(Icons.chevron_right, color: AppColors.textMuted, size: 20),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                color: AppColors.surfaceLight,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Center(
+                child: Text('😴', style: TextStyle(fontSize: 24)),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Dia de descanso',
+                  style: Theme.of(context)
+                      .textTheme
+                      .headlineSmall
+                      ?.copyWith(fontSize: 17, fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  'Sem treino programado para hoje',
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: AppColors.textSecondary),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -240,11 +440,19 @@ class _HomeScreenState extends State<HomeScreen> {
         color: AppColors.surfaceLight,
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Text(text, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textMuted, fontSize: 11)),
+      child: Text(
+        text,
+        style: Theme.of(context)
+            .textTheme
+            .bodySmall
+            ?.copyWith(color: AppColors.textMuted, fontSize: 11),
+      ),
     );
   }
 
-  Widget _buildGoalsSection() {
+  // ─── Goals ─────────────────────────────────────────────────────────────────
+
+  Widget _buildGoalsSection(List<HomeGoal> goals) {
     return Column(
       children: [
         Row(
@@ -254,62 +462,112 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 const Icon(Icons.adjust, color: AppColors.primary, size: 20),
                 const SizedBox(width: 8),
-                Text('Metas', style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
+                Text(
+                  'Metas',
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodyLarge
+                      ?.copyWith(fontWeight: FontWeight.w600),
+                ),
               ],
             ),
             GestureDetector(
               onTap: () => context.go(AppRoutes.goals),
-              child: Text('Ver todas',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.primary, fontWeight: FontWeight.w600)),
+              child: Text(
+                'Ver todas',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
             ),
           ],
         ),
         const SizedBox(height: 12),
-        ...goals.where((g) => !g.completed).take(2).map((goal) {
-          return FadeInUp(
-            delay: const Duration(milliseconds: 200),
-            child: Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                border: Border.all(color: AppColors.border, width: 1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(goal.title,
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+        if (goals.isEmpty)
+          _buildEmptyGoals()
+        else
+          ...goals.map((goal) {
+            return FadeInUp(
+              delay: const Duration(milliseconds: 200),
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  border: Border.all(color: AppColors.border, width: 1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            goal.title,
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(fontWeight: FontWeight.w600),
                             maxLines: 1,
-                            overflow: TextOverflow.ellipsis),
-                      ),
-                      Text('${(goal.progress * 100).toStringAsFixed(0)}%',
-                          style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.primary, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: goal.progress,
-                      minHeight: 8,
-                      backgroundColor: AppColors.surfaceLight,
-                      valueColor: const AlwaysStoppedAnimation(AppColors.primary),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Text(
+                          '${(goal.progress * 100).toStringAsFixed(0)}%',
+                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                color: AppColors.primary,
+                                fontWeight: FontWeight.bold,
+                              ),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: goal.progress,
+                        minHeight: 8,
+                        backgroundColor: AppColors.surfaceLight,
+                        valueColor: const AlwaysStoppedAnimation(AppColors.primary),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          );
-        }),
+            );
+          }),
       ],
     );
   }
+
+  Widget _buildEmptyGoals() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.flag_outlined, color: AppColors.textMuted, size: 24),
+          const SizedBox(width: 12),
+          Text(
+            'Nenhuma meta ativa',
+            style: Theme.of(context)
+                .textTheme
+                .bodyMedium
+                ?.copyWith(color: AppColors.textSecondary),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── Bottom Nav ────────────────────────────────────────────────────────────
 
   Widget _buildBottomNav() {
     return Container(
