@@ -76,8 +76,14 @@ class AuthProvider extends ChangeNotifier {
       );
 
       _token = response.accessToken;
+
+      // Busca o perfil do usuário para obter o role
+      final userResponse = await _authService.getCurrentUser();
+      _user = AuthUser.fromUserResponse(userResponse);
+
       notifyListeners();
     } on UnauthorizedException catch (e) {
+
       _error = e.message;
       _token = null;
       _user = null;

@@ -46,7 +46,12 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       if (mounted) {
-        context.go(AppRoutes.home);
+        final user = authProvider.user;
+        if (user?.role == 'personal_trainer' || user?.role == 'admin') {
+          context.go('/trainer/dashboard');
+        } else {
+          context.go(AppRoutes.home);
+        }
       }
     } catch (e) {
       if (mounted) {
