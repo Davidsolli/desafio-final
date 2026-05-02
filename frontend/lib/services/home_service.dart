@@ -24,7 +24,7 @@ class HomeUserData {
 
   factory HomeUserData.fromJson(Map<String, dynamic> json) {
     return HomeUserData(
-      id: json['id'] as String,
+      id: json['id']?.toString() ?? '',
       name: json['name'] as String,
       weight: (json['weight'] as num?)?.toDouble(),
       height: (json['height'] as num?)?.toDouble(),
@@ -82,7 +82,7 @@ class HomeGoalData {
   factory HomeGoalData.fromJson(Map<String, dynamic> json) {
     final pct = (json['progress_percentage'] as num?)?.toDouble() ?? 0.0;
     return HomeGoalData(
-      id: json['id'] as String,
+      id: json['id']?.toString() ?? '',
       title: json['title'] as String,
       progress: (pct / 100).clamp(0.0, 1.0),
       status: json['status'] as String? ?? 'active',
@@ -136,7 +136,7 @@ class HomeWorkoutData {
         .toList();
 
     return HomeWorkoutData(
-      id: json['id'] as String,
+      id: json['id']?.toString() ?? '',
       name: json['name'] as String? ?? 'Treino',
       dayOfWeek: json['day_of_week'] as int? ?? 0,
       exercises: exercises,
@@ -169,43 +169,46 @@ class HomeWorkoutData {
     return (totalSeconds / 60).ceil().clamp(10, 120);
   }
 
+  // Inclui variantes com e sem acento para não depender da normalização do backend.
+  static const _muscleEmoji = <String, String>{
+    'peito': '💪',
+    'costa': '🔙',
+    'costas': '🔙',
+    'perna_anterior': '🦵',
+    'perna_posterior': '🦵',
+    'panturrilha': '🦵',
+    'ombro': '🏋️',
+    'biceps': '💪',
+    'bíceps': '💪',
+    'triceps': '💪',
+    'tríceps': '💪',
+    'antebraco': '💪',
+    'antebraço': '💪',
+    'core': '🔥',
+  };
+
   static String _emojiForMuscleGroup(String group) {
-    switch (group) {
-      case 'peito':
-        return '💪';
-      case 'costa':
-        return '🔙';
-      case 'perna_anterior':
-      case 'perna_posterior':
-      case 'panturrilha':
-        return '🦵';
-      case 'ombro':
-        return '🏋️';
-      case 'bíceps':
-      case 'tríceps':
-      case 'antebraço':
-        return '💪';
-      case 'core':
-        return '🔥';
-      default:
-        return '🏃';
-    }
+    return _muscleEmoji[group] ?? _muscleEmoji[group.toLowerCase()] ?? '🏃';
   }
 
   static String _formatMuscleGroup(String group) {
     const map = {
       'peito': 'Peito',
       'costa': 'Costas',
+      'costas': 'Costas',
       'perna_anterior': 'Quadríceps',
       'perna_posterior': 'Posterior',
       'ombro': 'Ombros',
+      'biceps': 'Bíceps',
       'bíceps': 'Bíceps',
+      'triceps': 'Tríceps',
       'tríceps': 'Tríceps',
       'core': 'Core',
       'panturrilha': 'Panturrilha',
+      'antebraco': 'Antebraço',
       'antebraço': 'Antebraço',
     };
-    return map[group] ?? group;
+    return map[group] ?? map[group.toLowerCase()] ?? group;
   }
 }
 
@@ -237,18 +240,15 @@ class HomeService {
     // User must succeed – propagate any error to the provider.
     final user = await _getUser();
 
-    // Goals and workout-sheet are independent; fetch in parallel.
-    // Each catches its own errors and returns a safe fallback.
-    final results = await Future.wait([
-      _getGoals(),
-      _getTodayWorkout(),
-    ]);
+    // Iniciar os dois futures antes de qualquer await para rodar em paralelo.
+    // Variáveis tipadas eliminam o cast dinâmico do Future.wait.
+    final goalsFuture = _getGoals();
+    final workoutFuture = _getTodayWorkout();
 
-    return HomeData(
-      user: user,
-      goals: results[0] as List<HomeGoalData>,
-      todayWorkout: results[1] as HomeWorkoutData?,
-    );
+    final goals = await goalsFuture;
+    final workout = await workoutFuture;
+
+    return HomeData(user: user, goals: goals, todayWorkout: workout);
   }
 
   Future<HomeUserData> _getUser() async {

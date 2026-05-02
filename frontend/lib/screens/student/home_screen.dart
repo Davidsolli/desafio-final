@@ -26,18 +26,11 @@ class HomeScreen extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Body (holds the _userRole dropdown state)
+// Body
 // ---------------------------------------------------------------------------
 
-class _HomeBody extends StatefulWidget {
+class _HomeBody extends StatelessWidget {
   const _HomeBody();
-
-  @override
-  State<_HomeBody> createState() => _HomeBodyState();
-}
-
-class _HomeBodyState extends State<_HomeBody> {
-  String _userRole = 'student';
 
   @override
   Widget build(BuildContext context) {
@@ -159,35 +152,6 @@ class _HomeBodyState extends State<_HomeBody> {
           ],
         ),
         const Spacer(),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            border: Border.all(color: AppColors.border),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: DropdownButton<String>(
-            value: _userRole,
-            onChanged: (value) =>
-                setState(() => _userRole = value ?? 'student'),
-            items: [
-              DropdownMenuItem(
-                  value: 'student',
-                  child: Text('Aluno',
-                      style: Theme.of(context).textTheme.bodySmall)),
-              DropdownMenuItem(
-                  value: 'trainer',
-                  child: Text('Personal',
-                      style: Theme.of(context).textTheme.bodySmall)),
-            ],
-            underline: const SizedBox(),
-            style: const TextStyle(color: AppColors.textPrimary),
-            dropdownColor: AppColors.surface,
-            icon: const Icon(Icons.expand_more,
-                color: AppColors.primary, size: 18),
-          ),
-        ),
-        const SizedBox(width: 8),
         GestureDetector(
           onTap: () => context.go(AppRoutes.notifications),
           child: Stack(
@@ -222,7 +186,7 @@ class _HomeBodyState extends State<_HomeBody> {
   }
 
   // ---------------------------------------------------------------------------
-  // Stats row (IMC, TMB, treinos da semana)
+  // Stats row (IMC, TMB)
   // ---------------------------------------------------------------------------
 
   Widget _buildStatsRow(BuildContext context, HomeData data) {
@@ -245,12 +209,6 @@ class _HomeBodyState extends State<_HomeBody> {
         'value': tmbValue,
         'label': 'kcal/dia',
         'delay': 100,
-      },
-      {
-        'icon': Icons.fitness_center,
-        'value': '—',
-        'label': 'treinos',
-        'delay': 200,
       },
     ];
 

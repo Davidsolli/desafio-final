@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:omniconnect_fitness/services/home_service.dart';
 import 'package:omniconnect_fitness/services/api_client.dart';
@@ -39,6 +40,6 @@ class HomeProvider extends ChangeNotifier {
 
   void refresh() {
     _data = null;
-    fetchHomeData();
+    unawaited(fetchHomeData());
   }
 }
