@@ -13,16 +13,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  int _selectedNavIndex = 0;
   String _userRole = 'student';
-
-  final List<Map<String, dynamic>> _navItems = [
-    {'icon': Icons.home_outlined, 'label': 'Home', 'route': AppRoutes.home},
-    {'icon': Icons.fitness_center_outlined, 'label': 'Treinos', 'route': AppRoutes.workouts},
-    {'icon': Icons.restaurant_outlined, 'label': 'Nutrição', 'route': AppRoutes.nutrition},
-    {'icon': Icons.chat_bubble_outline, 'label': 'Chat', 'route': AppRoutes.chat},
-    {'icon': Icons.person_outline, 'label': 'Perfil', 'route': AppRoutes.profile},
-  ];
 
   @override
   Widget build(BuildContext context) {
@@ -55,7 +46,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
-      bottomNavigationBar: _buildBottomNav(),
     );
   }
 
@@ -311,31 +301,4 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildBottomNav() {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border(top: BorderSide(color: AppColors.border, width: 1)),
-      ),
-      child: BottomNavigationBar(
-        currentIndex: _selectedNavIndex,
-        onTap: (index) {
-          setState(() => _selectedNavIndex = index);
-          context.go(_navItems[index]['route']);
-        },
-        backgroundColor: AppColors.surface,
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: AppColors.primary,
-        unselectedItemColor: AppColors.textMuted,
-        items: _navItems
-            .map(
-              (item) => BottomNavigationBarItem(
-                icon: Icon(item['icon'] as IconData, size: 24),
-                label: item['label'] as String,
-              ),
-            )
-            .toList(),
-      ),
-    );
-  }
 }

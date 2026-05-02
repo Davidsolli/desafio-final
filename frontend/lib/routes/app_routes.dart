@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../screens/auth/splash_screen.dart';
 import '../screens/auth/login_screen.dart';
 import '../screens/auth/register_screen.dart';
+import '../screens/student/student_shell.dart';
 import '../screens/student/home_screen.dart';
 import '../screens/student/workouts_screen.dart';
 import '../screens/student/nutrition_screen.dart';
@@ -46,37 +47,42 @@ class AppRoutes {
         path: register,
         builder: (context, state) => const RegisterScreen(),
       ),
-      GoRoute(
-        path: home,
-        builder: (context, state) => const HomeScreen(),
-      ),
-      GoRoute(
-        path: workouts,
-        builder: (context, state) => const WorkoutsScreen(),
-      ),
-      GoRoute(
-        path: nutrition,
-        builder: (context, state) => const NutritionScreen(),
-      ),
-      GoRoute(
-        path: logbook,
-        builder: (context, state) => const LogbookScreen(),
-      ),
-      GoRoute(
-        path: metrics,
-        builder: (context, state) => const MetricsScreen(),
-      ),
-      GoRoute(
-        path: goals,
-        builder: (context, state) => const GoalsScreen(),
-      ),
-      GoRoute(
-        path: chat,
-        builder: (context, state) => const ChatScreen(),
-      ),
-      GoRoute(
-        path: profile,
-        builder: (context, state) => const ProfileScreenV2(),
+      ShellRoute(
+        builder: (context, state, child) => StudentShell(child: child),
+        routes: [
+          GoRoute(
+            path: home,
+            builder: (context, state) => const HomeScreen(),
+          ),
+          GoRoute(
+            path: workouts,
+            builder: (context, state) => const WorkoutsScreen(),
+          ),
+          GoRoute(
+            path: nutrition,
+            builder: (context, state) => const NutritionScreen(),
+          ),
+          GoRoute(
+            path: logbook,
+            builder: (context, state) => const LogbookScreen(),
+          ),
+          GoRoute(
+            path: metrics,
+            builder: (context, state) => const MetricsScreen(),
+          ),
+          GoRoute(
+            path: goals,
+            builder: (context, state) => const GoalsScreen(),
+          ),
+          GoRoute(
+            path: chat,
+            builder: (context, state) => const ChatScreen(),
+          ),
+          GoRoute(
+            path: profile,
+            builder: (context, state) => const ProfileScreenV2(),
+          ),
+        ],
       ),
       GoRoute(
         path: notifications,
