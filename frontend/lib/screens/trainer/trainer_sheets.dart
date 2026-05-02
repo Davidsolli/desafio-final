@@ -6,6 +6,7 @@ import '../../theme/app_colors.dart';
 import '../../models/workout_sheet_model.dart';
 import '../../providers/workout_sheet_provider.dart';
 import '../../services/workout_sheet_service.dart';
+import 'widgets/create_workout_sheet_dialog.dart';
 
 class TrainerSheets extends StatefulWidget {
   const TrainerSheets({super.key});
@@ -32,6 +33,24 @@ class _TrainerSheetsState extends State<TrainerSheets> {
     }
   }
 
+  Future<void> _openCreateDialog() async {
+    final created = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const CreateWorkoutSheetDialog(),
+    );
+
+    if (created == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✅ Ficha criada com sucesso!'),
+          backgroundColor: AppColors.accentSuccess,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -52,20 +71,23 @@ class _TrainerSheetsState extends State<TrainerSheets> {
                           style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
                     ],
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.add, color: Colors.white, size: 16),
-                        const SizedBox(width: 4),
-                        Text('Nova',
-                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
-                      ],
+                  GestureDetector(
+                    onTap: _openCreateDialog,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.add, color: Colors.white, size: 16),
+                          const SizedBox(width: 4),
+                          Text('Nova',
+                              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                  color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
+                        ],
+                      ),
                     ),
                   ),
                 ],
