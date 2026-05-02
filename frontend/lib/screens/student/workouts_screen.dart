@@ -18,7 +18,6 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
   Set<String> _completedExercises = {};
   int? _restTimerSeconds;
   Timer? _restTimer;
-  int _selectedNavIndex = 1;
 
   @override
   void dispose() {
@@ -136,7 +135,6 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: _buildBottomNav(),
     );
   }
 
@@ -349,7 +347,6 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: _buildBottomNav(),
     );
   }
 
@@ -363,40 +360,6 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
       child: Text(text,
           style: Theme.of(context).textTheme.labelSmall?.copyWith(
               color: AppColors.textMuted, fontSize: 11, fontWeight: FontWeight.w500)),
-    );
-  }
-
-  Widget _buildBottomNav() {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border(top: BorderSide(color: AppColors.border, width: 1)),
-      ),
-      child: BottomNavigationBar(
-        currentIndex: _selectedNavIndex,
-        onTap: (index) {
-          setState(() => _selectedNavIndex = index);
-          final routes = [
-            AppRoutes.home,
-            AppRoutes.workouts,
-            AppRoutes.nutrition,
-            AppRoutes.chat,
-            AppRoutes.profile,
-          ];
-          context.go(routes[index]);
-        },
-        backgroundColor: AppColors.surface,
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: AppColors.primary,
-        unselectedItemColor: AppColors.textMuted,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home_outlined), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.fitness_center_outlined), label: 'Treinos'),
-          BottomNavigationBarItem(icon: Icon(Icons.restaurant_outlined), label: 'Nutrição'),
-          BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_outline), label: 'Chat'),
-          BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: 'Perfil'),
-        ],
-      ),
     );
   }
 }
