@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 import '../../theme/app_colors.dart';
 import '../../routes/app_routes.dart';
-import '../../models/mock_data.dart';
+import '../../providers/auth_provider.dart';
 
 class TrainerProfile extends StatefulWidget {
   const TrainerProfile({super.key});
@@ -12,12 +13,26 @@ class TrainerProfile extends StatefulWidget {
 }
 
 class _TrainerProfileState extends State<TrainerProfile> {
-  final _nameController = TextEditingController(text: trainerFullName);
-  final _emailController = TextEditingController(text: trainerEmail);
-  final _phoneController = TextEditingController(text: trainerPhone);
-  final _crefController = TextEditingController(text: trainerCREF);
+  late TextEditingController _nameController;
+  late TextEditingController _emailController;
+  late TextEditingController _phoneController;
+  final _crefController = TextEditingController();
   bool _notificationsEnabled = true;
   bool _darkModeEnabled = true;
+  bool _initialized = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Inicializa os controllers uma única vez com os dados reais do AuthProvider
+    if (!_initialized) {
+      final user = context.read<AuthProvider>().user;
+      _nameController = TextEditingController(text: user?.name ?? '');
+      _emailController = TextEditingController(text: user?.email ?? '');
+      _phoneController = TextEditingController(text: user?.phoneWhatsapp ?? '');
+      _initialized = true;
+    }
+  }
 
   @override
   void dispose() {
@@ -30,49 +45,63 @@ class _TrainerProfileState extends State<TrainerProfile> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            children: [
-              _buildHeader(),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildPersonalDataSection(),
-                    const SizedBox(height: 24),
-                    _buildConfigurationsSection(),
-                    const SizedBox(height: 24),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.accentError,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+    return Consumer<AuthProvider>(
+      builder: (context, authProvider, _) {
+        final user = authProvider.user;
+
+        return Scaffold(
+          backgroundColor: AppColors.background,
+          body: SafeArea(
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  _buildHeader(user),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildPersonalDataSection(),
+                        const SizedBox(height: 24),
+                        _buildConfigurationsSection(),
+                        const SizedBox(height: 24),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.accentError,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                            onPressed: () async {
+                              final router = GoRouter.of(context);
+                              await authProvider.logout();
+                              router.go(AppRoutes.login);
+                            },
+                            child: Text('↩️ Sair da Conta',
+                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: Colors.white, fontWeight: FontWeight.w600)),
+                          ),
                         ),
-                        onPressed: () => context.go(AppRoutes.login),
-                        child: Text('↩️ Sair da Conta',
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: Colors.white, fontWeight: FontWeight.w600)),
-                      ),
+                        const SizedBox(height: 32),
+                      ],
                     ),
-                    const SizedBox(height: 32),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
-      ),
-      bottomNavigationBar: _buildBottomNav(),
+          bottomNavigationBar: _buildBottomNav(),
+        );
+      },
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(AuthUser? user) {
+    final initial = (user?.name.isNotEmpty == true) ? user!.name[0].toUpperCase() : '?';
+    final name = user?.name ?? '';
+    final email = user?.email ?? '';
+
     return Container(
       color: AppColors.surface,
       padding: const EdgeInsets.symmetric(vertical: 20),
@@ -90,12 +119,15 @@ class _TrainerProfileState extends State<TrainerProfile> {
               borderRadius: BorderRadius.circular(16),
             ),
             child: Center(
-              child: Text('R', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white)),
+              child: Text(initial,
+                  style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white)),
             ),
           ),
           const SizedBox(height: 12),
-          Text(trainerFullName, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
-          Text(trainerEmail, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
+          Text(name,
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+          Text(email,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
           const SizedBox(height: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -123,20 +155,21 @@ class _TrainerProfileState extends State<TrainerProfile> {
               children: [
                 const Icon(Icons.person, color: AppColors.primary, size: 20),
                 const SizedBox(width: 8),
-                Text('Dados Pessoais', style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
+                Text('Dados Pessoais',
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
               ],
             ),
-            Icon(Icons.edit, color: AppColors.textMuted, size: 18),
+            const Icon(Icons.edit, color: AppColors.textMuted, size: 18),
           ],
         ),
         const SizedBox(height: 12),
         _buildTextField('Nome', _nameController),
         const SizedBox(height: 12),
-        _buildTextField('Email', _emailController),
+        _buildTextField('Email', _emailController, readOnly: true),
         const SizedBox(height: 12),
-        _buildTextField('Telefone', _phoneController),
+        _buildTextField('Telefone / WhatsApp', _phoneController),
         const SizedBox(height: 12),
-        _buildTextField('CREF', _crefController),
+        _buildTextField('CREF', _crefController, hint: 'Ex: 012345-G/SP'),
         const SizedBox(height: 16),
         SizedBox(
           width: double.infinity,
@@ -160,24 +193,33 @@ class _TrainerProfileState extends State<TrainerProfile> {
     );
   }
 
-  Widget _buildTextField(String label, TextEditingController controller) {
+  Widget _buildTextField(String label, TextEditingController controller,
+      {bool readOnly = false, String? hint}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted, fontWeight: FontWeight.w500)),
+        Text(label,
+            style: Theme.of(context)
+                .textTheme
+                .labelSmall
+                ?.copyWith(color: AppColors.textMuted, fontWeight: FontWeight.w500)),
         const SizedBox(height: 6),
         TextField(
           controller: controller,
+          readOnly: readOnly,
           decoration: InputDecoration(
+            hintText: hint,
             filled: true,
-            fillColor: AppColors.surfaceLight,
+            fillColor: readOnly ? AppColors.surfaceLight.withValues(alpha: 0.5) : AppColors.surfaceLight,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
               borderSide: const BorderSide(color: AppColors.border),
             ),
             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           ),
-          style: const TextStyle(color: AppColors.textPrimary),
+          style: TextStyle(
+            color: readOnly ? AppColors.textMuted : AppColors.textPrimary,
+          ),
         ),
       ],
     );
@@ -191,64 +233,60 @@ class _TrainerProfileState extends State<TrainerProfile> {
           children: [
             const Icon(Icons.settings, color: AppColors.primary, size: 20),
             const SizedBox(width: 8),
-            Text('Configurações', style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
+            Text('Configurações',
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
           ],
         ),
         const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            border: Border.all(color: AppColors.border, width: 1),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.notifications, color: AppColors.textMuted, size: 20),
-                  const SizedBox(width: 12),
-                  Text('Notificações', style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w500)),
-                ],
-              ),
-              Switch(
-                value: _notificationsEnabled,
-                onChanged: (value) => setState(() => _notificationsEnabled = value),
-                activeThumbColor: AppColors.primary,
-                activeTrackColor: AppColors.primary.withValues(alpha: 0.4),
-              ),
-            ],
-          ),
+        _buildToggleRow(
+          icon: Icons.notifications,
+          label: 'Notificações',
+          value: _notificationsEnabled,
+          onChanged: (v) => setState(() => _notificationsEnabled = v),
         ),
         const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            border: Border.all(color: AppColors.border, width: 1),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.dark_mode, color: AppColors.textMuted, size: 20),
-                  const SizedBox(width: 12),
-                  Text('Modo Escuro', style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w500)),
-                ],
-              ),
-              Switch(
-                value: _darkModeEnabled,
-                onChanged: (value) => setState(() => _darkModeEnabled = value),
-                activeThumbColor: AppColors.primary,
-                activeTrackColor: AppColors.primary.withValues(alpha: 0.4),
-              ),
-            ],
-          ),
+        _buildToggleRow(
+          icon: Icons.dark_mode,
+          label: 'Modo Escuro',
+          value: _darkModeEnabled,
+          onChanged: (v) => setState(() => _darkModeEnabled = v),
         ),
       ],
+    );
+  }
+
+  Widget _buildToggleRow({
+    required IconData icon,
+    required String label,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        border: Border.all(color: AppColors.border, width: 1),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: AppColors.textMuted, size: 20),
+              const SizedBox(width: 12),
+              Text(label,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w500)),
+            ],
+          ),
+          Switch(
+            value: value,
+            onChanged: onChanged,
+            activeThumbColor: AppColors.primary,
+            activeTrackColor: AppColors.primary.withValues(alpha: 0.4),
+          ),
+        ],
+      ),
     );
   }
 
