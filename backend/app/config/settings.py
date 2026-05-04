@@ -13,10 +13,11 @@ class Settings(BaseSettings):
     # Ambiente
     ENV: str = "development"
 
-    # JWT
+    # JWT (RNF-05: access=24h, refresh=30d)
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440    # 24 horas
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 30        # 30 dias
 
     # ── IA / Google Gemini ────────────────────────────────────────────────
     GOOGLE_API_KEY: str = ""

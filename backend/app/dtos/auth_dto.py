@@ -27,27 +27,38 @@ class LoginDTO(BaseModel):
 
 
 class TokenResponseDTO(BaseModel):
-    """DTO para resposta de token JWT."""
+    """DTO para resposta de token JWT (RNF-05)."""
 
     access_token: str = Field(
         ...,
-        description="Token JWT para autenticação",
+        description="Token JWT de acesso (24 horas)",
+    )
+    refresh_token: str = Field(
+        ...,
+        description="Token de renovação (30 dias)",
     )
     token_type: str = Field(
         default="bearer",
-        description="Tipo de token (sempre 'bearer' para JWT)",
+        description="Tipo de token (sempre 'bearer')",
     )
     expires_in: int = Field(
         ...,
-        description="Tempo de expiração do token em segundos",
+        description="Tempo de expiração do access_token em segundos",
     )
 
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
                 "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
                 "token_type": "bearer",
                 "expires_in": 86400,
             }
         }
     )
+
+
+class RefreshTokenDTO(BaseModel):
+    """DTO para renovação de token via refresh_token (RNF-05)."""
+
+    refresh_token: str = Field(..., description="Token de renovação emitido no login")
