@@ -166,11 +166,13 @@ class WorkoutSheetService {
   ///
   /// [search] — Busca por nome (parcial, case-insensitive).
   /// [muscleGroup] — Filtrar por grupo muscular mapeado.
+  /// [equipment] — Filtrar por equipamento.
   /// [page] — Número da página.
   /// [limit] — Itens por página.
   Future<PaginatedCatalog> searchExerciseCatalog({
     String? search,
     String? muscleGroup,
+    String? equipment,
     int page = 1,
     int limit = 20,
   }) async {
@@ -180,6 +182,7 @@ class WorkoutSheetService {
         'limit': limit.toString(),
         if (search != null && search.isNotEmpty) 'search': search,
         if (muscleGroup != null) 'muscle_group': muscleGroup,
+        if (equipment != null) 'equipment': equipment,
       };
 
       final response = await _apiClient.get<PaginatedCatalog>(

@@ -238,6 +238,7 @@ class WorkoutSheetProvider extends ChangeNotifier {
   Future<void> searchCatalog({
     String? search,
     String? muscleGroup,
+    String? equipment,
     int page = 1,
     int limit = 20,
   }) async {
@@ -248,6 +249,7 @@ class WorkoutSheetProvider extends ChangeNotifier {
       final result = await _service.searchExerciseCatalog(
         search: search,
         muscleGroup: muscleGroup,
+        equipment: equipment,
         page: page,
         limit: limit,
       );
