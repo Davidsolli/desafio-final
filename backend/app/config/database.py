@@ -68,6 +68,9 @@ async def init_db() -> None:
     import app.models.chatbot  # noqa: F401 — registra KnowledgeBase, ChatConversation, etc.
     from app.models.goal import Goal, GoalProgressEntry  # noqa: F401 — registra Goals
     import app.models.logbook  # noqa: F401 — registra WorkoutSession e SessionExercise no Base
+    import app.models.food_catalog  # noqa: F401 — registra FoodCatalog no Base
+    import app.models.diet  # noqa: F401 — registra CustomFood, Diet, DietMeal, DietItem
+    import app.models.diet_logbook  # noqa: F401 — registra DietLogbook, DietLogbookEntry
 
     engine = _get_engine()
     async with engine.begin() as conn:
