@@ -324,15 +324,20 @@ class WorkoutSheetService:
 
     async def search_exercise_catalog(
         self,
-        search: Optional[str],
-        muscle_group: Optional[str],
-        page: int,
-        limit: int,
+        search: Optional[str] = None,
+        muscle_group: Optional[str] = None,
+        equipment: Optional[str] = None,
+        page: int = 1,
+        limit: int = 20,
     ) -> PaginatedCatalogDTO:
-        """Busca exercícios no catálogo (qualquer usuário autenticado)."""
+        """
+        Busca exercícios no catálogo pré-definido.
+        Acessível por qualquer usuário autenticado.
+        """
         items, total = await self.repository.search_exercise_catalog(
             search=search,
             muscle_group=muscle_group,
+            equipment=equipment,
             page=page,
             limit=limit,
         )
