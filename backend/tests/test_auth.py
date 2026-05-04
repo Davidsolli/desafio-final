@@ -1,7 +1,6 @@
 """Testes de integração para o módulo de autenticação."""
 
 import pytest
-import json
 from jose import jwt
 
 from app.config.settings import settings
@@ -176,26 +175,73 @@ class TestAuthIntegration:
         self, async_client, sample_user, sample_user_data
     ):
         """Teste 11: Mensagem igual para email inválido e senha errada (evita enumeração)."""
-        # Tentativa 1: email não existe
         response1 = await async_client.post(
             "/api/v1/auth/login",
-            json={
-                "email": "naoexiste@example.com",
-                "password": "SenhaForte123!",
-            },
+            json={"email": "naoexiste@example.com", "password": "SenhaForte123!"},
         )
-        msg1 = response1.json()["detail"]
-
-        # Tentativa 2: senha errada
         response2 = await async_client.post(
             "/api/v1/auth/login",
-            json={
-                "email": sample_user_data["email"],
-                "password": "SenhaErrada123!",
-            },
+            json={"email": sample_user_data["email"], "password": "SenhaErrada123!"},
         )
-        msg2 = response2.json()["detail"]
-
         assert response1.status_code == 401
         assert response2.status_code == 401
-        assert msg1 == msg2
+        assert response1.json()["detail"] == response2.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_login_returns_refresh_token(self, async_client, sample_user, sample_user_data):
+        """Teste 12 (RNF-05): Login retorna refresh_token além do access_token."""
+        response = await async_client.post(
+            "/api/v1/auth/login",
+            json={"email": sample_user_data["email"], "password": sample_user_data["password"]},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "refresh_token" in data
+        assert isinstance(data["refresh_token"], str)
+        assert len(data["refresh_token"]) > 10
+
+    @pytest.mark.asyncio
+    async def test_refresh_token_generates_new_access_token(
+        self, async_client, sample_user, sample_user_data
+    ):
+        """Teste 13 (RNF-05): Refresh token gera novo access_token."""
+        login_resp = await async_client.post(
+            "/api/v1/auth/login",
+            json={"email": sample_user_data["email"], "password": sample_user_data["password"]},
+        )
+        assert login_resp.status_code == 200
+        refresh_token = login_resp.json()["refresh_token"]
+
+        refresh_resp = await async_client.post(
+            "/api/v1/auth/refresh",
+            json={"refresh_token": refresh_token},
+        )
+        assert refresh_resp.status_code == 200
+        data = refresh_resp.json()
+        assert "access_token" in data
+        assert "refresh_token" in data
+        assert data["token_type"] == "bearer"
+
+    @pytest.mark.asyncio
+    async def test_refresh_token_invalid(self, async_client):
+        """Teste 14 (RNF-05): Refresh token inválido retorna 401."""
+        response = await async_client.post(
+            "/api/v1/auth/refresh",
+            json={"refresh_token": "token.invalido.aqui"},
+        )
+        assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_access_token_type_in_payload(
+        self, async_client, sample_user, sample_user_data
+    ):
+        """Teste 15 (RNF-05): Payload do access_token tem type='access'."""
+        login_resp = await async_client.post(
+            "/api/v1/auth/login",
+            json={"email": sample_user_data["email"], "password": sample_user_data["password"]},
+        )
+        assert login_resp.status_code == 200
+        access_token = login_resp.json()["access_token"]
+
+        decoded = jwt.decode(access_token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        assert decoded.get("type") == "access"

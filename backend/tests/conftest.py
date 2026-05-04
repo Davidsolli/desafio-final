@@ -22,6 +22,7 @@ import app.models.logbook  # noqa: F401 — garante que workout_sessions/session
 from app.models.goal import Goal as _Goal, GoalProgressEntry as _GoalProgressEntry  # noqa: F401
 from app.models import workout_sheet  # noqa: F401 — registra workout_sheets/exercises no Base.metadata
 from app.models import exercise_catalog  # noqa: F401 — registra exercise_catalog no Base.metadata
+import app.models.nutrition  # noqa: F401 — registra foods, meals, meal_food_entries no Base.metadata
 from app.services.user_service import UserService
 from app.dependencies.auth import get_current_user
 
