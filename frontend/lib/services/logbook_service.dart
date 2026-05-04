@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:omniconnect_fitness/services/api_client.dart';
 
-/// Modelo de exercício no logbook
+/// Exercício registrado em uma sessão de logbook
 class ExerciseLogResponse {
   final String id;
   final String exerciseName;
@@ -23,18 +23,27 @@ class ExerciseLogResponse {
 
   factory ExerciseLogResponse.fromJson(Map<String, dynamic> json) {
     return ExerciseLogResponse(
-      id: json['id'] as String,
-      exerciseName: json['exercise_name'] as String,
-      sets: json['sets'] as int,
-      reps: json['reps'] as int,
-      weight: (json['weight'] as num).toDouble(),
-      restTime: json['rest_time'] as int,
-      notes: json['notes'] as String?,
+      id: (json['id'] as String?) ?? '',
+      exerciseName: (json['exercise_name'] as String?) ??
+          (json['exerciseName'] as String?) ??
+          'Exercício',
+      sets: (json['actual_series'] as int?) ??
+          (json['planned_series'] as int?) ??
+          (json['sets'] as int?) ??
+          0,
+      reps: (json['actual_repetitions'] as int?) ??
+          (json['planned_repetitions'] as int?) ??
+          (json['reps'] as int?) ??
+          0,
+      weight: ((json['actual_load_kg'] ?? json['planned_load_kg'] ?? json['weight'] ?? 0) as num)
+          .toDouble(),
+      restTime: (json['rest_time'] as int?) ?? 60,
+      notes: json['exercise_notes'] as String? ?? json['notes'] as String?,
     );
   }
 }
 
-/// Modelo de sessão de treino (logbook)
+/// Sessão de treino no logbook (mapeada a partir do backend SessionListItemDTO/SessionResponseDTO)
 class LogbookResponse {
   final String id;
   final String userId;
@@ -61,18 +70,27 @@ class LogbookResponse {
   });
 
   factory LogbookResponse.fromJson(Map<String, dynamic> json) {
+    final exerciseList = <ExerciseLogResponse>[];
+    final rawExercises = json['session_exercises'] ?? json['exercises'];
+    if (rawExercises is List) {
+      for (final e in rawExercises) {
+        if (e is Map<String, dynamic>) {
+          exerciseList.add(ExerciseLogResponse.fromJson(e));
+        }
+      }
+    }
+
     return LogbookResponse(
       id: json['id'] as String,
-      userId: json['user_id'] as String,
-      workoutName: json['workout_name'] as String,
+      userId: (json['user_id'] as String?) ?? '',
+      workoutName: (json['workout_name'] as String?) ?? 'Treino',
       sessionDate: DateTime.parse(json['session_date'] as String),
-      durationMinutes: json['duration_minutes'] as int,
-      caloriesBurned: (json['calories_burned'] as num).toDouble(),
-      intensity: json['intensity'] as String,
-      exercises: (json['exercises'] as List<dynamic>?)
-          ?.map((e) => ExerciseLogResponse.fromJson(e as Map<String, dynamic>))
-          .toList() ?? [],
-      notes: json['notes'] as String?,
+      durationMinutes: (json['duration_minutes'] as int?) ?? 0,
+      caloriesBurned:
+          ((json['calories_burned'] ?? 0) as num).toDouble(),
+      intensity: (json['intensity'] as String?) ?? 'moderada',
+      exercises: exerciseList,
+      notes: (json['notes'] ?? json['general_notes']) as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
     );
   }
@@ -81,7 +99,8 @@ class LogbookResponse {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final yesterday = today.subtract(const Duration(days: 1));
-    final sessionDay = DateTime(sessionDate.year, sessionDate.month, sessionDate.day);
+    final sessionDay =
+        DateTime(sessionDate.year, sessionDate.month, sessionDate.day);
 
     if (sessionDay == today) return 'Hoje';
     if (sessionDay == yesterday) return 'Ontem';
@@ -102,7 +121,7 @@ class LogbookResponse {
   }
 }
 
-/// Modelo para criar/atualizar logbook
+/// DTO para criar/atualizar uma sessão de logbook
 class CreateLogbookDTO {
   final String workoutName;
   final DateTime sessionDate;
@@ -123,41 +142,55 @@ class CreateLogbookDTO {
   });
 
   Map<String, dynamic> toJson() => {
-    'workout_name': workoutName,
-    'session_date': sessionDate.toIso8601String(),
-    'duration_minutes': durationMinutes,
-    'calories_burned': caloriesBurned,
-    'intensity': intensity,
-    'exercises': exercises,
-    if (notes != null) 'notes': notes,
-  };
+        'workout_name': workoutName,
+        'session_date': sessionDate.toIso8601String(),
+        'duration_minutes': durationMinutes,
+        'calories_burned': caloriesBurned,
+        'intensity': intensity,
+        if (notes != null) 'notes': notes,
+      };
 }
 
 /// Serviço de logbook (histórico de treinos)
+///
+/// Endpoints do backend:
+///   GET    /api/v1/logbook/sessions           → Listar sessões (paginado)
+///   POST   /api/v1/logbook/sessions           → Criar sessão
+///   GET    /api/v1/logbook/sessions/{id}      → Buscar sessão
+///   PUT    /api/v1/logbook/sessions/{id}      → Atualizar sessão
+///   DELETE /api/v1/logbook/sessions/{id}      → Deletar sessão
 class LogbookService {
   final ApiClient _apiClient;
 
   LogbookService({required ApiClient apiClient}) : _apiClient = apiClient;
 
-  /// Lista todas as sessões do logbook do usuário
+  /// Lista sessões do logbook do usuário (retorna a lista do campo `data`)
   Future<List<LogbookResponse>> getLogbookSessions({
+    int page = 1,
     int limit = 10,
-    int offset = 0,
   }) async {
     try {
       final queryParameters = <String, dynamic>{
+        'page': page,
         'limit': limit,
-        'offset': offset,
       };
 
       final response = await _apiClient.get<List<LogbookResponse>>(
-        '/logbook',
+        '/logbook/sessions',
         queryParameters: queryParameters,
         fromJson: (data) {
-          if (data is List) {
-            return data.map((item) => LogbookResponse.fromJson(item as Map<String, dynamic>)).toList();
+          List<dynamic> items;
+          if (data is Map && data.containsKey('data')) {
+            items = data['data'] as List<dynamic>;
+          } else if (data is List) {
+            items = data;
+          } else {
+            return [];
           }
-          return [];
+          return items
+              .whereType<Map<String, dynamic>>()
+              .map((item) => LogbookResponse.fromJson(item))
+              .toList();
         },
       );
       return response;
@@ -170,8 +203,9 @@ class LogbookService {
   Future<LogbookResponse> getLogbookSession(String sessionId) async {
     try {
       final response = await _apiClient.get<LogbookResponse>(
-        '/logbook/$sessionId',
-        fromJson: (data) => LogbookResponse.fromJson(data as Map<String, dynamic>),
+        '/logbook/sessions/$sessionId',
+        fromJson: (data) =>
+            LogbookResponse.fromJson(data as Map<String, dynamic>),
       );
       return response;
     } catch (e) {
@@ -183,9 +217,10 @@ class LogbookService {
   Future<LogbookResponse> createLogbookSession(CreateLogbookDTO dto) async {
     try {
       final response = await _apiClient.post<LogbookResponse>(
-        '/logbook',
+        '/logbook/sessions',
         body: dto.toJson(),
-        fromJson: (data) => LogbookResponse.fromJson(data as Map<String, dynamic>),
+        fromJson: (data) =>
+            LogbookResponse.fromJson(data as Map<String, dynamic>),
       );
       return response;
     } catch (e) {
@@ -200,9 +235,12 @@ class LogbookService {
   ) async {
     try {
       final response = await _apiClient.put<LogbookResponse>(
-        '/logbook/$sessionId',
-        body: dto.toJson(),
-        fromJson: (data) => LogbookResponse.fromJson(data as Map<String, dynamic>),
+        '/logbook/sessions/$sessionId',
+        body: {
+          'general_notes': dto.notes,
+        },
+        fromJson: (data) =>
+            LogbookResponse.fromJson(data as Map<String, dynamic>),
       );
       return response;
     } catch (e) {
@@ -214,7 +252,7 @@ class LogbookService {
   Future<void> deleteLogbookSession(String sessionId) async {
     try {
       await _apiClient.delete<void>(
-        '/logbook/$sessionId',
+        '/logbook/sessions/$sessionId',
         fromJson: (_) {},
       );
     } catch (e) {

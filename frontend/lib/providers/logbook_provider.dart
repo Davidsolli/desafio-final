@@ -19,12 +19,12 @@ class LogbookProvider extends ChangeNotifier {
   bool get hasSessions => _sessions.isNotEmpty;
 
   /// Carrega todas as sessões do logbook
-  Future<void> loadSessions({int limit = 10, int offset = 0}) async {
+  Future<void> loadSessions({int limit = 10, int page = 1}) async {
     try {
       _setLoading(true);
       _error = null;
 
-      _sessions = await _logbookService.getLogbookSessions(limit: limit, offset: offset);
+      _sessions = await _logbookService.getLogbookSessions(limit: limit, page: page);
       notifyListeners();
     } on NetworkException catch (e) {
       _error = 'Erro de conexão: ${e.message}';

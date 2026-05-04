@@ -67,10 +67,10 @@ class WorkoutSession(Base):
         index=True,
     )
 
-    # UUID sem FK constraint — workout_sheets ainda não implementado
+    # UUID sem FK constraint — workout_sheets ainda não implementado (opcional)
     workout_sheet_id = Column(
         PG_UUID(as_uuid=True),
-        nullable=False,
+        nullable=True,
         index=True,
     )
 
@@ -82,6 +82,12 @@ class WorkoutSession(Base):
         default="in_progress",
         index=True,
     )
+
+    # Campos simplificados para compatibilidade com o frontend (RF-16/RF-19)
+    workout_name = Column(String(200), nullable=True)
+    duration_minutes = Column(Integer, nullable=True)
+    calories_burned = Column(Float, nullable=True)
+    intensity = Column(String(20), nullable=True)  # leve | moderada | intensa
 
     general_notes = Column(Text, nullable=True)
 
@@ -160,6 +166,9 @@ class SessionExercise(Base):
         nullable=False,
         index=True,
     )
+
+    # Nome do exercício (desnormalizado para evitar join externo)
+    exercise_name = Column(String(200), nullable=True)
 
     # Valores planejados (podem ser NULL se exercício não estava na ficha)
     planned_series = Column(Integer, nullable=True)

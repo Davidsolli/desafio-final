@@ -120,9 +120,8 @@ async def add_exercise(
     Comportamento de upsert: se o `exercise_id` já foi registrado nesta
     sessão, os dados são atualizados (HTTP 200). Caso contrário, é criado (HTTP 201).
     """
-    from fastapi import Response
-
-    user_id, role = auth
+    user_id = current_user.id
+    role = current_user.role
     controller = LogbookController(session)
     try:
         exercise_dto, created = await controller.add_exercise(session_id, user_id, role, dto)
@@ -174,7 +173,8 @@ async def update_session(
 
     Personal **não** pode editar sessões de alunos.
     """
-    user_id, role = auth
+    user_id = current_user.id
+    role = current_user.role
     controller = LogbookController(session)
     try:
         return await controller.update_session(session_id, user_id, role, dto)
@@ -225,7 +225,8 @@ async def list_sessions(
     - **Aluno:** vê apenas suas próprias sessões.
     - **Personal/Admin:** pode filtrar por `user_id` de qualquer aluno.
     """
-    requester_id, role = auth
+    requester_id = current_user.id
+    role = current_user.role
     controller = LogbookController(session)
     try:
         return await controller.list_sessions(
@@ -271,7 +272,8 @@ async def get_session(
 
     Inclui valores planejados vs. reais e notas de cada exercício.
     """
-    user_id, role = auth
+    user_id = current_user.id
+    role = current_user.role
     controller = LogbookController(session)
     try:
         return await controller.get_session(session_id, user_id, role)
@@ -316,7 +318,8 @@ async def get_calendar(
     - `skipped`: marcou que faltou
     - `no_plan`: dia sem sessão registrada
     """
-    requester_id, role = auth
+    requester_id = current_user.id
+    role = current_user.role
     # Aluno vê o próprio calendário; personal/admin pode ver de outro aluno
     effective_user_id = user_id if (role != "client" and user_id) else requester_id
     controller = LogbookController(session)
@@ -359,7 +362,8 @@ async def get_progression(
     - Pontos de dados com carga, séries, repetições e volume total
     - Estatísticas: média, máximo, mínimo, trend e % de melhora
     """
-    requester_id, role = auth
+    requester_id = current_user.id
+    role = current_user.role
     effective_user_id = user_id if (role != "client" and user_id) else requester_id
     controller = LogbookController(session)
     try:
@@ -404,7 +408,8 @@ async def delete_session(
     - Personal **não** pode deletar sessões de alunos.
     - A sessão continua no banco para fins de auditoria (LGPD).
     """
-    user_id, role = auth
+    user_id = current_user.id
+    role = current_user.role
     controller = LogbookController(session)
     try:
         await controller.delete_session(session_id, user_id, role)

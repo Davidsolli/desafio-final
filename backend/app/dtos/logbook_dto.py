@@ -6,7 +6,7 @@ de logbook/diário de treino.
 """
 
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -20,6 +20,7 @@ VALID_SESSION_STATUSES = {"in_progress", "completed", "incomplete", "skipped"}
 VALID_COMPLETE_STATUSES = {"completed", "incomplete", "skipped"}
 VALID_EXERCISE_STATUSES = {"completed", "partial", "skipped"}
 VALID_MOODS = {"great", "good", "normal", "bad", "terrible"}
+VALID_INTENSITIES = {"leve", "moderada", "intensa"}
 
 
 # ---------------------------------------------------------------------------
@@ -28,19 +29,36 @@ VALID_MOODS = {"great", "good", "normal", "bad", "terrible"}
 
 
 class CreateSessionDTO(BaseModel):
-    """DTO para iniciar uma nova sessão de treino."""
+    """DTO para iniciar uma nova sessão de treino.
 
-    workout_sheet_id: UUID = Field(..., description="UUID da ficha de treino ativa")
+    Aceita tanto o formato completo (workout_sheet_id obrigatório) quanto
+    o formato simplificado enviado pelo app mobile (workout_name + campos extras).
+    """
+
+    workout_sheet_id: Optional[UUID] = Field(None, description="UUID da ficha de treino (opcional)")
     session_date: datetime = Field(..., description="Data/hora em que treinou (não pode ser futura)")
+
+    # Campos do formato simplificado (compatibilidade com frontend)
+    workout_name: Optional[str] = Field(None, max_length=200, description="Nome do treino")
+    duration_minutes: Optional[int] = Field(None, ge=0, le=1440, description="Duração em minutos")
+    calories_burned: Optional[float] = Field(None, ge=0, description="Calorias queimadas (kcal)")
+    intensity: Optional[str] = Field(None, description="Intensidade: leve | moderada | intensa")
+    notes: Optional[str] = Field(None, max_length=2000, description="Notas da sessão")
 
     @field_validator("session_date")
     @classmethod
     def session_date_not_future(cls, v: datetime) -> datetime:
-        # Normalizar para naive UTC para comparação consistente
         v_naive = v.replace(tzinfo=None) if v.tzinfo else v
         now = datetime.utcnow()
-        if v_naive > now + timedelta(seconds=5):  # 5s de tolerância para latência
+        if v_naive > now + timedelta(seconds=5):
             raise ValueError("session_date não pode ser uma data futura")
+        return v
+
+    @field_validator("intensity")
+    @classmethod
+    def validate_intensity(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in VALID_INTENSITIES:
+            raise ValueError(f"intensity deve ser um de {VALID_INTENSITIES}")
         return v
 
 
@@ -120,6 +138,7 @@ class SessionExerciseResponseDTO(BaseModel):
     id: UUID
     session_id: UUID
     exercise_id: UUID
+    exercise_name: Optional[str] = None  # desnormalizado para evitar joins
 
     # Valores planejados
     planned_series: Optional[int] = None
@@ -153,9 +172,13 @@ class SessionResponseDTO(BaseModel):
 
     id: UUID
     user_id: UUID
-    workout_sheet_id: UUID
+    workout_sheet_id: Optional[UUID] = None
     session_date: datetime
     status: str
+    workout_name: Optional[str] = None
+    duration_minutes: Optional[int] = None
+    calories_burned: Optional[float] = None
+    intensity: Optional[str] = None
     general_notes: Optional[str] = None
     difficulty_level: Optional[int] = None
     mood: Optional[str] = None
@@ -172,9 +195,13 @@ class SessionListItemDTO(BaseModel):
 
     id: UUID
     user_id: UUID
-    workout_sheet_id: UUID
+    workout_sheet_id: Optional[UUID] = None
     session_date: datetime
     status: str
+    workout_name: Optional[str] = None
+    duration_minutes: Optional[int] = None
+    calories_burned: Optional[float] = None
+    intensity: Optional[str] = None
     difficulty_level: Optional[int] = None
     mood: Optional[str] = None
     completed_at: Optional[datetime] = None
