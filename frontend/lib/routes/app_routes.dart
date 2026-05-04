@@ -93,6 +93,10 @@ class AppRoutes {
         builder: (context, state) => const TrainerDashboard(),
       ),
       GoRoute(
+        path: '/trainer/students',
+        builder: (context, state) => const TrainerDashboard(),
+      ),
+      GoRoute(
         path: '/trainer/student/:studentId',
         builder: (context, state) => TrainerStudentDetail(
           studentId: state.pathParameters['studentId'] ?? 's1',

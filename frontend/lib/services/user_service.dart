@@ -109,6 +109,47 @@ class UserService {
     }
   }
 
+  /// Lista usuários com paginação e filtro opcional por papel
+  ///
+  /// Requer que o usuário autenticado seja admin ou personal_trainer.
+  Future<List<UserResponse>> listUsers({
+    int page = 1,
+    int limit = 50,
+    String? role,
+    String? search,
+  }) async {
+    try {
+      final queryParams = <String, dynamic>{
+        'page': page,
+        'limit': limit,
+        if (role != null) 'role': role,
+        if (search != null && search.isNotEmpty) 'search': search,
+      };
+
+      final response = await _apiClient.get<List<UserResponse>>(
+        '/users',
+        queryParameters: queryParams,
+        fromJson: (data) {
+          List<dynamic> items;
+          if (data is Map && data.containsKey('data')) {
+            items = data['data'] as List<dynamic>;
+          } else if (data is List) {
+            items = data;
+          } else {
+            return [];
+          }
+          return items
+              .whereType<Map<String, dynamic>>()
+              .map((u) => UserResponse.fromJson(u))
+              .toList();
+        },
+      );
+      return response;
+    } catch (e) {
+      rethrow;
+    }
+  }
+
   /// Verifica se o usuário está autenticado
   bool get isAuthenticated => _apiClient.isAuthenticated;
 
