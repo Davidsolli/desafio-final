@@ -132,18 +132,24 @@ class UserService:
         self,
         page: int = 1,
         limit: int = 10,
+        role_filter: Optional[str] = None,
+        search: Optional[str] = None,
     ) -> Tuple[List[UserResponseDTO], int]:
         """
-        Listar usuários com paginação.
+        Listar usuários com paginação, filtro por papel e busca.
 
         Args:
             page: Número da página
             limit: Itens por página
+            role_filter: Filtrar por papel (admin, personal_trainer, client)
+            search: Busca parcial por nome ou email
 
         Returns:
             Tuple[List[UserResponseDTO], int]: Lista de usuários e total
         """
-        users, total = await self.repository.list_all(page, limit)
+        users, total = await self.repository.list_all(
+            page, limit, role_filter=role_filter, search=search
+        )
         user_dtos = [UserResponseDTO.model_validate(user) for user in users]
         return user_dtos, total
 

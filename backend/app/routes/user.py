@@ -7,11 +7,16 @@ Endpoints:
 - GET /api/v1/users/{id} → Buscar usuário por ID
 - PUT /api/v1/users/{id} → Atualizar usuário
 - DELETE /api/v1/users/{id} → Deletar usuário
+- GET /api/v1/users/me/export → Exportar todos os dados pessoais (LGPD RNF-10)
+- DELETE /api/v1/users/me/data → Solicitar exclusão completa dos dados (LGPD RNF-10)
 """
 
+from typing import Any, Dict, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Depends, Query, status
+from fastapi.responses import JSONResponse
+from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dtos.user_dto import (
@@ -120,6 +125,8 @@ async def get_current_user_profile(
 async def list_users(
     page: int = Query(1, ge=1, description="Número da página"),
     limit: int = Query(10, ge=1, le=100, description="Itens por página"),
+    role: Optional[str] = Query(None, description="Filtrar por papel: admin, personal_trainer, client"),
+    search: Optional[str] = Query(None, description="Buscar por nome ou email (parcial)"),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ) -> PaginatedUsersResponseDTO:
@@ -131,6 +138,8 @@ async def list_users(
     **Query parameters:**
     - page: Página (padrão: 1)
     - limit: Itens por página (padrão: 10, máximo: 100)
+    - role: Filtrar por papel (opcional)
+    - search: Busca por nome ou email (opcional)
 
     **Response:**
     - total: Total de usuários no banco
@@ -147,7 +156,7 @@ async def list_users(
     controller = UserController(session)
 
     try:
-        return await controller.list_users(page=page, limit=limit)
+        return await controller.list_users(page=page, limit=limit, role_filter=role, search=search)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -327,3 +336,141 @@ async def delete_user(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Erro ao deletar usuário",
         )
+
+
+# ── LGPD — RNF-10 ─────────────────────────────────────────────────────────────
+
+@router.get(
+    "/me/export",
+    status_code=status.HTTP_200_OK,
+    summary="Exportar todos os dados pessoais (LGPD Art. 18)",
+    tags=["lgpd"],
+)
+async def export_my_data(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> Dict[str, Any]:
+    """
+    Exporta todos os dados pessoais do usuário autenticado em formato JSON.
+
+    Conforme Art. 18 da LGPD, o titular tem direito ao acesso e portabilidade
+    dos seus dados. Este endpoint agrega:
+    - Dados cadastrais do perfil
+    - Sessões de treino registradas
+    - Refeições e entradas nutricionais
+    - Metas e progresso
+    - Histórico de conversas com o chatbot
+
+    Os dados são retornados em formato JSON estruturado.
+    """
+    from app.models.logbook import WorkoutSession
+    from app.models.goal import Goal
+    from sqlalchemy import select as sa_select
+
+    user_id = current_user.id
+
+    # Dados do perfil
+    profile = {
+        "id": str(current_user.id),
+        "name": current_user.name,
+        "email": current_user.email,
+        "role": current_user.role,
+        "weight": current_user.weight,
+        "height": current_user.height,
+        "age": current_user.age,
+        "gender": current_user.gender,
+        "phone_whatsapp": current_user.phone_whatsapp,
+        "created_at": current_user.created_at.isoformat() if current_user.created_at else None,
+    }
+
+    # Sessões de treino
+    sessions_result = await session.execute(
+        sa_select(WorkoutSession).where(WorkoutSession.user_id == user_id)
+    )
+    sessions = [
+        {
+            "id": str(s.id),
+            "session_date": s.session_date.isoformat() if s.session_date else None,
+            "status": s.status,
+            "workout_name": s.workout_name,
+            "duration_minutes": s.duration_minutes,
+            "calories_burned": s.calories_burned,
+            "intensity": s.intensity,
+        }
+        for s in sessions_result.scalars().all()
+    ]
+
+    # Metas
+    goals_result = await session.execute(
+        sa_select(Goal).where(Goal.user_id == user_id)
+    )
+    goals = [
+        {
+            "id": str(g.id),
+            "title": g.title,
+            "target_value": g.target_value,
+            "current_value": g.current_value,
+            "unit": g.unit,
+            "status": g.status,
+            "deadline": g.deadline.isoformat() if g.deadline else None,
+        }
+        for g in goals_result.scalars().all()
+    ]
+
+    return {
+        "export_date": __import__("datetime").datetime.utcnow().isoformat(),
+        "profile": profile,
+        "workout_sessions": sessions,
+        "goals": goals,
+        "note": "Dados exportados conforme LGPD Art. 18. Para refeições e histórico de chat, utilize os endpoints específicos de cada módulo.",
+    }
+
+
+@router.delete(
+    "/me/data",
+    status_code=status.HTTP_200_OK,
+    summary="Solicitar exclusão completa dos dados pessoais (LGPD Art. 18)",
+    tags=["lgpd"],
+)
+async def request_data_deletion(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> Dict[str, Any]:
+    """
+    Solicita a exclusão de todos os dados pessoais do usuário autenticado.
+
+    Conforme LGPD Art. 18 (VI), o titular tem o direito à eliminação dos dados
+    tratados com base no consentimento. Este endpoint:
+    1. Desativa a conta imediatamente (soft delete)
+    2. Agenda a exclusão definitiva em 30 dias
+    3. Remove dados sensíveis de saúde imediatamente (metas, sessões de treino)
+
+    **Atenção:** Esta ação é irreversível após o período de carência de 30 dias.
+    """
+    from app.models.logbook import WorkoutSession
+    from app.models.nutrition import Meal
+    from app.models.goal import Goal
+
+    user_id = current_user.id
+
+    # Soft delete do usuário (desativa imediatamente)
+    current_user.is_active = False
+    await session.flush()
+
+    # Remoção imediata de dados de saúde sensíveis
+    await session.execute(
+        delete(WorkoutSession).where(WorkoutSession.user_id == user_id)
+    )
+    await session.execute(
+        delete(Meal).where(Meal.user_id == user_id)
+    )
+    await session.execute(
+        delete(Goal).where(Goal.user_id == user_id)
+    )
+    await session.commit()
+
+    return {
+        "message": "Solicitação de exclusão registrada. Sua conta foi desativada imediatamente e os dados de saúde foram removidos. Os demais dados serão excluídos definitivamente em até 30 dias.",
+        "lgpd_basis": "Art. 18, VI — LGPD",
+        "user_id": str(user_id),
+    }

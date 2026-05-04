@@ -93,18 +93,23 @@ class UserRepository:
         self,
         page: int = 1,
         limit: int = 10,
+        role_filter: Optional[str] = None,
+        search: Optional[str] = None,
     ) -> Tuple[List[User], int]:
         """
-        Listar usuários com paginação (apenas ativos).
+        Listar usuários com paginação (apenas ativos), com filtro opcional por papel e busca.
 
         Args:
             page: Número da página (começa em 1)
             limit: Itens por página
+            role_filter: Filtrar por papel (admin, personal_trainer, client)
+            search: Busca parcial por nome ou email
 
         Returns:
             Tuple[List[User], int]: Lista de usuários e total de registros
         """
-        # Validar limites
+        from sqlalchemy import or_, ilike
+
         if limit > 100:
             limit = 100
         if page < 1:
@@ -112,15 +117,24 @@ class UserRepository:
 
         offset = (page - 1) * limit
 
-        # Query para contar total
-        count_query = select(func.count(User.id)).where(User.is_active == True)
+        base_conditions = [User.is_active == True]
+        if role_filter:
+            base_conditions.append(User.role == role_filter)
+        if search:
+            base_conditions.append(
+                or_(
+                    User.name.ilike(f"%{search}%"),
+                    User.email.ilike(f"%{search}%"),
+                )
+            )
+
+        count_query = select(func.count(User.id)).where(*base_conditions)
         count_result = await self.session.execute(count_query)
         total = count_result.scalar()
 
-        # Query para buscar registros
         query = (
             select(User)
-            .where(User.is_active == True)
+            .where(*base_conditions)
             .order_by(User.created_at.desc())
             .offset(offset)
             .limit(limit)
