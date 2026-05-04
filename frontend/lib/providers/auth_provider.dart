@@ -106,6 +106,29 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  /// Verifica o estado de autenticação silenciosamente (chamado no startup)
+  Future<void> checkAuthState() async {
+    try {
+      _setLoading(true);
+      if (_authService.isAuthenticated) {
+        _token = _authService.token;
+        final userResponse = await _authService.getCurrentUser();
+        _user = AuthUser.fromUserResponse(userResponse);
+      } else {
+        _token = null;
+        _user = null;
+      }
+    } catch (e) {
+      // Se o token for inválido, expirado ou houver erro de rede, limpa a sessão
+      _token = null;
+      _user = null;
+      await _authService.logout();
+    } finally {
+      _setLoading(false);
+      notifyListeners();
+    }
+  }
+
   /// Registra um novo usuário
   Future<void> register({
     required String name,

@@ -17,21 +17,26 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    _navigateAfterSplash();
+    _initializeApp();
   }
 
-  void _navigateAfterSplash() {
-    Future.delayed(const Duration(seconds: 3), () {
-      if (!mounted) return;
+  Future<void> _initializeApp() async {
+    final authProvider = context.read<AuthProvider>();
 
-      final authProvider = context.read<AuthProvider>();
+    // Dispara a verificação de sessão e um timer mínimo de 3s (para a animação)
+    // O Future.wait aguardará a tarefa que for mais demorada.
+    await Future.wait([
+      authProvider.checkAuthState(),
+      Future.delayed(const Duration(seconds: 3)),
+    ]);
 
-      if (authProvider.isAuthenticated && authProvider.user != null) {
-        _navigateByRole(authProvider.user!.role);
-      } else {
-        context.go(AppRoutes.login);
-      }
-    });
+    if (!mounted) return;
+
+    if (authProvider.isAuthenticated && authProvider.user != null) {
+      _navigateByRole(authProvider.user!.role);
+    } else {
+      context.go(AppRoutes.login);
+    }
   }
 
   void _navigateByRole(String role) {
