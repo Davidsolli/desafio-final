@@ -47,11 +47,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (mounted) {
         final user = authProvider.user;
-        if (user?.role == 'personal_trainer' || user?.role == 'admin') {
-          context.go('/trainer/dashboard');
-        } else {
-          context.go(AppRoutes.home);
-        }
+        _navigateByRole(user?.role ?? '');
       }
     } catch (e) {
       if (mounted) {
@@ -61,6 +57,22 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted) {
         setState(() => _isLoading = false);
       }
+    }
+  }
+
+  void _navigateByRole(String role) {
+    if (!mounted) return;
+
+    switch (role) {
+      case 'personal_trainer':
+        context.go('/trainer/dashboard');
+        break;
+      case 'admin':
+        context.go('/admin/dashboard');
+        break;
+      case 'client':
+      default:
+        context.go(AppRoutes.home);
     }
   }
 
