@@ -1,4 +1,3 @@
-//import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../screens/auth/splash_screen.dart';
 import '../screens/auth/login_screen.dart';
@@ -17,11 +16,15 @@ import '../screens/trainer/trainer_dashboard.dart';
 import '../screens/trainer/trainer_student_detail.dart';
 import '../screens/trainer/trainer_sheets.dart';
 import '../screens/trainer/trainer_profile.dart';
+import '../screens/admin/admin_dashboard.dart';
 
 class AppRoutes {
+  // Auth
   static const String splash = '/';
   static const String login = '/login';
   static const String register = '/register';
+
+  // Student
   static const String home = '/home';
   static const String workouts = '/workouts';
   static const String nutrition = '/nutrition';
@@ -30,6 +33,17 @@ class AppRoutes {
   static const String goals = '/goals';
   static const String chat = '/chat';
   static const String profile = '/profile';
+
+  // Trainer
+  static const String trainerDashboard = '/trainer/dashboard';
+  static const String trainerStudent = '/trainer/student/:studentId';
+  static const String trainerSheets = '/trainer/sheets';
+  static const String trainerProfile = '/trainer/profile';
+
+  // Admin
+  static const String adminDashboard = '/admin/dashboard';
+
+  // Shared
   static const String notifications = '/notifications';
 
   static final GoRouter router = GoRouter(
@@ -105,6 +119,10 @@ class AppRoutes {
       GoRoute(
         path: '/trainer/profile',
         builder: (context, state) => const TrainerProfile(),
+      ),
+      GoRoute(
+        path: '/admin/dashboard',
+        builder: (context, state) => const AdminDashboardPlaceholder(),
       ),
     ],
   );
