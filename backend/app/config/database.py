@@ -83,3 +83,18 @@ async def init_db() -> None:
         await conn.run_sync(Base.metadata.create_all)
         logger.info("✓ Todas as tabelas criadas/verificadas com sucesso")
 
+    # ── 3. Popular Banco de Dados Inicial (Seed) ──────────────────────
+    import sys
+    import os
+    # Adicionar raiz ao sys.path caso não esteja (para o script seed funcionar isoladamente ou importado)
+    root_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    if root_path not in sys.path:
+        sys.path.insert(0, root_path)
+
+    from scripts.seed_exercises import seed
+    try:
+        await seed(force=False)
+        logger.info("✓ Verificação/Seed do catálogo de exercícios concluída")
+    except Exception as exc:
+        logger.warning("Erro ao popular catálogo de exercícios: %s", exc)
+

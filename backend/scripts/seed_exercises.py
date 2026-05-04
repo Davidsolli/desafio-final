@@ -39,53 +39,23 @@ IMAGE_CDN = (
 
 # Mapeamento de músculos PT-BR para VALID_MUSCLE_GROUPS do sistema
 MUSCLE_MAPPING: Dict[str, str] = {
-    # Peito
-    "peitorais": "peito",
-    "peitoral maior": "peito",
-    "peitoral menor": "peito",
-    # Costa
-    "costas largas": "costa",
-    "trapézio": "costa",
-    "romboides": "costa",
-    "eretores da coluna": "costa",
-    "grande dorsal": "costa",
-    # Ombro
-    "deltoides": "ombro",
-    "deltoide anterior": "ombro",
-    "deltoide lateral": "ombro",
-    "deltoide posterior": "ombro",
-    # Bíceps
-    "bíceps braquial": "bíceps",
-    "bíceps": "bíceps",
-    "braquial": "bíceps",
-    # Tríceps
-    "tríceps braquial": "tríceps",
-    "tríceps": "tríceps",
-    # Antebraço
-    "antebraços": "antebraço",
-    "flexores do antebraço": "antebraço",
-    # Core
     "abdominais": "core",
-    "oblíquos": "core",
-    "abdominais inferiores": "core",
-    "transverso do abdômen": "core",
-    "núcleo": "core",
-    # Perna Anterior
-    "quadríceps": "perna_anterior",
-    "quadríceps femoral": "perna_anterior",
-    "vasto lateral": "perna_anterior",
-    "vasto medial": "perna_anterior",
-    "reto femoral": "perna_anterior",
-    # Perna Posterior
-    "isquiotibiais": "perna_posterior",
-    "glúteos": "perna_posterior",
-    "glúteo máximo": "perna_posterior",
-    "glúteo médio": "perna_posterior",
-    "glúteo mínimo": "perna_posterior",
-    # Panturrilha
-    "gastrocnêmio": "panturrilha",
-    "sóleo": "panturrilha",
+    "triceps": "tríceps",
+    "meio-das-costas": "costa",
+    "gluteos": "perna_posterior",
+    "peito": "peito",
+    "quadriceps": "perna_anterior",
+    "ombros": "ombro",
+    "abdutores": "perna_posterior",
+    "pescoco": "costa",
     "panturrilhas": "panturrilha",
+    "biceps": "bíceps",
+    "adutores": "perna_anterior",
+    "isquiotibiais": "perna_posterior",
+    "dorsais": "costa",
+    "trapezio": "costa",
+    "antebracos": "antebraço",
+    "inferior-das-costas": "costa"
 }
 
 
