@@ -1,21 +1,30 @@
 services:
-  # Container da nossa API (Backend FastAPI)
+  # Container da API FastAPI
   api:
     build: .
     container_name: omniconnect-api
     ports:
       - "8000:8000"
-    # O volume abaixo sincroniza a pasta local com o container, pra você não precisar dar "docker build" a toda hora que salvar o código
     volumes:
       - .:/app
     environment:
       - DATABASE_URL=postgresql+asyncpg://omni_user:omni_pass@db:5432/omniconnect_db
-      # Futuramente outras variáveis (OPENAI_API_KEY) ficarão no arquivo .env
+    env_file:
+      - .env
     depends_on:
       db:
         condition: service_healthy
+    # RNF-07: garantia de disponibilidade — reiniciar automaticamente em caso de falha
+    restart: unless-stopped
+    # RNF-07: healthcheck próprio da API (endpoint /api/v1/health)
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/v1/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
-  # Container do nosso Banco de Dados com pgvector integrado para RAG 
+  # Container do Banco de Dados com pgvector para RAG
   db:
     image: ankane/pgvector:latest
     container_name: omniconnect-db
@@ -25,9 +34,10 @@ services:
       - POSTGRES_USER=omni_user
       - POSTGRES_PASSWORD=omni_pass
       - POSTGRES_DB=omniconnect_db
-    # Criamos um volume para que os dados do banco não sumam quando o container cair
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    # RNF-07: reiniciar banco automaticamente se cair
+    restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U omni_user -d omniconnect_db"]
       interval: 10s
@@ -35,5 +45,4 @@ services:
       retries: 5
 
 volumes:
-  # Armazena nossa base de dados (Inclusive os Vetores) na máquina local
   postgres_data:
