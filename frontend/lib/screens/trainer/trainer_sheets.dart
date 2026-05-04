@@ -7,6 +7,7 @@ import '../../models/workout_sheet_model.dart';
 import '../../providers/workout_sheet_provider.dart';
 import '../../services/workout_sheet_service.dart';
 import 'widgets/create_workout_sheet_dialog.dart';
+import 'widgets/edit_workout_sheet_dialog.dart';
 
 class TrainerSheets extends StatefulWidget {
   const TrainerSheets({super.key});
@@ -48,6 +49,25 @@ class _TrainerSheetsState extends State<TrainerSheets> {
           behavior: SnackBarBehavior.floating,
         ),
       );
+    }
+  }
+
+  Future<void> _openEditDialog(WorkoutSheetListItem sheet) async {
+    final updated = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => EditWorkoutSheetDialog(sheetId: sheet.id),
+    );
+
+    if (updated == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✅ Ficha atualizada com sucesso!'),
+          backgroundColor: AppColors.accentSuccess,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      _loadSheets();
     }
   }
 
@@ -218,7 +238,10 @@ class _TrainerSheetsState extends State<TrainerSheets> {
                       child: const Icon(Icons.copy, color: AppColors.textMuted, size: 18),
                     ),
                     const SizedBox(width: 12),
-                    const Icon(Icons.edit, color: AppColors.textMuted, size: 20),
+                    GestureDetector(
+                      onTap: () => _openEditDialog(sheet),
+                      child: const Icon(Icons.edit, color: AppColors.primary, size: 20),
+                    ),
                   ],
                 ),
               ],

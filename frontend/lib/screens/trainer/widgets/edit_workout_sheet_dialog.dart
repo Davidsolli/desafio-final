@@ -2,32 +2,38 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../theme/app_colors.dart';
 import '../../../models/workout_sheet_model.dart';
-import '../../../providers/auth_provider.dart';
 import '../../../providers/workout_sheet_provider.dart';
 import '../../../services/workout_sheet_service.dart';
 import 'exercise_catalog_picker.dart';
 
-/// Dialog para criar uma nova ficha de treino.
+/// Dialog para editar uma ficha de treino existente.
 ///
-/// Permite ao Personal Trainer definir:
-/// - Nome e descrição da ficha
-/// - Dia da semana (RN-01: único por aluno)
-/// - Exercícios via busca no catálogo da API ou adição manual
-class CreateWorkoutSheetDialog extends StatefulWidget {
-  const CreateWorkoutSheetDialog({super.key});
+/// Recebe o [sheetId] e carrega os detalhes completos (com exercícios)
+/// antes de exibir o formulário pré-preenchido.
+class EditWorkoutSheetDialog extends StatefulWidget {
+  final String sheetId;
+
+  const EditWorkoutSheetDialog({super.key, required this.sheetId});
 
   @override
-  State<CreateWorkoutSheetDialog> createState() =>
-      _CreateWorkoutSheetDialogState();
+  State<EditWorkoutSheetDialog> createState() => _EditWorkoutSheetDialogState();
 }
 
-class _CreateWorkoutSheetDialogState extends State<CreateWorkoutSheetDialog> {
+class _EditWorkoutSheetDialogState extends State<EditWorkoutSheetDialog> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _descriptionController = TextEditingController();
   int _selectedDayOfWeek = 0;
-  final List<_ExerciseFormEntry> _exercises = [];
+  final List<_ExerciseEditEntry> _exercises = [];
+  bool _isLoading = true;
   bool _isSubmitting = false;
+  String? _loadError;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadSheet());
+  }
 
   @override
   void dispose() {
@@ -39,28 +45,39 @@ class _CreateWorkoutSheetDialogState extends State<CreateWorkoutSheetDialog> {
     super.dispose();
   }
 
-  void _addBlankExercise() {
-    setState(() {
-      _exercises.add(_ExerciseFormEntry(order: _exercises.length + 1));
-    });
-  }
+  Future<void> _loadSheet() async {
+    try {
+      await context.read<WorkoutSheetProvider>().loadSheetDetail(widget.sheetId);
+      final sheet = context.read<WorkoutSheetProvider>().selectedSheet;
+      if (sheet != null && mounted) {
+        _nameController.text = sheet.name;
+        _descriptionController.text = sheet.description ?? '';
+        _selectedDayOfWeek = sheet.dayOfWeek;
 
-  Future<void> _addFromCatalog() async {
-    final item = await showExerciseCatalogPicker(context);
-    if (item != null && mounted) {
-      setState(() {
-        final entry = _ExerciseFormEntry(order: _exercises.length + 1);
-        entry.nameController.text = item.name;
-        if (item.muscleGroupMapped != null &&
-            validMuscleGroups.contains(item.muscleGroupMapped)) {
-          entry.selectedMuscleGroup = item.muscleGroupMapped!;
+        // Pré-popula os exercícios ordenados
+        final sorted = List<ExerciseResponse>.from(sheet.exercises)
+          ..sort((a, b) => a.order.compareTo(b.order));
+
+        for (final ex in sorted) {
+          _exercises.add(_ExerciseEditEntry.fromResponse(ex));
         }
-        _exercises.add(entry);
-      });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _loadError = 'Não foi possível carregar a ficha.');
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _pickForExistingEntry(int index) async {
+  void _addExercise() {
+    setState(() {
+      _exercises.add(_ExerciseEditEntry(order: _exercises.length + 1));
+    });
+  }
+
+  Future<void> _pickFromCatalog(int index) async {
     final item = await showExerciseCatalogPicker(context);
     if (item != null && mounted) {
       setState(() {
@@ -77,7 +94,6 @@ class _CreateWorkoutSheetDialogState extends State<CreateWorkoutSheetDialog> {
     setState(() {
       _exercises[index].dispose();
       _exercises.removeAt(index);
-      // Reordena
       for (int i = 0; i < _exercises.length; i++) {
         _exercises[i].order = i + 1;
       }
@@ -87,18 +103,16 @@ class _CreateWorkoutSheetDialogState extends State<CreateWorkoutSheetDialog> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final userId = context.read<AuthProvider>().user?.id;
-    if (userId == null) return;
-
     final exerciseDTOs = _exercises.asMap().entries.map((entry) {
       final i = entry.key;
       final e = entry.value;
+      final load = double.tryParse(e.loadController.text) ?? 0.0;
       return ExerciseCreateDTO(
         name: e.nameController.text.trim(),
         muscleGroup: e.selectedMuscleGroup,
         series: int.tryParse(e.seriesController.text) ?? 3,
         repetitions: int.tryParse(e.repsController.text) ?? 12,
-        loadKg: double.tryParse(e.loadController.text) ?? 10.0,
+        loadKg: load,
         restSeconds: int.tryParse(e.restController.text) ?? 60,
         observations:
             e.obsController.text.isEmpty ? null : e.obsController.text.trim(),
@@ -106,8 +120,7 @@ class _CreateWorkoutSheetDialogState extends State<CreateWorkoutSheetDialog> {
       );
     }).toList();
 
-    final dto = CreateWorkoutSheetDTO(
-      userId: userId,
+    final dto = UpdateWorkoutSheetDTO(
       name: _nameController.text.trim(),
       description: _descriptionController.text.isEmpty
           ? null
@@ -118,14 +131,16 @@ class _CreateWorkoutSheetDialogState extends State<CreateWorkoutSheetDialog> {
 
     setState(() => _isSubmitting = true);
     try {
-      await context.read<WorkoutSheetProvider>().createSheet(dto);
+      await context
+          .read<WorkoutSheetProvider>()
+          .updateSheet(widget.sheetId, dto);
       if (mounted) {
         Navigator.of(context).pop(true);
       }
     } on WorkoutSheetConflictException catch (e) {
       if (mounted) _showError(e.message);
     } catch (e) {
-      if (mounted) _showError('Erro ao criar ficha: ${e.toString()}');
+      if (mounted) _showError('Erro ao atualizar ficha: ${e.toString()}');
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
@@ -149,176 +164,178 @@ class _CreateWorkoutSheetDialogState extends State<CreateWorkoutSheetDialog> {
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       child: SizedBox(
         width: double.infinity,
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Header
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.1),
-                  borderRadius:
-                      const BorderRadius.vertical(top: Radius.circular(16)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.fitness_center,
-                        color: AppColors.primary, size: 20),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text('Nova Ficha de Treino',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodyLarge
-                              ?.copyWith(fontWeight: FontWeight.bold)),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close, size: 20),
-                      onPressed: () => Navigator.of(context).pop(false),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                    ),
-                  ],
-                ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Header
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.1),
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(16)),
               ),
+              child: Row(
+                children: [
+                  const Icon(Icons.edit, color: AppColors.primary, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text('Editar Ficha de Treino',
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodyLarge
+                            ?.copyWith(fontWeight: FontWeight.bold)),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 20),
+                    onPressed: () => Navigator.of(context).pop(false),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ],
+              ),
+            ),
 
-              // Conteúdo scrollável
-              Flexible(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Nome
-                      _buildLabel('Nome da Ficha *'),
-                      TextFormField(
-                        controller: _nameController,
-                        decoration:
-                            _inputDecoration('Ex: Treino A — Peito + Tríceps'),
-                        validator: (v) => v == null || v.trim().isEmpty
-                            ? 'Nome obrigatório'
-                            : null,
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Descrição
-                      _buildLabel('Descrição (opcional)'),
-                      TextFormField(
-                        controller: _descriptionController,
-                        decoration:
-                            _inputDecoration('Observações sobre o treino...'),
-                        maxLines: 2,
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Dia da semana
-                      _buildLabel('Dia da Semana *'),
-                      DropdownButtonFormField<int>(
-                        value: _selectedDayOfWeek,
-                        decoration: _inputDecoration(null),
-                        dropdownColor: AppColors.surface,
-                        items: List.generate(7, (i) {
-                          return DropdownMenuItem(
-                            value: i,
-                            child: Text('${dayOfWeekEmojis[i]} ${dayOfWeekLabels[i]}',
-                                style: const TextStyle(
-                                    color: AppColors.textPrimary)),
-                          );
-                        }),
-                        onChanged: (v) =>
-                            setState(() => _selectedDayOfWeek = v ?? 0),
-                      ),
-                      const SizedBox(height: 20),
-
-                      // Exercícios — cabeçalho com dois botões
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text('Exercícios',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodyMedium
-                                  ?.copyWith(fontWeight: FontWeight.w600)),
-                          Row(
+            // Conteúdo
+            Flexible(
+              child: _isLoading
+                  ? const Padding(
+                      padding: EdgeInsets.all(40),
+                      child: CircularProgressIndicator(
+                          color: AppColors.primary),
+                    )
+                  : _loadError != null
+                      ? Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              // Botão busca no catálogo (primário)
-                              ElevatedButton.icon(
-                                onPressed: _addFromCatalog,
-                                icon: const Icon(Icons.search,
-                                    size: 14, color: Colors.white),
-                                label: const Text('Do Catálogo',
-                                    style: TextStyle(
-                                        color: Colors.white, fontSize: 11)),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.primary,
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 10, vertical: 6),
-                                  minimumSize: Size.zero,
-                                  tapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                  shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(8)),
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              // Botão adicionar manualmente (secundário)
-                              OutlinedButton.icon(
-                                onPressed: _addBlankExercise,
-                                icon: const Icon(Icons.edit_outlined,
-                                    size: 14, color: AppColors.primary),
-                                label: const Text('Manual',
-                                    style: TextStyle(
-                                        color: AppColors.primary, fontSize: 11)),
-                                style: OutlinedButton.styleFrom(
-                                  side: const BorderSide(
-                                      color: AppColors.primary),
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 10, vertical: 6),
-                                  minimumSize: Size.zero,
-                                  tapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                  shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(8)),
-                                ),
+                              const Icon(Icons.error_outline,
+                                  color: AppColors.accentError, size: 40),
+                              const SizedBox(height: 12),
+                              Text(_loadError!,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodyMedium
+                                      ?.copyWith(color: AppColors.textMuted)),
+                              const SizedBox(height: 16),
+                              ElevatedButton(
+                                onPressed: () {
+                                  setState(() {
+                                    _isLoading = true;
+                                    _loadError = null;
+                                  });
+                                  _loadSheet();
+                                },
+                                child: const Text('Tentar novamente'),
                               ),
                             ],
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
+                        )
+                      : Form(
+                          key: _formKey,
+                          child: SingleChildScrollView(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _buildLabel('Nome da Ficha *'),
+                                TextFormField(
+                                  controller: _nameController,
+                                  decoration: _inputDecoration(
+                                      'Ex: Treino A — Peito + Tríceps'),
+                                  validator: (v) =>
+                                      v == null || v.trim().isEmpty
+                                          ? 'Nome obrigatório'
+                                          : null,
+                                ),
+                                const SizedBox(height: 12),
 
-                      if (_exercises.isEmpty)
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: AppColors.surfaceLight,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: AppColors.border),
-                          ),
-                          child: Center(
-                            child: Text(
-                              'Nenhum exercício adicionado.\nClique em "Do Catálogo" para buscar ou "Manual" para digitar.',
-                              textAlign: TextAlign.center,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .labelSmall
-                                  ?.copyWith(color: AppColors.textMuted),
+                                _buildLabel('Descrição (opcional)'),
+                                TextFormField(
+                                  controller: _descriptionController,
+                                  decoration: _inputDecoration(
+                                      'Observações sobre o treino...'),
+                                  maxLines: 2,
+                                ),
+                                const SizedBox(height: 12),
+
+                                _buildLabel('Dia da Semana *'),
+                                DropdownButtonFormField<int>(
+                                  value: _selectedDayOfWeek,
+                                  decoration: _inputDecoration(null),
+                                  dropdownColor: AppColors.surface,
+                                  items: List.generate(7, (i) {
+                                    return DropdownMenuItem(
+                                      value: i,
+                                      child: Text(
+                                          '${_dayEmoji(i)} ${_dayLabel(i)}',
+                                          style: const TextStyle(
+                                              color: AppColors.textPrimary)),
+                                    );
+                                  }),
+                                  onChanged: (v) => setState(
+                                      () => _selectedDayOfWeek = v ?? 0),
+                                ),
+                                const SizedBox(height: 20),
+
+                                // Cabeçalho exercícios
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text('Exercícios (${_exercises.length})',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodyMedium
+                                            ?.copyWith(
+                                                fontWeight: FontWeight.w600)),
+                                    TextButton.icon(
+                                      onPressed: _addExercise,
+                                      icon: const Icon(Icons.add,
+                                          size: 16,
+                                          color: AppColors.primary),
+                                      label: const Text('Adicionar',
+                                          style: TextStyle(
+                                              color: AppColors.primary,
+                                              fontSize: 12)),
+                                    ),
+                                  ],
+                                ),
+
+                                if (_exercises.isEmpty)
+                                  Container(
+                                    padding: const EdgeInsets.all(16),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.surfaceLight,
+                                      borderRadius: BorderRadius.circular(10),
+                                      border:
+                                          Border.all(color: AppColors.border),
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        'Nenhum exercício.\nClique em "Adicionar" para incluir.',
+                                        textAlign: TextAlign.center,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .labelSmall
+                                            ?.copyWith(
+                                                color: AppColors.textMuted),
+                                      ),
+                                    ),
+                                  ),
+
+                                ..._exercises.asMap().entries.map((entry) =>
+                                    _buildExerciseCard(
+                                        entry.key, entry.value)),
+                              ],
                             ),
                           ),
                         ),
+            ),
 
-                      ..._exercises.asMap().entries.map((entry) {
-                        return _buildExerciseCard(entry.key, entry.value);
-                      }),
-                    ],
-                  ),
-                ),
-              ),
-
-              // Botões de ação
+            // Botões
+            if (!_isLoading && _loadError == null)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                 child: Row(
@@ -355,7 +372,7 @@ class _CreateWorkoutSheetDialogState extends State<CreateWorkoutSheetDialog> {
                                 child: CircularProgressIndicator(
                                     strokeWidth: 2, color: Colors.white),
                               )
-                            : const Text('Criar Ficha',
+                            : const Text('Salvar Alterações',
                                 style: TextStyle(
                                     color: Colors.white,
                                     fontWeight: FontWeight.bold)),
@@ -364,14 +381,13 @@ class _CreateWorkoutSheetDialogState extends State<CreateWorkoutSheetDialog> {
                   ],
                 ),
               ),
-            ],
-          ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildExerciseCard(int index, _ExerciseFormEntry entry) {
+  Widget _buildExerciseCard(int index, _ExerciseEditEntry entry) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
@@ -383,7 +399,7 @@ class _CreateWorkoutSheetDialogState extends State<CreateWorkoutSheetDialog> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Cabeçalho do card
+          // Cabeçalho do card de exercício
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -392,9 +408,9 @@ class _CreateWorkoutSheetDialogState extends State<CreateWorkoutSheetDialog> {
                       color: AppColors.primary, fontWeight: FontWeight.bold)),
               Row(
                 children: [
-                  // Mini botão busca no catálogo
+                  // Botão buscar no catálogo
                   GestureDetector(
-                    onTap: () => _pickForExistingEntry(index),
+                    onTap: () => _pickFromCatalog(index),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 8, vertical: 4),
@@ -405,16 +421,14 @@ class _CreateWorkoutSheetDialogState extends State<CreateWorkoutSheetDialog> {
                       child: Row(
                         children: [
                           const Icon(Icons.search,
-                              color: AppColors.primary, size: 13),
-                          const SizedBox(width: 3),
-                          Text('Trocar',
+                              color: AppColors.primary, size: 14),
+                          const SizedBox(width: 4),
+                          Text('Catálogo',
                               style: Theme.of(context)
                                   .textTheme
                                   .labelSmall
                                   ?.copyWith(
-                                    color: AppColors.primary,
-                                    fontSize: 10,
-                                  )),
+                                      color: AppColors.primary, fontSize: 11)),
                         ],
                       ),
                     ),
@@ -433,7 +447,7 @@ class _CreateWorkoutSheetDialogState extends State<CreateWorkoutSheetDialog> {
           ),
           const SizedBox(height: 8),
 
-          // Nome do exercício
+          // Nome
           TextFormField(
             controller: entry.nameController,
             decoration: _inputDecoration('Nome do exercício'),
@@ -445,15 +459,13 @@ class _CreateWorkoutSheetDialogState extends State<CreateWorkoutSheetDialog> {
           // Grupo muscular
           DropdownButtonFormField<String>(
             value: entry.selectedMuscleGroup,
-            decoration:
-                _inputDecoration(null).copyWith(labelText: 'Grupo Muscular'),
+            decoration: _inputDecoration(null).copyWith(labelText: 'Grupo Muscular'),
             dropdownColor: AppColors.surface,
             items: validMuscleGroups.map((g) {
               return DropdownMenuItem(
                 value: g,
                 child: Text(g,
-                    style:
-                        const TextStyle(color: AppColors.textPrimary)),
+                    style: const TextStyle(color: AppColors.textPrimary)),
               );
             }).toList(),
             onChanged: (v) => setState(
@@ -501,9 +513,7 @@ class _CreateWorkoutSheetDialogState extends State<CreateWorkoutSheetDialog> {
                       _inputDecoration(null).copyWith(labelText: 'Carga (kg)'),
                   validator: (v) {
                     final n = double.tryParse(v ?? '');
-                    if (n == null || n <= 0) {
-                      return '> 0';
-                    }
+                    if (n == null || n <= 0) return '> 0';
                     return null;
                   },
                 ),
@@ -554,14 +564,25 @@ class _CreateWorkoutSheetDialogState extends State<CreateWorkoutSheetDialog> {
           const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
     );
   }
+
+  String _dayLabel(int i) {
+    const labels = [
+      'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'
+    ];
+    return labels[i];
+  }
+
+  String _dayEmoji(int i) {
+    const emojis = ['💪', '🔥', '⚡', '🎯', '🏋️', '🚀', '😴'];
+    return emojis[i];
+  }
 }
 
 // ---------------------------------------------------------------------------
-// Modelo interno do formulário de criação
+// Modelo interno do formulário de edição
 // ---------------------------------------------------------------------------
 
-/// Modelo interno para cada exercício no formulário de criação.
-class _ExerciseFormEntry {
+class _ExerciseEditEntry {
   int order;
   final TextEditingController nameController;
   final TextEditingController seriesController;
@@ -571,15 +592,29 @@ class _ExerciseFormEntry {
   final TextEditingController obsController;
   String selectedMuscleGroup;
 
-  _ExerciseFormEntry({required this.order})
+  _ExerciseEditEntry({required this.order})
       : nameController = TextEditingController(),
         seriesController = TextEditingController(text: '3'),
         repsController = TextEditingController(text: '12'),
-        // Fix: valor padrão > 0 para não causar erro 422 no backend
         loadController = TextEditingController(text: '10'),
         restController = TextEditingController(text: '60'),
         obsController = TextEditingController(),
         selectedMuscleGroup = validMuscleGroups.first;
+
+  /// Constrói a partir de um exercício já existente (pré-preenche campos).
+  factory _ExerciseEditEntry.fromResponse(ExerciseResponse ex) {
+    final entry = _ExerciseEditEntry(order: ex.order);
+    entry.nameController.text = ex.name;
+    entry.seriesController.text = ex.series.toString();
+    entry.repsController.text = ex.repetitions.toString();
+    entry.loadController.text = ex.loadKg.toString();
+    entry.restController.text = ex.restSeconds.toString();
+    entry.obsController.text = ex.observations ?? '';
+    if (validMuscleGroups.contains(ex.muscleGroup)) {
+      entry.selectedMuscleGroup = ex.muscleGroup;
+    }
+    return entry;
+  }
 
   void dispose() {
     nameController.dispose();
@@ -590,6 +625,3 @@ class _ExerciseFormEntry {
     obsController.dispose();
   }
 }
-
-/// Constante auxiliar de emojis por dia da semana.
-const dayOfWeekEmojis = ['💪', '🔥', '⚡', '🎯', '🏋️', '🚀', '😴'];
