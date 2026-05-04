@@ -3,9 +3,16 @@ Configuração de banco de dados.
 
 Define engine assíncrono, sessionmaker e função de dependency injection
 para obter sessões de banco.
+
+Pool configurado para RNF-02: suportar 200 requisições simultâneas.
+  - pool_size=20  → conexões permanentes no pool
+  - max_overflow=30 → conexões extras em pico (total 50 por worker)
+  - pool_pre_ping=True → detecta conexões mortas automaticamente
+  - pool_recycle=1800 → recicla conexões a cada 30min (previne timeout de TCP)
 """
 
 import logging
+import os
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
@@ -21,15 +28,32 @@ _AsyncSessionLocal = None
 
 
 def _get_engine():
-    """Obter engine, criando se necessário."""
+    """Obter engine, criando se necessário.
+
+    Em ambiente de teste (TEST_ENV=1) usa NullPool para isolamento entre testes.
+    Em produção usa QueuePool configurado para suportar carga (RNF-02).
+    """
     global _engine
     if _engine is None:
-        _engine = create_async_engine(
-            settings.DATABASE_URL,
-            echo=settings.DATABASE_ECHO,
-            poolclass=NullPool,
-            future=True,
-        )
+        is_test = os.getenv("TEST_ENV", "0") == "1"
+        if is_test:
+            _engine = create_async_engine(
+                settings.DATABASE_URL,
+                echo=settings.DATABASE_ECHO,
+                poolclass=NullPool,
+                future=True,
+            )
+        else:
+            _engine = create_async_engine(
+                settings.DATABASE_URL,
+                echo=settings.DATABASE_ECHO,
+                pool_size=20,
+                max_overflow=30,
+                pool_timeout=30,
+                pool_pre_ping=True,
+                pool_recycle=1800,
+                future=True,
+            )
     return _engine
 
 
@@ -68,6 +92,7 @@ async def init_db() -> None:
     import app.models.chatbot  # noqa: F401 — registra KnowledgeBase, ChatConversation, etc.
     from app.models.goal import Goal, GoalProgressEntry  # noqa: F401 — registra Goals
     import app.models.logbook  # noqa: F401 — registra WorkoutSession e SessionExercise no Base
+    import app.models.nutrition  # noqa: F401 — registra Food, Meal, MealFoodEntry
 
     engine = _get_engine()
     async with engine.begin() as conn:
