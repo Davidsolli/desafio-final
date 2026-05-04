@@ -138,17 +138,19 @@ class WorkoutSheetRepository:
 
     async def search_exercise_catalog(
         self,
-        search: Optional[str],
-        muscle_group: Optional[str],
-        page: int,
-        limit: int,
+        search: Optional[str] = None,
+        muscle_group: Optional[str] = None,
+        equipment: Optional[str] = None,
+        page: int = 1,
+        limit: int = 20,
     ) -> Tuple[List[ExerciseCatalog], int]:
         """
-        Busca exercícios no catálogo com filtros opcionais.
+        Busca paginada no catálogo de exercícios.
 
         Args:
             search: Termo de busca no nome (case-insensitive, parcial)
             muscle_group: Filtro por muscle_group_mapped
+            equipment: Filtro por equipamento (ex: maquina, peso-do-corpo)
             page: Página (1-indexed)
             limit: Itens por página
 
@@ -164,6 +166,10 @@ class WorkoutSheetRepository:
         if muscle_group:
             base_stmt = base_stmt.where(
                 ExerciseCatalog.muscle_group_mapped == muscle_group
+            )
+        if equipment:
+            base_stmt = base_stmt.where(
+                ExerciseCatalog.equipment == equipment
             )
 
         # Total

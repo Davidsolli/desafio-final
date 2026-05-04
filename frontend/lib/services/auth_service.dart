@@ -98,6 +98,19 @@ class AuthService {
     }
   }
 
+  /// Busca o perfil do usuário autenticado (GET /api/v1/users/me)
+  Future<UserResponse> getCurrentUser() async {
+    try {
+      final response = await _apiClient.get<UserResponse>(
+        '/users/me',
+        fromJson: (data) => UserResponse.fromJson(data as Map<String, dynamic>),
+      );
+      return response;
+    } catch (e) {
+      rethrow;
+    }
+  }
+
   /// Registra um novo usuário
   ///
   /// Args:

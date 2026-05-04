@@ -357,6 +357,7 @@ async def duplicate_workout_sheet(
 async def search_exercise_catalog(
     search: Optional[str] = Query(None, description="Busca por nome (parcial, case-insensitive)"),
     muscle_group: Optional[str] = Query(None, description="Filtrar por grupo muscular mapeado"),
+    equipment: Optional[str] = Query(None, description="Filtrar por equipamento (ex: peso-do-corpo, maquina)"),
     page: int = Query(1, ge=1, description="Número da página"),
     limit: int = Query(20, ge=1, le=100, description="Itens por página (máx. 100)"),
     current_user: User = Depends(get_current_user),
@@ -372,6 +373,7 @@ async def search_exercise_catalog(
         return await controller.search_exercise_catalog(
             search=search,
             muscle_group=muscle_group,
+            equipment=equipment,
             page=page,
             limit=limit,
         )
