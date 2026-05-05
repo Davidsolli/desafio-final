@@ -1,7 +1,7 @@
 services:
   # Container da nossa API (Backend FastAPI)
   api:
-    build: .
+    image: davidsolli/backend-api:latest
     container_name: omniconnect-api
     ports:
       - "8000:8000"
