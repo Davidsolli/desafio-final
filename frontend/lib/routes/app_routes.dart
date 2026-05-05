@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../screens/auth/splash_screen.dart';
 import '../screens/auth/login_screen.dart';
 import '../screens/auth/register_screen.dart';
+import '../screens/auth/invite_code_screen.dart';
 import '../screens/student/home_screen.dart';
 import '../screens/student/workouts_screen.dart';
 import '../screens/student/nutrition_screen.dart';
@@ -16,11 +17,14 @@ import '../screens/trainer/trainer_dashboard.dart';
 import '../screens/trainer/trainer_student_detail.dart';
 import '../screens/trainer/trainer_sheets.dart';
 import '../screens/trainer/trainer_profile.dart';
+import '../screens/trainer/generate_invite_screen.dart';
 
 class AppRoutes {
   static const String splash = '/';
   static const String login = '/login';
   static const String register = '/register';
+  static const String inviteCode = '/invite-code';
+  static const String generateInvite = '/trainer/generate-invite';
   static const String home = '/home';
   static const String workouts = '/workouts';
   static const String nutrition = '/nutrition';
@@ -44,7 +48,19 @@ class AppRoutes {
       ),
       GoRoute(
         path: register,
-        builder: (context, state) => const RegisterScreen(),
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>?;
+          final invitationCode = extra?['invitationCode'] as String?;
+          return RegisterScreen(invitationCode: invitationCode);
+        },
+      ),
+      GoRoute(
+        path: inviteCode,
+        builder: (context, state) => const InviteCodeScreen(),
+      ),
+      GoRoute(
+        path: generateInvite,
+        builder: (context, state) => const GenerateInviteScreen(),
       ),
       GoRoute(
         path: home,

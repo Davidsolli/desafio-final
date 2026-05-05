@@ -6,7 +6,12 @@ import '../../routes/app_routes.dart';
 import '../../providers/auth_provider.dart';
 
 class RegisterScreen extends StatefulWidget {
-  const RegisterScreen({Key? key}) : super(key: key);
+  final String? invitationCode;
+
+  const RegisterScreen({
+    super.key,
+    this.invitationCode,
+  });
 
   @override
   State<RegisterScreen> createState() => _RegisterScreenState();
@@ -15,12 +20,19 @@ class RegisterScreen extends StatefulWidget {
 class _RegisterScreenState extends State<RegisterScreen> {
   int _currentStep = 0;
   bool _isLoading = false;
+  late String? _invitationCode;
 
   // Step 1
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _invitationCode = widget.invitationCode;
+  }
 
   // Step 2
   final _weightController = TextEditingController();
@@ -78,6 +90,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           heightCm: height,
           age: userAge,
           goalType: _selectedGoal,
+          invitationCode: _invitationCode,
         );
 
         // Faz login automático após registro
@@ -105,7 +118,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (_currentStep > 0) {
       setState(() => _currentStep--);
     } else {
-      context.pop();
+      context.go(AppRoutes.login);
     }
   }
 

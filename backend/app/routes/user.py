@@ -21,7 +21,7 @@ from app.dtos.user_dto import (
     PaginatedUsersResponseDTO,
 )
 from app.controllers.user_controller import UserController
-from app.services.user_service import UserAlreadyExistsError, UserNotFoundError
+from app.services.user_service import UserAlreadyExistsError, UserNotFoundError, InvalidInvitationError
 from app.config.database import get_db
 from app.dependencies.auth import get_current_user
 from app.models.user import User
@@ -63,10 +63,11 @@ async def create_user(
     - height_cm: Altura em cm (opcional)
     - age: Idade em anos (opcional)
     - goal_type: Objetivo de treino (opcional)
+    - invitation_code: Código de convite (obrigatório para clientes, opcional para personal trainers e admins)
 
     **Responses:**
     - 201: Usuário criado
-    - 400: Validação falhou
+    - 400: Validação falhou ou código de convite inválido
     - 409: Email duplicado
     """
     controller = UserController(session)
@@ -76,6 +77,11 @@ async def create_user(
     except UserAlreadyExistsError as e:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
+            detail=str(e),
+        )
+    except InvalidInvitationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
     except Exception as e:

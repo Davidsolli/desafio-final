@@ -111,6 +111,7 @@ class AuthProvider extends ChangeNotifier {
     double? heightCm,
     int? age,
     String? goalType,
+    String? invitationCode,
   }) async {
     try {
       _setLoading(true);
@@ -126,6 +127,7 @@ class AuthProvider extends ChangeNotifier {
         heightCm: heightCm,
         age: age,
         goalType: goalType,
+        invitationCode: invitationCode,
       );
 
       _user = AuthUser.fromUserResponse(response);

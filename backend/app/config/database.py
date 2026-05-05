@@ -7,6 +7,7 @@ para obter sessões de banco.
 
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.pool import NullPool
+from sqlalchemy import text
 
 from app.config.settings import settings
 
@@ -60,7 +61,10 @@ async def init_db() -> None:
     from app.models.user_profile import UserProfile  # noqa: F401 — registra UserProfile
     from app.models.goal import Goal, GoalProgressEntry  # noqa: F401 — registra Goals
     import app.models.logbook  # noqa: F401 — registra WorkoutSession e SessionExercise no Base
+    from app.models.invitation import Invitation  # noqa: F401 — registra Invitation
 
     engine = _get_engine()
     async with engine.begin() as conn:
+        # Criar extensão pgvector antes de criar as tabelas
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         await conn.run_sync(Base.metadata.create_all)

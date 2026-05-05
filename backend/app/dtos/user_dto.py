@@ -58,6 +58,10 @@ class CreateUserDTO(BaseModel):
         default=None,
         description="Objetivo de treino: gain_mass, lose_weight, maintain, endurance (opcional)",
     )
+    invitation_code: Optional[str] = Field(
+        default=None,
+        description="Código de convite (obrigatório para clientes, opcional para personal trainers e admins)",
+    )
 
     @field_validator("name")
     @classmethod
@@ -99,6 +103,13 @@ class CreateUserDTO(BaseModel):
                 "height_cm": 175,
                 "age": 27,
                 "goal_type": "gain_mass",
+                "invitation_code": "AB3X7KP2QR",
+            },
+            "example_personal_trainer": {
+                "name": "Maria Treinadora",
+                "email": "maria@example.com",
+                "password": "SenhaForte123!",
+                "role": "personal_trainer",
             }
         }
     )
@@ -202,7 +213,6 @@ class PaginatedUsersResponseDTO(BaseModel):
                         "name": "João Silva",
                         "email": "joao@example.com",
                         "role": "client",
-                        "phone_whatsapp": "+55 11 99999-9999",
                         "is_active": True,
                         "created_at": "2026-04-14T10:30:00Z",
                         "updated_at": "2026-04-14T10:30:00Z",

@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:animate_do/animate_do.dart';
 import '../../theme/app_colors.dart';
 import '../../models/mock_data.dart';
+import '../../routes/app_routes.dart';
 
 class TrainerDashboard extends StatefulWidget {
   const TrainerDashboard({super.key});
@@ -47,13 +48,24 @@ class _TrainerDashboardState extends State<TrainerDashboard> {
           children: [
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Olá, Personal',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
-                  Text('Painel Profissional 👨‍🏫',
-                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Olá, Personal',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
+                      Text('Painel Profissional 👨‍🏫',
+                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.card_giftcard_outlined),
+                    color: AppColors.primary,
+                    onPressed: () => context.push(AppRoutes.generateInvite),
+                    tooltip: 'Gerar Códigos',
+                  ),
                 ],
               ),
             ),

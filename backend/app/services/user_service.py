@@ -16,10 +16,18 @@ from app.models.user import User
 from app.models.user_profile import UserProfile
 from app.dtos.user_dto import CreateUserDTO, UpdateUserDTO, UserResponseDTO
 from app.repositories.user_repository import UserRepository
+from app.services.invitation_service import InvitationService
+from app.repositories.invitation_repository import InvitationRepository
 
 
 class UserAlreadyExistsError(Exception):
     """Exceção quando email já existe no banco."""
+
+    pass
+
+
+class InvalidInvitationError(Exception):
+    """Exceção quando código de convite é inválido."""
 
     pass
 
@@ -78,11 +86,22 @@ class UserService:
 
         Raises:
             UserAlreadyExistsError: Se email já existe
+            InvalidInvitationError: Se código de convite é inválido
         """
         # Validar se email já existe
         existing_user = await self.repository.get_by_email_all_states(dto.email)
         if existing_user:
             raise UserAlreadyExistsError(f"Email '{dto.email}' já está cadastrado")
+
+        # Validar código de convite: obrigatório para clientes
+        invitation = None
+        if dto.role == "client":
+            if not dto.invitation_code:
+                raise InvalidInvitationError("Código de convite obrigatório para clientes")
+            invitation_repo = InvitationRepository(self.session)
+            invitation = await invitation_repo.get_by_code(dto.invitation_code)
+            if not invitation or invitation.used:
+                raise InvalidInvitationError("Código de convite inválido ou já utilizado")
 
         # Criar instância de User
         user = User(
@@ -91,11 +110,22 @@ class UserService:
             password=self.hash_password(dto.password),
             role=dto.role,
             is_active=True,
+            trainer_id=invitation.trainer_id if invitation else None,
         )
 
         try:
             # Salvar no banco
             created_user = await self.repository.create(user)
+
+            # Marcar convite como utilizado (se houver)
+            if invitation:
+                from datetime import datetime
+                invitation.used = True
+                invitation.used_by_id = created_user.id
+                invitation.used_at = datetime.utcnow()
+                invitation_repo = InvitationRepository(self.session)
+                await invitation_repo.update(invitation)
+
             await self.repository.commit()
 
             # Se houver dados de perfil, criar UserProfile
