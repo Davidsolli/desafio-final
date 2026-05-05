@@ -49,49 +49,45 @@ class _TrainerProfileState extends State<TrainerProfile> {
       builder: (context, authProvider, _) {
         final user = authProvider.user;
 
-        return Scaffold(
-          backgroundColor: AppColors.background,
-          body: SafeArea(
-            child: SingleChildScrollView(
-              child: Column(
-                children: [
-                  _buildHeader(user),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildPersonalDataSection(),
-                        const SizedBox(height: 24),
-                        _buildConfigurationsSection(),
-                        const SizedBox(height: 24),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.accentError,
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                            ),
-                            onPressed: () async {
-                              final router = GoRouter.of(context);
-                              await authProvider.logout();
-                              router.go(AppRoutes.login);
-                            },
-                            child: Text('↩️ Sair da Conta',
-                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    color: Colors.white, fontWeight: FontWeight.w600)),
+        return SafeArea(
+          child: SingleChildScrollView(
+            child: Column(
+              children: [
+                _buildHeader(user),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildPersonalDataSection(),
+                      const SizedBox(height: 24),
+                      _buildConfigurationsSection(),
+                      const SizedBox(height: 24),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.accentError,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                           ),
+                          onPressed: () async {
+                            final router = GoRouter.of(context);
+                            await authProvider.logout();
+                            router.go(AppRoutes.login);
+                          },
+                          child: Text('↩️ Sair da Conta',
+                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                  color: Colors.white, fontWeight: FontWeight.w600)),
                         ),
-                        const SizedBox(height: 32),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(height: 32),
+                    ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
-          bottomNavigationBar: _buildBottomNav(),
         );
       },
     );
@@ -290,41 +286,4 @@ class _TrainerProfileState extends State<TrainerProfile> {
     );
   }
 
-  Widget _buildBottomNav() {
-    final trainerNavItems = [
-      {'icon': Icons.dashboard_outlined, 'label': 'Dashboard'},
-      {'icon': Icons.people_outlined, 'label': 'Alunos'},
-      {'icon': Icons.fitness_center_outlined, 'label': 'Fichas'},
-      {'icon': Icons.person_outline, 'label': 'Perfil'},
-    ];
-
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border(top: BorderSide(color: AppColors.border, width: 1)),
-      ),
-      child: BottomNavigationBar(
-        currentIndex: 3,
-        onTap: (index) {
-          final routes = [
-            '/trainer/dashboard',
-            '/trainer/students',
-            '/trainer/sheets',
-            '/trainer/profile',
-          ];
-          context.go(routes[index]);
-        },
-        backgroundColor: AppColors.surface,
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: AppColors.primary,
-        unselectedItemColor: AppColors.textMuted,
-        items: trainerNavItems
-            .map((item) => BottomNavigationBarItem(
-                  icon: Icon(item['icon'] as IconData, size: 24),
-                  label: item['label'] as String,
-                ))
-            .toList(),
-      ),
-    );
-  }
 }
