@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_colors.dart';
 import '../../services/goal_service.dart';
+import '../../utils/goal_utils.dart';
 
 class GoalDetailScreen extends StatefulWidget {
   final String goalId;
@@ -67,25 +68,35 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
           onPressed: () => Navigator.pop(context),
         ),
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.error_outline, size: 48, color: AppColors.accentError),
-                      const SizedBox(height: 16),
-                      Text(_error!),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: _loadDetail,
-                        child: const Text('Tentar novamente'),
-                      ),
-                    ],
+      // Mostra conteúdo imediatamente com initialGoal; LinearProgressIndicator indica carregamento em background
+      body: _error != null && _detail == null
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.error_outline, size: 48, color: AppColors.accentError),
+                  const SizedBox(height: 16),
+                  Text(_error!),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: _loadDetail,
+                    child: const Text('Tentar novamente'),
                   ),
-                )
-              : _buildContent(context, goal),
+                ],
+              ),
+            )
+          : Stack(
+              children: [
+                _buildContent(context, goal),
+                if (_isLoading)
+                  const Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: LinearProgressIndicator(),
+                  ),
+              ],
+            ),
     );
   }
 
@@ -367,7 +378,7 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
   }
 
   Widget _buildStatusBadge(BuildContext context, String status) {
-    final color = _getStatusColor(status);
+    final color = GoalUtils.getStatusColor(status);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
@@ -376,7 +387,7 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
         border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Text(
-        _getStatusLabel(status),
+        GoalUtils.getStatusLabel(status),
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
               color: color,
               fontWeight: FontWeight.w700,
@@ -386,7 +397,7 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
   }
 
   Widget _buildCategoryChip(BuildContext context, String category) {
-    final label = _getCategoryLabel(category);
+    final label = GoalUtils.getCategoryLabel(category);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
@@ -416,48 +427,4 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
     return '$d/$m $h:$min';
   }
 
-  Color _getStatusColor(String status) {
-    switch (status.toLowerCase()) {
-      case 'active':
-        return AppColors.primary;
-      case 'completed':
-        return Colors.green;
-      case 'failed':
-        return AppColors.accentError;
-      case 'paused':
-        return Colors.orange;
-      default:
-        return AppColors.textMuted;
-    }
-  }
-
-  String _getStatusLabel(String status) {
-    switch (status.toLowerCase()) {
-      case 'active':
-        return 'Ativa';
-      case 'completed':
-        return 'Concluída';
-      case 'failed':
-        return 'Expirada';
-      case 'paused':
-        return 'Pausada';
-      default:
-        return status;
-    }
-  }
-
-  String _getCategoryLabel(String category) {
-    switch (category.toLowerCase()) {
-      case 'strength':
-        return 'Força';
-      case 'endurance':
-        return 'Resistência';
-      case 'composition':
-        return 'Composição';
-      case 'frequency':
-        return 'Frequência';
-      default:
-        return category;
-    }
-  }
 }

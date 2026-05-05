@@ -5,6 +5,7 @@ import '../../theme/app_colors.dart';
 import '../../providers/goal_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/goal_service.dart';
+import '../../utils/goal_utils.dart';
 import 'goal_detail_screen.dart';
 
 class GoalsScreen extends StatefulWidget {
@@ -324,7 +325,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        _getCategoryLabel(goal.category),
+                        GoalUtils.getCategoryLabel(goal.category),
                         style: Theme.of(context).textTheme.labelSmall?.copyWith(
                               color: AppColors.textMuted,
                             ),
@@ -334,13 +335,13 @@ class _GoalsScreenState extends State<GoalsScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: _getStatusColor(goal.status).withValues(alpha: 0.2),
+                      color: GoalUtils.getStatusColor(goal.status).withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
-                      _getStatusLabel(goal.status),
+                      GoalUtils.getStatusLabel(goal.status),
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: _getStatusColor(goal.status),
+                            color: GoalUtils.getStatusColor(goal.status),
                             fontWeight: FontWeight.w600,
                           ),
                     ),
@@ -588,9 +589,9 @@ class _GoalsScreenState extends State<GoalsScreen> {
                   ? null
                   : () {
                       final newValue = double.tryParse(currentValueController.text);
-                      if (newValue == null) {
+                      if (newValue == null || newValue < 0) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Informe um valor válido')),
+                          const SnackBar(content: Text('Informe um valor válido (≥ 0)')),
                         );
                         return;
                       }
@@ -661,48 +662,4 @@ class _GoalsScreenState extends State<GoalsScreen> {
     return 'Em $difference dias';
   }
 
-  Color _getStatusColor(String status) {
-    switch (status.toLowerCase()) {
-      case 'active':
-        return AppColors.primary;
-      case 'completed':
-        return Colors.green;
-      case 'failed':
-        return AppColors.accentError;
-      case 'paused':
-        return Colors.orange;
-      default:
-        return AppColors.textMuted;
-    }
-  }
-
-  String _getStatusLabel(String status) {
-    switch (status.toLowerCase()) {
-      case 'active':
-        return 'Ativa';
-      case 'completed':
-        return 'Concluída';
-      case 'failed':
-        return 'Expirada';
-      case 'paused':
-        return 'Pausada';
-      default:
-        return status;
-    }
-  }
-
-  String _getCategoryLabel(String category) {
-    switch (category.toLowerCase()) {
-      case 'strength':
-        return '🏋️ Força';
-      case 'endurance':
-        return '🏃 Resistência';
-      case 'composition':
-        return '⚖️ Composição';
-      case 'frequency':
-        return '📅 Frequência';
-      default:
-        return category;
-    }
-  }
 }

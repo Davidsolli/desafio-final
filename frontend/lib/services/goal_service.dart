@@ -39,13 +39,13 @@ class GoalResponse {
       title: json['title'] as String,
       description: json['description'] as String?,
       status: json['status'] as String,
-      category: json['category'] as String? ?? '',
+      category: json['category'] as String? ?? 'general',
       targetValue: (json['target_value'] as num).toDouble(),
       currentValue: (json['current_value'] as num).toDouble(),
       unit: json['unit'] as String,
       targetDate: DateTime.parse(json['target_date'] as String),
-      progressPercentage: (json['progress_percentage'] as num).toDouble(),
-      daysRemaining: json['days_remaining'] as int,
+      progressPercentage: (json['progress_percentage'] as num?)?.toDouble() ?? 0.0,
+      daysRemaining: (json['days_remaining'] as num?)?.toInt() ?? 0,
       createdAt: DateTime.parse(json['created_at'] as String),
     );
   }
@@ -101,25 +101,24 @@ class GoalDetail extends GoalResponse {
   });
 
   factory GoalDetail.fromJson(Map<String, dynamic> json) {
-    final base = GoalResponse.fromJson(json);
     final entries = (json['progress_entries'] as List<dynamic>? ?? [])
         .whereType<Map<String, dynamic>>()
         .map((e) => GoalProgressEntry.fromJson(e))
         .toList();
     return GoalDetail(
-      id: base.id,
-      userId: base.userId,
-      title: base.title,
-      description: base.description,
-      status: base.status,
-      category: base.category,
-      targetValue: base.targetValue,
-      currentValue: base.currentValue,
-      unit: base.unit,
-      targetDate: base.targetDate,
-      progressPercentage: base.progressPercentage,
-      daysRemaining: base.daysRemaining,
-      createdAt: base.createdAt,
+      id: json['id'] as String,
+      userId: json['user_id'] as String,
+      title: json['title'] as String,
+      description: json['description'] as String?,
+      status: json['status'] as String,
+      category: json['category'] as String? ?? 'general',
+      targetValue: (json['target_value'] as num).toDouble(),
+      currentValue: (json['current_value'] as num).toDouble(),
+      unit: json['unit'] as String,
+      targetDate: DateTime.parse(json['target_date'] as String),
+      progressPercentage: (json['progress_percentage'] as num?)?.toDouble() ?? 0.0,
+      daysRemaining: (json['days_remaining'] as num?)?.toInt() ?? 0,
+      createdAt: DateTime.parse(json['created_at'] as String),
       progressEntries: entries,
     );
   }

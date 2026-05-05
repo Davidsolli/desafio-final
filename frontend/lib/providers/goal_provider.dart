@@ -63,7 +63,6 @@ class GoalProvider extends ChangeNotifier {
       final page = await _goalService.getGoals(status: _currentStatus, page: nextPage);
       _goals = [..._goals, ...page.goals];
       _currentPage = nextPage;
-      notifyListeners();
     } on NetworkException catch (e) {
       _error = 'Erro de conexão: ${e.message}';
       notifyListeners();
@@ -86,8 +85,11 @@ class GoalProvider extends ChangeNotifier {
       _error = null;
 
       final newGoal = await _goalService.createGoal(dto);
-      _goals.insert(0, newGoal);
-      _total += 1;
+      // Novas metas sempre chegam como 'active'; só insere na lista se o filtro atual corresponde
+      if (_currentStatus == null || _currentStatus == 'active') {
+        _goals.insert(0, newGoal);
+        _total += 1;
+      }
       notifyListeners();
     } on NetworkException catch (e) {
       _error = 'Erro de conexão: ${e.message}';
