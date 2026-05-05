@@ -1,12 +1,15 @@
 import 'package:flutter/foundation.dart';
+import 'package:omniconnect_fitness/models/diet_models.dart';
 import 'package:omniconnect_fitness/services/nutrition_service.dart';
 import 'package:omniconnect_fitness/services/api_client.dart';
 
-/// Provider para gerenciar estado de nutrição
+/// Provider para gerenciar estado de nutrição (Dieta e Logbook)
 class NutritionProvider extends ChangeNotifier {
   final NutritionService _nutritionService;
 
-  List<MealResponse> _meals = [];
+  DietLogbook? _currentLogbook;
+  Diet? _activeDiet;
+
   bool _isLoading = false;
   String? _error;
 
@@ -14,114 +17,89 @@ class NutritionProvider extends ChangeNotifier {
       : _nutritionService = nutritionService;
 
   // Getters
-  List<MealResponse> get meals => _meals;
+  DietLogbook? get currentLogbook => _currentLogbook;
+  Diet? get activeDiet => _activeDiet;
   bool get isLoading => _isLoading;
   String? get error => _error;
-  bool get hasMeals => _meals.isNotEmpty;
 
-  /// Calcula totais do dia
-  Map<String, double> get dailyTotals {
+  /// Retorna as entradas agrupadas por meal_name para facilitar a listagem
+  Map<String, List<DietLogbookEntry>> get entriesByMeal {
+    final map = <String, List<DietLogbookEntry>>{};
+    if (_currentLogbook == null) return map;
+
+    for (var entry in _currentLogbook!.entries) {
+      if (!map.containsKey(entry.mealName)) {
+        map[entry.mealName] = [];
+      }
+      map[entry.mealName]!.add(entry);
+    }
+    return map;
+  }
+
+  /// Calcula a meta calórica e macros com base na dieta ativa.
+  /// Se não tiver dieta, retorna uma meta genérica de 2000kcal.
+  Map<String, double> get dailyTargets {
+    if (_activeDiet != null) {
+      return {
+        'calories': _activeDiet!.totalKcal,
+        'protein': _activeDiet!.totalProtein,
+        'carbs': _activeDiet!.totalCarbs,
+        'fat': _activeDiet!.totalFats,
+      };
+    }
     return {
-      'calories': _meals.fold<double>(0, (sum, m) => sum + m.calories),
-      'protein': _meals.fold<double>(0, (sum, m) => sum + m.protein),
-      'carbs': _meals.fold<double>(0, (sum, m) => sum + m.carbs),
-      'fat': _meals.fold<double>(0, (sum, m) => sum + m.fat),
+      'calories': 2000.0,
+      'protein': 150.0,
+      'carbs': 200.0,
+      'fat': 66.0,
     };
   }
 
-  /// Carrega todas as refeições do dia
-  Future<void> loadMeals({DateTime? date, int limit = 10, int offset = 0}) async {
+  /// Carrega os dados do dia (Diário e Dieta)
+  Future<void> loadTodayData() async {
     try {
       _setLoading(true);
       _error = null;
 
-      _meals = await _nutritionService.getMeals(
-        date: date ?? DateTime.now(),
-        limit: limit,
-        offset: offset,
-      );
-      notifyListeners();
-    } on NetworkException catch (e) {
-      _error = 'Erro de conexão: ${e.message}';
-      notifyListeners();
-      rethrow;
-    } on ApiException catch (e) {
-      _error = e.message;
-      notifyListeners();
-      rethrow;
-    } catch (e) {
-      _error = 'Erro ao carregar refeições: ${e.toString()}';
-      notifyListeners();
-      rethrow;
-    } finally {
-      _setLoading(false);
-    }
-  }
+      // Chama as duas requisições em paralelo
+      final results = await Future.wait([
+        _nutritionService.getLogbookByDate(DateTime.now()).then((v) => v as DietLogbook?).catchError((_) => null as DietLogbook?),
+        _nutritionService.getMyDiets().then((v) => v as List<Diet>?).catchError((_) => <Diet>[]),
+      ]);
 
-  /// Cria uma nova refeição
-  Future<void> createMeal(CreateMealDTO dto) async {
-    try {
-      _setLoading(true);
-      _error = null;
-
-      final newMeal = await _nutritionService.createMeal(dto);
-      _meals.insert(0, newMeal);
-      notifyListeners();
-    } on NetworkException catch (e) {
-      _error = 'Erro de conexão: ${e.message}';
-      notifyListeners();
-      rethrow;
-    } on ApiException catch (e) {
-      _error = e.message;
-      notifyListeners();
-      rethrow;
-    } catch (e) {
-      _error = 'Erro ao criar refeição: ${e.toString()}';
-      notifyListeners();
-      rethrow;
-    } finally {
-      _setLoading(false);
-    }
-  }
-
-  /// Atualiza uma refeição
-  Future<void> updateMeal(String mealId, CreateMealDTO dto) async {
-    try {
-      _setLoading(true);
-      _error = null;
-
-      final updatedMeal = await _nutritionService.updateMeal(mealId, dto);
-
-      final index = _meals.indexWhere((m) => m.id == mealId);
-      if (index != -1) {
-        _meals[index] = updatedMeal;
+      _currentLogbook = results[0] as DietLogbook?;
+      
+      final diets = results[1] as List<Diet>?;
+      if (diets != null && diets.isNotEmpty) {
+        // Pega a dieta ativa, ou a primeira se não tiver uma flag 'isActive'
+        _activeDiet = diets.firstWhere((d) => d.isActive, orElse: () => diets.first);
+      } else {
+        _activeDiet = null;
       }
+
       notifyListeners();
     } on NetworkException catch (e) {
       _error = 'Erro de conexão: ${e.message}';
       notifyListeners();
-      rethrow;
-    } on ApiException catch (e) {
-      _error = e.message;
-      notifyListeners();
-      rethrow;
     } catch (e) {
-      _error = 'Erro ao atualizar refeição: ${e.toString()}';
+      _error = 'Erro ao carregar dados nutricionais: ${e.toString()}';
       notifyListeners();
-      rethrow;
     } finally {
       _setLoading(false);
     }
   }
 
-  /// Deleta uma refeição
-  Future<void> deleteMeal(String mealId) async {
+  /// Adiciona uma entrada no diário alimentar
+  Future<void> addLogbookEntry(CreateDietLogbookEntryDTO dto) async {
     try {
       _setLoading(true);
       _error = null;
 
-      await _nutritionService.deleteMeal(mealId);
-      _meals.removeWhere((m) => m.id == mealId);
+      await _nutritionService.addLogbookEntry(dto);
+      
+      // Recarrega o logbook do dia para pegar os totais calculados no backend
+      _currentLogbook = await _nutritionService.getLogbookByDate(dto.logDate ?? DateTime.now());
+      
       notifyListeners();
     } on NetworkException catch (e) {
       _error = 'Erro de conexão: ${e.message}';
@@ -132,7 +110,7 @@ class NutritionProvider extends ChangeNotifier {
       notifyListeners();
       rethrow;
     } catch (e) {
-      _error = 'Erro ao deletar refeição: ${e.toString()}';
+      _error = 'Erro ao adicionar alimento: ${e.toString()}';
       notifyListeners();
       rethrow;
     } finally {
@@ -140,22 +118,43 @@ class NutritionProvider extends ChangeNotifier {
     }
   }
 
-  /// Define o estado de carregamento
+  /// Deleta uma entrada do diário alimentar
+  Future<void> deleteLogbookEntry(String entryId, DateTime date) async {
+    try {
+      _setLoading(true);
+      _error = null;
+
+      await _nutritionService.deleteLogbookEntry(entryId);
+      
+      // Recarrega o logbook
+      _currentLogbook = await _nutritionService.getLogbookByDate(date);
+      
+      notifyListeners();
+    } on NetworkException catch (e) {
+      _error = 'Erro de conexão: ${e.message}';
+      notifyListeners();
+      rethrow;
+    } on ApiException catch (e) {
+      _error = e.message;
+      notifyListeners();
+      rethrow;
+    } catch (e) {
+      _error = 'Erro ao deletar alimento: ${e.toString()}';
+      notifyListeners();
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
   void _setLoading(bool loading) {
     _isLoading = loading;
     notifyListeners();
   }
 
-  /// Limpa a mensagem de erro
   void clearError() {
     _error = null;
     notifyListeners();
   }
-
-  /// Limpa todas as refeições
-  void clearMeals() {
-    _meals = [];
-    _error = null;
-    notifyListeners();
-  }
 }
+
