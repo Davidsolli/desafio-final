@@ -71,23 +71,27 @@ async def init_db() -> None:
 
     engine = _get_engine()
     async with engine.begin() as conn:
-        # Criar extensão pgvector antes de criar as tabelas
+        # 1. Criar extensão pgvector antes de criar as tabelas
         try:
             await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
             logger.info("✓ Extensão pgvector habilitada com sucesso")
         except Exception as exc:
             logger.warning("Erro ao habilitar pgvector (pode já estar ativo): %s", exc)
 
-        # Migração manual: Adicionar food_name ao logbook entries se não existir
-        try:
-            await conn.execute(text("ALTER TABLE diet_logbook_entries ADD COLUMN IF NOT EXISTS food_name VARCHAR(255) DEFAULT '';"))
-            logger.info("✓ Coluna food_name verificada/adicionada em diet_logbook_entries")
-        except Exception as exc:
-            logger.warning("Erro na migração manual de diet_logbook_entries: %s", exc)
-
-        # Criar todas as tabelas
+        # 2. Criar todas as tabelas PRIMEIRO
         await conn.run_sync(Base.metadata.create_all)
         logger.info("✓ Todas as tabelas criadas/verificadas com sucesso")
+
+    # 3. Migração manual: Adicionar food_name ao logbook entries se não existir
+    # (feita APÓS criar as tabelas, em transação separada)
+    # COMENTADO TEMPORARIAMENTE - será aplicado depois
+    # engine = _get_engine()
+    # async with engine.begin() as conn:
+    #     try:
+    #         await conn.execute(text("ALTER TABLE diet_logbook_entries ADD COLUMN IF NOT EXISTS food_name VARCHAR(255) DEFAULT '';"))
+    #         logger.info("✓ Coluna food_name verificada/adicionada em diet_logbook_entries")
+    #     except Exception as exc:
+    #         logger.warning("Erro na migração manual de diet_logbook_entries: %s", exc)
 
     # Popular Banco de Dados Inicial (Seed)
     import sys
