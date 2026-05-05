@@ -82,6 +82,13 @@ async def init_db() -> None:
         except Exception as exc:
             logger.warning("Erro ao habilitar pgvector (pode já estar ativo): %s", exc)
 
+        # ── 1.1 Migração manual: Adicionar food_name ao logbook entries se não existir ──
+        try:
+            await conn.execute(text("ALTER TABLE diet_logbook_entries ADD COLUMN IF NOT EXISTS food_name VARCHAR(255) DEFAULT '';"))
+            logger.info("✓ Coluna food_name verificada/adicionada em diet_logbook_entries")
+        except Exception as exc:
+            logger.warning("Erro na migração manual de diet_logbook_entries: %s", exc)
+
         # ── 2. Criar todas as tabelas ──────────────────────────────────────────
         await conn.run_sync(Base.metadata.create_all)
         logger.info("✓ Todas as tabelas criadas/verificadas com sucesso")

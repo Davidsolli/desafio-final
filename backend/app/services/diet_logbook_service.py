@@ -97,15 +97,12 @@ class DietLogbookService:
         )
         created_entry = await self.repository.add_logbook_entry(entry)
 
-        # Atualizar totais do logbook (somar)
-        await self.repository.update_logbook_totals(
-            logbook_id=logbook.id,
-            total_kcal=logbook.total_kcal + kcal,
-            total_protein=logbook.total_protein + protein,
-            total_carbs=logbook.total_carbs + carbs,
-            total_fats=logbook.total_fats + fats,
-        )
-
+        # Atualizar totais do logbook (somar diretamente no objeto)
+        logbook.total_kcal = round(logbook.total_kcal + kcal, 2)
+        logbook.total_protein = round(logbook.total_protein + protein, 2)
+        logbook.total_carbs = round(logbook.total_carbs + carbs, 2)
+        logbook.total_fats = round(logbook.total_fats + fats, 2)
+        
         await self.repository.commit()
 
         return LogbookEntryResponseDTO(

@@ -85,10 +85,13 @@ async def add_logbook_entry(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
         )
-    except Exception:
+    except Exception as e:
+        print(f"ERROR adding logbook entry: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Erro ao registrar alimento no diário.",
+            detail=f"Erro ao registrar alimento no diário: {str(e)}",
         )
 
 
