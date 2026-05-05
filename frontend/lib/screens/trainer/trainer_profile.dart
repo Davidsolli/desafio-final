@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../theme/app_colors.dart';
 import '../../routes/app_routes.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/user_provider.dart';
 
 class TrainerProfile extends StatefulWidget {
   const TrainerProfile({super.key});
@@ -28,6 +29,19 @@ class _TrainerProfileState extends State<TrainerProfile> {
     _emailController = TextEditingController();
     _phoneController = TextEditingController();
     _crefController = TextEditingController();
+    _loadUserData();
+  }
+
+  Future<void> _loadUserData() async {
+    try {
+      await context.read<UserProvider>().loadUser();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao carregar dados: $e')),
+        );
+      }
+    }
   }
 
   void _syncWithAuthProvider(AuthUser? user) {
@@ -36,6 +50,35 @@ class _TrainerProfileState extends State<TrainerProfile> {
       _emailController.text = user.email;
       _phoneController.text = user.phoneWhatsapp ?? '';
       _lastUserId = user.id;
+    }
+  }
+
+  Future<void> _handleSaveChanges(BuildContext context, UserProvider userProvider) async {
+    try {
+      final nameText = _nameController.text.trim();
+      final phoneText = _phoneController.text.trim();
+
+      await userProvider.updateUser(
+        name: nameText,
+        phoneWhatsapp: phoneText.isNotEmpty ? phoneText : null,
+      );
+
+      if (mounted) {
+        context.read<AuthProvider>().updateUserProfile(
+          name: nameText,
+          phoneWhatsapp: phoneText.isNotEmpty ? phoneText : null,
+        );
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('✅ Alterações salvas com sucesso!')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('❌ Erro ao salvar: ${userProvider.error}')),
+        );
+      }
     }
   }
 
@@ -174,23 +217,36 @@ class _TrainerProfileState extends State<TrainerProfile> {
           const SizedBox(height: 12),
           _buildTextField('CREF', _crefController, hint: 'Ex: 012345-G/SP'),
           const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('✅ Alterações salvas!')),
-                );
-              },
-              child: Text('Salvar Alterações',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Colors.white, fontWeight: FontWeight.w600)),
-            ),
+          Consumer<UserProvider>(
+            builder: (context, userProvider, _) {
+              return SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: userProvider.isLoading ? AppColors.textMuted : AppColors.primary,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: userProvider.isLoading
+                      ? null
+                      : () => _handleSaveChanges(context, userProvider),
+                  child: userProvider.isLoading
+                      ? SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Theme.of(context).textTheme.bodyMedium?.color ?? Colors.white,
+                            ),
+                          ),
+                        )
+                      : Text('Salvar Alterações',
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: Colors.white, fontWeight: FontWeight.w600)),
+                ),
+              );
+            },
           ),
         ],
       ),

@@ -84,23 +84,25 @@ class UserService {
   Future<UserResponse> updateUser({
     required String id,
     required String name,
-    required double weight,
-    required double height,
-    required int age,
+    double? weight,
+    double? height,
+    int? age,
     String? gender,
     String? phoneWhatsapp,
   }) async {
     try {
+      final body = {
+        'name': name,
+        if (weight != null) 'weight': weight,
+        if (height != null) 'height': height,
+        if (age != null) 'age': age,
+        if (gender != null) 'gender': gender,
+        if (phoneWhatsapp != null) 'phone_whatsapp': phoneWhatsapp,
+      };
+
       final response = await _apiClient.put<UserResponse>(
         '/users/$id',
-        body: {
-          'name': name,
-          'weight': weight,
-          'height': height,
-          'age': age,
-          if (gender != null) 'gender': gender,
-          if (phoneWhatsapp != null) 'phone_whatsapp': phoneWhatsapp,
-        },
+        body: body,
         fromJson: (data) => UserResponse.fromJson(data as Map<String, dynamic>),
       );
       return response;

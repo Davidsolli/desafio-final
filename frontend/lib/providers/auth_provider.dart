@@ -197,4 +197,19 @@ class AuthProvider extends ChangeNotifier {
     _error = null;
     notifyListeners();
   }
+
+  /// Sincroniza dados do usuário após atualização (sem fazer nova chamada de rede)
+  /// Útil após UserProvider.updateUser para manter AuthUser sincronizado
+  void updateUserProfile({required String name, String? phoneWhatsapp}) {
+    if (_user != null) {
+      _user = AuthUser(
+        id: _user!.id,
+        name: name,
+        email: _user!.email,
+        role: _user!.role,
+        phoneWhatsapp: phoneWhatsapp,
+      );
+      notifyListeners();
+    }
+  }
 }
