@@ -16,21 +16,26 @@ class _TrainerProfileState extends State<TrainerProfile> {
   late TextEditingController _nameController;
   late TextEditingController _emailController;
   late TextEditingController _phoneController;
-  final _crefController = TextEditingController();
+  late TextEditingController _crefController;
   bool _notificationsEnabled = true;
   bool _darkModeEnabled = true;
-  bool _initialized = false;
+  String? _lastUserId;
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // Inicializa os controllers uma única vez com os dados reais do AuthProvider
-    if (!_initialized) {
-      final user = context.read<AuthProvider>().user;
-      _nameController = TextEditingController(text: user?.name ?? '');
-      _emailController = TextEditingController(text: user?.email ?? '');
-      _phoneController = TextEditingController(text: user?.phoneWhatsapp ?? '');
-      _initialized = true;
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController();
+    _emailController = TextEditingController();
+    _phoneController = TextEditingController();
+    _crefController = TextEditingController();
+  }
+
+  void _syncWithAuthProvider(AuthUser? user) {
+    if (user != null && _lastUserId != user.id) {
+      _nameController.text = user.name;
+      _emailController.text = user.email;
+      _phoneController.text = user.phoneWhatsapp ?? '';
+      _lastUserId = user.id;
     }
   }
 
@@ -48,6 +53,7 @@ class _TrainerProfileState extends State<TrainerProfile> {
     return Consumer<AuthProvider>(
       builder: (context, authProvider, _) {
         final user = authProvider.user;
+        _syncWithAuthProvider(user);
 
         return SafeArea(
           child: SingleChildScrollView(
@@ -65,9 +71,9 @@ class _TrainerProfileState extends State<TrainerProfile> {
                       const SizedBox(height: 24),
                       SizedBox(
                         width: double.infinity,
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.accentError,
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: AppColors.accentError, width: 1.5),
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                           ),
@@ -76,9 +82,9 @@ class _TrainerProfileState extends State<TrainerProfile> {
                             await authProvider.logout();
                             router.go(AppRoutes.login);
                           },
-                          child: Text('↩️ Sair da Conta',
+                          child: Text('Sair da Conta',
                               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  color: Colors.white, fontWeight: FontWeight.w600)),
+                                  color: AppColors.accentError, fontWeight: FontWeight.w600)),
                         ),
                       ),
                       const SizedBox(height: 32),
@@ -141,51 +147,53 @@ class _TrainerProfileState extends State<TrainerProfile> {
   }
 
   Widget _buildPersonalDataSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.person, color: AppColors.primary, size: 20),
-                const SizedBox(width: 8),
-                Text('Dados Pessoais',
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
-              ],
-            ),
-            const Icon(Icons.edit, color: AppColors.textMuted, size: 18),
-          ],
-        ),
-        const SizedBox(height: 12),
-        _buildTextField('Nome', _nameController),
-        const SizedBox(height: 12),
-        _buildTextField('Email', _emailController, readOnly: true),
-        const SizedBox(height: 12),
-        _buildTextField('Telefone / WhatsApp', _phoneController),
-        const SizedBox(height: 12),
-        _buildTextField('CREF', _crefController, hint: 'Ex: 012345-G/SP'),
-        const SizedBox(height: 16),
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('✅ Alterações salvas!')),
-              );
-            },
-            child: Text('Salvar Alterações',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.white, fontWeight: FontWeight.w600)),
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        border: Border.all(color: AppColors.border, width: 1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.person, color: AppColors.primary, size: 20),
+              const SizedBox(width: 8),
+              Text('Dados Pessoais',
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
+            ],
           ),
-        ),
-      ],
+          const SizedBox(height: 16),
+          _buildTextField('Nome', _nameController),
+          const SizedBox(height: 12),
+          _buildTextField('Email', _emailController, readOnly: true),
+          const SizedBox(height: 12),
+          _buildTextField('Telefone', _phoneController),
+          const SizedBox(height: 12),
+          _buildTextField('CREF', _crefController, hint: 'Ex: 012345-G/SP'),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('✅ Alterações salvas!')),
+                );
+              },
+              child: Text('Salvar Alterações',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Colors.white, fontWeight: FontWeight.w600)),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -198,16 +206,21 @@ class _TrainerProfileState extends State<TrainerProfile> {
             style: Theme.of(context)
                 .textTheme
                 .labelSmall
-                ?.copyWith(color: AppColors.textMuted, fontWeight: FontWeight.w500)),
-        const SizedBox(height: 6),
+                ?.copyWith(fontWeight: FontWeight.w500)),
+        const SizedBox(height: 8),
         TextField(
           controller: controller,
           readOnly: readOnly,
           decoration: InputDecoration(
             hintText: hint,
+            hintStyle: TextStyle(color: AppColors.textMuted),
             filled: true,
-            fillColor: readOnly ? AppColors.surfaceLight.withValues(alpha: 0.5) : AppColors.surfaceLight,
+            fillColor: AppColors.surfaceLight,
             border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: AppColors.border),
+            ),
+            enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
               borderSide: const BorderSide(color: AppColors.border),
             ),
@@ -240,7 +253,6 @@ class _TrainerProfileState extends State<TrainerProfile> {
           value: _notificationsEnabled,
           onChanged: (v) => setState(() => _notificationsEnabled = v),
         ),
-        const SizedBox(height: 8),
         _buildToggleRow(
           icon: Icons.dark_mode,
           label: 'Modo Escuro',
@@ -257,19 +269,14 @@ class _TrainerProfileState extends State<TrainerProfile> {
     required bool value,
     required ValueChanged<bool> onChanged,
   }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border.all(color: AppColors.border, width: 1),
-        borderRadius: BorderRadius.circular(10),
-      ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(
             children: [
-              Icon(icon, color: AppColors.textMuted, size: 20),
+              Icon(icon, color: AppColors.primary, size: 20),
               const SizedBox(width: 12),
               Text(label,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w500)),
@@ -278,8 +285,10 @@ class _TrainerProfileState extends State<TrainerProfile> {
           Switch(
             value: value,
             onChanged: onChanged,
-            activeThumbColor: AppColors.primary,
-            activeTrackColor: AppColors.primary.withValues(alpha: 0.4),
+            activeThumbColor: Colors.white,
+            activeTrackColor: AppColors.primary,
+            inactiveThumbColor: AppColors.textMuted,
+            inactiveTrackColor: AppColors.textMuted.withValues(alpha: 0.3),
           ),
         ],
       ),
