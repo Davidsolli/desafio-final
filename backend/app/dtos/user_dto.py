@@ -132,6 +132,34 @@ class UpdateUserDTO(BaseModel):
         None,
         description="Status ativo/inativo do usuário",
     )
+    weight: Optional[float] = Field(
+        None,
+        gt=0,
+        description="Peso do usuário em kg",
+    )
+    height: Optional[float] = Field(
+        None,
+        gt=0,
+        description="Altura do usuário em cm",
+    )
+    age: Optional[int] = Field(
+        None,
+        ge=1,
+        le=150,
+        description="Idade do usuário em anos",
+    )
+    gender: Optional[str] = Field(
+        None,
+        description="Gênero: male ou female",
+    )
+    phone_whatsapp: Optional[str] = Field(
+        None,
+        description="Telefone WhatsApp do usuário",
+    )
+    goal_type: Optional[str] = Field(
+        None,
+        description="Objetivo de treino: gain_mass, lose_weight, maintain, endurance",
+    )
 
     @field_validator("name")
     @classmethod
@@ -176,6 +204,12 @@ class UserResponseDTO(BaseModel):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+    weight: Optional[float] = None
+    height: Optional[float] = None
+    age: Optional[int] = None
+    gender: Optional[str] = None
+    phone_whatsapp: Optional[str] = None
+    goal_type: Optional[str] = None
 
     model_config = ConfigDict(
         from_attributes=True,
@@ -188,6 +222,12 @@ class UserResponseDTO(BaseModel):
                 "is_active": True,
                 "created_at": "2026-04-14T10:30:00Z",
                 "updated_at": "2026-04-14T10:30:00Z",
+                "weight": 78.5,
+                "height": 175.0,
+                "age": 27,
+                "gender": "male",
+                "phone_whatsapp": "+55 11 99999-9999",
+                "goal_type": "gain_mass",
             }
         }
     )

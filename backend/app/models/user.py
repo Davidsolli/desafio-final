@@ -7,7 +7,7 @@ role, phone_whatsapp, is_active, created_at, updated_at.
 
 from datetime import datetime
 from uuid import uuid4
-from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey
+from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Float, Integer
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import declarative_base
 
@@ -74,6 +74,18 @@ class User(Base):
         default=datetime.utcnow,
         onupdate=datetime.utcnow,
     )
+
+    weight = Column(Float, nullable=True)
+
+    height = Column(Float, nullable=True)
+
+    age = Column(Integer, nullable=True)
+
+    gender = Column(String(10), nullable=True)
+
+    phone_whatsapp = Column(String(20), nullable=True)
+
+    goal_type = Column(String(50), nullable=True)
 
     def __repr__(self) -> str:
         return f"<User(id={self.id}, name={self.name}, email={self.email}, role={self.role})>"
