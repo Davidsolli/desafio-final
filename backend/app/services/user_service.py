@@ -13,12 +13,21 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
+from app.models.user_profile import UserProfile
 from app.dtos.user_dto import CreateUserDTO, UpdateUserDTO, UserResponseDTO
 from app.repositories.user_repository import UserRepository
+from app.services.invitation_service import InvitationService
+from app.repositories.invitation_repository import InvitationRepository
 
 
 class UserAlreadyExistsError(Exception):
     """Exceção quando email já existe no banco."""
+
+    pass
+
+
+class InvalidInvitationError(Exception):
+    """Exceção quando código de convite é inválido."""
 
     pass
 
@@ -77,11 +86,22 @@ class UserService:
 
         Raises:
             UserAlreadyExistsError: Se email já existe
+            InvalidInvitationError: Se código de convite é inválido
         """
         # Validar se email já existe
         existing_user = await self.repository.get_by_email_all_states(dto.email)
         if existing_user:
             raise UserAlreadyExistsError(f"Email '{dto.email}' já está cadastrado")
+
+        # Validar código de convite: obrigatório para clientes
+        invitation = None
+        if dto.role == "client":
+            if not dto.invitation_code:
+                raise InvalidInvitationError("Código de convite obrigatório para clientes")
+            invitation_repo = InvitationRepository(self.session)
+            invitation = await invitation_repo.get_by_code(dto.invitation_code)
+            if not invitation or invitation.used:
+                raise InvalidInvitationError("Código de convite inválido ou já utilizado")
 
         # Criar instância de User
         user = User(
@@ -89,18 +109,36 @@ class UserService:
             email=dto.email,
             password=self.hash_password(dto.password),
             role=dto.role,
-            phone_whatsapp=dto.phone_whatsapp,
-            weight=dto.weight,
-            height=dto.height,
-            age=dto.age,
-            gender=dto.gender,
             is_active=True,
+            trainer_id=invitation.trainer_id if invitation else None,
         )
 
         try:
             # Salvar no banco
             created_user = await self.repository.create(user)
+
+            # Marcar convite como utilizado (se houver)
+            if invitation:
+                from datetime import datetime
+                invitation.used = True
+                invitation.used_by_id = created_user.id
+                invitation.used_at = datetime.utcnow()
+                invitation_repo = InvitationRepository(self.session)
+                await invitation_repo.update(invitation)
+
             await self.repository.commit()
+
+            # Se houver dados de perfil, criar UserProfile
+            if any([dto.weight_kg, dto.height_cm, dto.age, dto.goal_type]):
+                profile = UserProfile(
+                    user_id=created_user.id,
+                    weight_kg=dto.weight_kg,
+                    height_cm=dto.height_cm,
+                    age=dto.age,
+                    goal_type=dto.goal_type,
+                )
+                self.session.add(profile)
+                await self.session.commit()
 
             return UserResponseDTO.model_validate(created_user)
         except IntegrityError as e:
@@ -170,16 +208,6 @@ class UserService:
             user.name = dto.name
         if dto.role is not None:
             user.role = dto.role
-        if dto.phone_whatsapp is not None:
-            user.phone_whatsapp = dto.phone_whatsapp
-        if dto.weight is not None:
-            user.weight = dto.weight
-        if dto.height is not None:
-            user.height = dto.height
-        if dto.age is not None:
-            user.age = dto.age
-        if dto.gender is not None:
-            user.gender = dto.gender
         if dto.is_active is not None:
             user.is_active = dto.is_active
 

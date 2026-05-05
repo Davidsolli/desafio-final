@@ -37,6 +37,7 @@ firebase-*.json
 
 # Volumes Locais do Docker
 postgres_data/
+docker.log
 
 # Banco de Dados SQLite (Caso venham a usar para testes locas)
 *.db

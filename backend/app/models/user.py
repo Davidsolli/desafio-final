@@ -7,7 +7,7 @@ role, phone_whatsapp, is_active, created_at, updated_at.
 
 from datetime import datetime
 from uuid import uuid4
-from sqlalchemy import Column, String, Boolean, DateTime, Float, Integer
+from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import declarative_base
 
@@ -24,11 +24,7 @@ class User(Base):
         email: Email único do usuário
         password: Hash bcrypt da senha (nunca texto plano)
         role: Papel do usuário (admin, personal_trainer, client)
-        phone_whatsapp: Número WhatsApp (+55 XX XXXXX-XXXX)
-        weight: Peso em kg
-        height: Altura em cm
-        age: Idade em anos
-        gender: Sexo (male/female)
+        trainer_id: FK opcional para users.id (personal trainer vinculado, se é client)
         is_active: Status ativo/inativo (soft delete)
         created_at: Data de criação (imutável)
         updated_at: Data da última atualização
@@ -61,15 +57,12 @@ class User(Base):
         index=True,
     )
 
-    phone_whatsapp = Column(String(20), nullable=False)
-
-    weight = Column(Float, nullable=True)
-
-    height = Column(Float, nullable=True)
-
-    age = Column(Integer, nullable=True)
-
-    gender = Column(String(10), nullable=True)
+    trainer_id = Column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("users.id"),
+        nullable=True,
+        index=True,
+    )
 
     is_active = Column(Boolean, nullable=False, default=True, index=True)
 

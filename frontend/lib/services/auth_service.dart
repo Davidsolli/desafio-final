@@ -119,6 +119,7 @@ class AuthService {
   ///   password: Senha do usuário
   ///   role: Papel do usuário (client, personal_trainer, admin)
   ///   phoneWhatsapp: Número WhatsApp (opcional)
+  ///   invitationCode: Código de convite (obrigatório para clientes, opcional para PTs)
   ///
   /// Returns:
   ///   UserResponse com dados do usuário criado
@@ -132,17 +133,29 @@ class AuthService {
     required String password,
     required String role,
     String? phoneWhatsapp,
+    double? weightKg,
+    double? heightCm,
+    int? age,
+    String? goalType,
+    String? invitationCode,
   }) async {
     try {
+      final body = <String, dynamic>{
+        'name': name,
+        'email': email,
+        'password': password,
+        'role': role,
+      };
+      if (phoneWhatsapp != null) body['phone_whatsapp'] = phoneWhatsapp;
+      if (weightKg != null) body['weight_kg'] = weightKg;
+      if (heightCm != null) body['height_cm'] = heightCm;
+      if (age != null) body['age'] = age;
+      if (goalType != null) body['goal_type'] = goalType;
+      if (invitationCode != null) body['invitation_code'] = invitationCode;
+
       final response = await _apiClient.post<UserResponse>(
         '/users',
-        body: {
-          'name': name,
-          'email': email,
-          'password': password,
-          'role': role,
-          'phone_whatsapp': phoneWhatsapp,
-        },
+        body: body,
         fromJson: (data) => UserResponse.fromJson(data as Map<String, dynamic>),
       );
 

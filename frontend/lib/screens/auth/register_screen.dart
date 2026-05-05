@@ -6,7 +6,12 @@ import '../../routes/app_routes.dart';
 import '../../providers/auth_provider.dart';
 
 class RegisterScreen extends StatefulWidget {
-  const RegisterScreen({Key? key}) : super(key: key);
+  final String? invitationCode;
+
+  const RegisterScreen({
+    super.key,
+    this.invitationCode,
+  });
 
   @override
   State<RegisterScreen> createState() => _RegisterScreenState();
@@ -15,12 +20,19 @@ class RegisterScreen extends StatefulWidget {
 class _RegisterScreenState extends State<RegisterScreen> {
   int _currentStep = 0;
   bool _isLoading = false;
+  late String? _invitationCode;
 
   // Step 1
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _invitationCode = widget.invitationCode;
+  }
 
   // Step 2
   final _weightController = TextEditingController();
@@ -64,13 +76,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
       try {
         setState(() => _isLoading = true);
 
+        final weight = double.tryParse(_weightController.text);
+        final height = double.tryParse(_heightController.text);
+        final userAge = int.tryParse(_ageController.text);
+
         final authProvider = context.read<AuthProvider>();
         await authProvider.register(
           name: name,
           email: email,
           password: password,
           role: 'client',
-          phoneWhatsapp: null,
+          weightKg: weight,
+          heightCm: height,
+          age: userAge,
+          goalType: _selectedGoal,
+          invitationCode: _invitationCode,
         );
 
         // Faz login automático após registro
@@ -98,7 +118,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (_currentStep > 0) {
       setState(() => _currentStep--);
     } else {
-      context.pop();
+      context.go(AppRoutes.login);
     }
   }
 
@@ -193,6 +213,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
         const SizedBox(height: 8),
         _label('Senha'),
         _inputPassword(),
+        const SizedBox(height: 4),
+        const Text(
+          'Mín. 8 caracteres: maiúscula, minúscula, número e caractere especial',
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
+        ),
         const SizedBox(height: 8),
       ],
     );

@@ -16,7 +16,6 @@ from pydantic import BaseModel, Field, EmailStr, field_validator, ConfigDict
 
 
 VALID_ROLES = {"admin", "personal_trainer", "client"}
-PHONE_REGEX = r"^\+55\s\d{2}\s\d{5}-\d{4}$"
 PASSWORD_REGEX = r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@!#$%^&*])[a-zA-Z0-9@!#$%^&*]{8,}$"
 
 
@@ -24,17 +23,14 @@ class CreateUserDTO(BaseModel):
     """DTO para criação de novo usuário."""
 
     name: str = Field(
-        ...,
         min_length=3,
         max_length=255,
         description="Nome completo do usuário",
     )
     email: EmailStr = Field(
-        ...,
         description="Email único do usuário",
     )
     password: str = Field(
-        ...,
         min_length=8,
         description="Senha (mín. 8 chars, maiúscula, minúscula, número, caractere especial)",
     )
@@ -42,29 +38,29 @@ class CreateUserDTO(BaseModel):
         default="client",
         description="Papel do usuário: admin, personal_trainer ou client",
     )
-    phone_whatsapp: str = Field(
-        ...,
-        description="Número WhatsApp no formato +55 XX XXXXX-XXXX",
-    )
-    weight: Optional[float] = Field(
-        None,
+    weight_kg: Optional[float] = Field(
+        default=None,
         gt=0,
-        description="Peso em kg",
+        description="Peso do usuário em kg (opcional)",
     )
-    height: Optional[float] = Field(
-        None,
+    height_cm: Optional[float] = Field(
+        default=None,
         gt=0,
-        description="Altura em cm",
+        description="Altura do usuário em cm (opcional)",
     )
     age: Optional[int] = Field(
-        None,
+        default=None,
         ge=1,
         le=150,
-        description="Idade em anos",
+        description="Idade do usuário em anos (opcional)",
     )
-    gender: Optional[str] = Field(
-        None,
-        description="Sexo: male ou female",
+    goal_type: Optional[str] = Field(
+        default=None,
+        description="Objetivo de treino: gain_mass, lose_weight, maintain, endurance (opcional)",
+    )
+    invitation_code: Optional[str] = Field(
+        default=None,
+        description="Código de convite (obrigatório para clientes, opcional para personal trainers e admins)",
     )
 
     @field_validator("name")
@@ -96,16 +92,6 @@ class CreateUserDTO(BaseModel):
             )
         return v
 
-    @field_validator("phone_whatsapp")
-    @classmethod
-    def validate_phone(cls, v: str) -> str:
-        """Validar telefone: formato +55 XX XXXXX-XXXX."""
-        if not re.match(PHONE_REGEX, v):
-            raise ValueError(
-                "Telefone WhatsApp deve estar no formato +55 XX XXXXX-XXXX"
-            )
-        return v
-
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
@@ -113,11 +99,17 @@ class CreateUserDTO(BaseModel):
                 "email": "joao@example.com",
                 "password": "SenhaForte123!",
                 "role": "client",
-                "phone_whatsapp": "+55 11 99999-9999",
-                "weight": 78.5,
-                "height": 175.0,
+                "weight_kg": 78,
+                "height_cm": 175,
                 "age": 27,
-                "gender": "male",
+                "goal_type": "gain_mass",
+                "invitation_code": "AB3X7KP2QR",
+            },
+            "example_personal_trainer": {
+                "name": "Maria Treinadora",
+                "email": "maria@example.com",
+                "password": "SenhaForte123!",
+                "role": "personal_trainer",
             }
         }
     )
@@ -135,30 +127,6 @@ class UpdateUserDTO(BaseModel):
     role: Optional[str] = Field(
         None,
         description="Papel do usuário: admin, personal_trainer ou client",
-    )
-    phone_whatsapp: Optional[str] = Field(
-        None,
-        description="Número WhatsApp no formato +55 XX XXXXX-XXXX",
-    )
-    weight: Optional[float] = Field(
-        None,
-        gt=0,
-        description="Peso em kg",
-    )
-    height: Optional[float] = Field(
-        None,
-        gt=0,
-        description="Altura em cm",
-    )
-    age: Optional[int] = Field(
-        None,
-        ge=1,
-        le=150,
-        description="Idade em anos",
-    )
-    gender: Optional[str] = Field(
-        None,
-        description="Sexo: male ou female",
     )
     is_active: Optional[bool] = Field(
         None,
@@ -187,23 +155,10 @@ class UpdateUserDTO(BaseModel):
             )
         return v
 
-    @field_validator("phone_whatsapp")
-    @classmethod
-    def validate_phone(cls, v: Optional[str]) -> Optional[str]:
-        """Validar telefone: formato +55 XX XXXXX-XXXX."""
-        if v is None:
-            return v
-        if not re.match(PHONE_REGEX, v):
-            raise ValueError(
-                "Telefone WhatsApp deve estar no formato +55 XX XXXXX-XXXX"
-            )
-        return v
-
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
                 "name": "João Silva Santos",
-                "phone_whatsapp": "+55 11 98888-8888",
                 "role": "personal_trainer",
                 "is_active": True,
             }
@@ -218,11 +173,6 @@ class UserResponseDTO(BaseModel):
     name: str
     email: str
     role: str
-    phone_whatsapp: str
-    weight: Optional[float] = None
-    height: Optional[float] = None
-    age: Optional[int] = None
-    gender: Optional[str] = None
     is_active: bool
     created_at: datetime
     updated_at: datetime
@@ -235,11 +185,6 @@ class UserResponseDTO(BaseModel):
                 "name": "João Silva",
                 "email": "joao@example.com",
                 "role": "client",
-                "phone_whatsapp": "+55 11 99999-9999",
-                "weight": 78.5,
-                "height": 175.0,
-                "age": 27,
-                "gender": "male",
                 "is_active": True,
                 "created_at": "2026-04-14T10:30:00Z",
                 "updated_at": "2026-04-14T10:30:00Z",
@@ -268,7 +213,6 @@ class PaginatedUsersResponseDTO(BaseModel):
                         "name": "João Silva",
                         "email": "joao@example.com",
                         "role": "client",
-                        "phone_whatsapp": "+55 11 99999-9999",
                         "is_active": True,
                         "created_at": "2026-04-14T10:30:00Z",
                         "updated_at": "2026-04-14T10:30:00Z",

@@ -5,15 +5,11 @@ Define engine assíncrono, sessionmaker e função de dependency injection
 para obter sessões de banco.
 """
 
-import logging
-
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.pool import NullPool
+from sqlalchemy import text
 
 from app.config.settings import settings
-
-logger = logging.getLogger(__name__)
 
 # Engine e sessionmaker serão inicializados lazily
 _engine = None
@@ -56,47 +52,46 @@ async def get_db() -> AsyncSession:
 
 async def init_db() -> None:
     """
-    Inicializar banco: criar extensões e tabelas.
+    Inicializar banco: criar todas as tabelas.
 
     Chamar uma vez na inicialização da aplicação.
-    Steps:
-        1. Habilitar extensão pgvector (para busca vetorial no RAG)
-        2. Importar todos os models para que o metadata inclua todas as tabelas
-        3. Criar todas as tabelas via SQLAlchemy ORM
+    Importar todos os models para que o metadata inclua todas as tabelas.
     """
+    import logging
     from app.models.user import Base  # noqa: F401 — registra User
-    import app.models.chatbot  # noqa: F401 — registra KnowledgeBase, ChatConversation, etc.
+    from app.models.user_profile import UserProfile  # noqa: F401 — registra UserProfile
     from app.models.goal import Goal, GoalProgressEntry  # noqa: F401 — registra Goals
     import app.models.logbook  # noqa: F401 — registra WorkoutSession e SessionExercise no Base
     import app.models.food_catalog  # noqa: F401 — registra FoodCatalog no Base
     import app.models.diet  # noqa: F401 — registra CustomFood, Diet, DietMeal, DietItem
     import app.models.diet_logbook  # noqa: F401 — registra DietLogbook, DietLogbookEntry
+    from app.models.invitation import Invitation  # noqa: F401 — registra Invitation
+
+    logger = logging.getLogger(__name__)
 
     engine = _get_engine()
     async with engine.begin() as conn:
-        # ── 1. Habilitar extensão pgvector ────────────────────────────────────
-        # Necessária para criar coluna VECTOR na knowledge_base (RAG embeddings)
+        # Criar extensão pgvector antes de criar as tabelas
         try:
             await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
             logger.info("✓ Extensão pgvector habilitada com sucesso")
         except Exception as exc:
             logger.warning("Erro ao habilitar pgvector (pode já estar ativo): %s", exc)
 
-        # ── 1.1 Migração manual: Adicionar food_name ao logbook entries se não existir ──
+        # Migração manual: Adicionar food_name ao logbook entries se não existir
         try:
             await conn.execute(text("ALTER TABLE diet_logbook_entries ADD COLUMN IF NOT EXISTS food_name VARCHAR(255) DEFAULT '';"))
             logger.info("✓ Coluna food_name verificada/adicionada em diet_logbook_entries")
         except Exception as exc:
             logger.warning("Erro na migração manual de diet_logbook_entries: %s", exc)
 
-        # ── 2. Criar todas as tabelas ──────────────────────────────────────────
+        # Criar todas as tabelas
         await conn.run_sync(Base.metadata.create_all)
         logger.info("✓ Todas as tabelas criadas/verificadas com sucesso")
 
-    # ── 3. Popular Banco de Dados Inicial (Seed) ──────────────────────
+    # Popular Banco de Dados Inicial (Seed)
     import sys
     import os
-    # Adicionar raiz ao sys.path caso não esteja (para o script seed funcionar isoladamente ou importado)
     root_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     if root_path not in sys.path:
         sys.path.insert(0, root_path)
@@ -107,4 +102,3 @@ async def init_db() -> None:
         logger.info("✓ Verificação/Seed do catálogo de exercícios concluída")
     except Exception as exc:
         logger.warning("Erro ao popular catálogo de exercícios: %s", exc)
-
