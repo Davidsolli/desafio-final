@@ -25,6 +25,7 @@ from app.models import exercise_catalog  # noqa: F401 — registra exercise_cata
 from app.models import diet  # noqa: F401 — registra diet/diet_meals/diet_items/custom_foods
 from app.models import diet_logbook  # noqa: F401 — registra diet_logbooks/diet_logbook_entries
 from app.models import food_catalog  # noqa: F401 — registra food_catalog
+from app.models import dashboard  # noqa: F401 — registra StudentAnalytics
 from app.services.user_service import UserService
 from app.dependencies.auth import get_current_user
 
