@@ -46,9 +46,9 @@ class UserProvider extends ChangeNotifier {
   /// Atualiza dados do usuário
   Future<void> updateUser({
     required String name,
-    required double weight,
-    required double height,
-    required int age,
+    double? weight,
+    double? height,
+    int? age,
     String? gender,
     String? phoneWhatsapp,
   }) async {
