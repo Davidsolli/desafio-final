@@ -44,7 +44,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
     switch (role) {
       case 'personal_trainer':
-        context.go(AppRoutes.trainerDashboard);
+        context.go(AppRoutes.trainerHome);
         break;
       case 'admin':
         context.go(AppRoutes.adminDashboard);

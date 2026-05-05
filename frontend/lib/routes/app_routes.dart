@@ -12,7 +12,9 @@ import '../screens/student/goals_screen.dart';
 import '../screens/student/chat_screen.dart';
 import '../screens/student/profile_screen_new.dart';
 import '../screens/notifications_screen.dart';
-import '../screens/trainer/trainer_dashboard.dart';
+import '../screens/trainer/trainer_shell.dart';
+import '../screens/trainer/trainer_home_screen.dart';
+import '../screens/trainer/trainer_students_screen.dart';
 import '../screens/trainer/trainer_student_detail.dart';
 import '../screens/trainer/trainer_sheets.dart';
 import '../screens/trainer/trainer_profile.dart';
@@ -35,7 +37,8 @@ class AppRoutes {
   static const String profile = '/profile';
 
   // Trainer
-  static const String trainerDashboard = '/trainer/dashboard';
+  static const String trainerHome = '/trainer/home';
+  static const String trainerStudents = '/trainer/students';
   static const String trainerStudent = '/trainer/student/:studentId';
   static const String trainerSheets = '/trainer/sheets';
   static const String trainerProfile = '/trainer/profile';
@@ -102,23 +105,32 @@ class AppRoutes {
         path: notifications,
         builder: (context, state) => const NotificationsScreen(),
       ),
-      GoRoute(
-        path: '/trainer/dashboard',
-        builder: (context, state) => const TrainerDashboard(),
+      ShellRoute(
+        builder: (context, state, child) => TrainerShell(child: child),
+        routes: [
+          GoRoute(
+            path: '/trainer/home',
+            builder: (context, state) => const TrainerHomeScreen(),
+          ),
+          GoRoute(
+            path: '/trainer/students',
+            builder: (context, state) => const TrainerStudentsScreen(),
+          ),
+          GoRoute(
+            path: '/trainer/sheets',
+            builder: (context, state) => const TrainerSheets(),
+          ),
+          GoRoute(
+            path: '/trainer/profile',
+            builder: (context, state) => const TrainerProfile(),
+          ),
+        ],
       ),
       GoRoute(
         path: '/trainer/student/:studentId',
         builder: (context, state) => TrainerStudentDetail(
           studentId: state.pathParameters['studentId'] ?? 's1',
         ),
-      ),
-      GoRoute(
-        path: '/trainer/sheets',
-        builder: (context, state) => const TrainerSheets(),
-      ),
-      GoRoute(
-        path: '/trainer/profile',
-        builder: (context, state) => const TrainerProfile(),
       ),
       GoRoute(
         path: '/admin/dashboard',

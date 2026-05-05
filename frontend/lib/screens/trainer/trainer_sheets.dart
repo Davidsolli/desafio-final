@@ -73,11 +73,9 @@ class _TrainerSheetsState extends State<TrainerSheets> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: Column(
-          children: [
+    return SafeArea(
+      child: Column(
+        children: [
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Row(
@@ -190,9 +188,7 @@ class _TrainerSheetsState extends State<TrainerSheets> {
             ),
           ],
         ),
-      ),
-      bottomNavigationBar: _buildBottomNav(),
-    );
+      );
   }
 
   Widget _buildSheetCard(WorkoutSheetListItem sheet, int index) {
@@ -287,41 +283,4 @@ class _TrainerSheetsState extends State<TrainerSheets> {
     }
   }
 
-  Widget _buildBottomNav() {
-    final trainerNavItems = [
-      {'icon': Icons.dashboard_outlined, 'label': 'Dashboard'},
-      {'icon': Icons.people_outlined, 'label': 'Alunos'},
-      {'icon': Icons.fitness_center_outlined, 'label': 'Fichas'},
-      {'icon': Icons.person_outline, 'label': 'Perfil'},
-    ];
-
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border(top: BorderSide(color: AppColors.border, width: 1)),
-      ),
-      child: BottomNavigationBar(
-        currentIndex: 2,
-        onTap: (index) {
-          final routes = [
-            '/trainer/dashboard',
-            '/trainer/students',
-            '/trainer/sheets',
-            '/trainer/profile',
-          ];
-          context.go(routes[index]);
-        },
-        backgroundColor: AppColors.surface,
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: AppColors.primary,
-        unselectedItemColor: AppColors.textMuted,
-        items: trainerNavItems
-            .map((item) => BottomNavigationBarItem(
-                  icon: Icon(item['icon'] as IconData, size: 24),
-                  label: item['label'] as String,
-                ))
-            .toList(),
-      ),
-    );
-  }
 }
