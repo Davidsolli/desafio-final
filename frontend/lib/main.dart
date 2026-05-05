@@ -132,7 +132,7 @@ class OmniConnectApp extends StatelessWidget {
         ),
       ],
       child: MaterialApp.router(
-        title: 'OmniConnect Fitness',
+        title: 'FitLoop',
         theme: AppTheme.darkTheme,
         routerConfig: AppRoutes.router,
         debugShowCheckedModeBanner: false,
