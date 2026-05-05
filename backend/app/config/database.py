@@ -83,8 +83,8 @@ async def init_db() -> None:
 
         # 3. Migração manual: Adicionar colunas de dados corporais à tabela users
         alters = [
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS weight FLOAT",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS height FLOAT",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS weight DOUBLE PRECISION",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS height DOUBLE PRECISION",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS age INTEGER",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS gender VARCHAR(10)",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_whatsapp VARCHAR(20)",
