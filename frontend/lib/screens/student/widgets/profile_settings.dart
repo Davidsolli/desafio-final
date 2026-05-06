@@ -14,9 +14,6 @@ class ProfileSettings extends StatefulWidget {
 }
 
 class _ProfileSettingsState extends State<ProfileSettings> {
-  bool notificationsEnabled = true;
-  bool darkModeEnabled = false;
-
   Future<void> _handleLogout(BuildContext context) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -59,69 +56,6 @@ class _ProfileSettingsState extends State<ProfileSettings> {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            border: Border.all(color: AppColors.border, width: 1),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.settings, color: AppColors.primary, size: 18),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Configurações',
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodyLarge
-                        ?.copyWith(fontWeight: FontWeight.w600),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.notifications_outlined,
-                          color: AppColors.textMuted, size: 18),
-                      const SizedBox(width: 12),
-                      const Text('Notificações'),
-                    ],
-                  ),
-                  Switch(
-                    value: notificationsEnabled,
-                    onChanged: (v) => setState(() => notificationsEnabled = v),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.dark_mode_outlined,
-                          color: AppColors.textMuted, size: 18),
-                      const SizedBox(width: 12),
-                      const Text('Modo Escuro'),
-                    ],
-                  ),
-                  Switch(
-                    value: darkModeEnabled,
-                    onChanged: (v) => setState(() => darkModeEnabled = v),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 24),
         SizedBox(
           width: double.infinity,
           child: ElevatedButton.icon(

@@ -18,8 +18,6 @@ class _TrainerProfileState extends State<TrainerProfile> {
   late TextEditingController _emailController;
   late TextEditingController _phoneController;
   late TextEditingController _crefController;
-  bool _notificationsEnabled = true;
-  bool _darkModeEnabled = true;
   String? _lastUserId;
 
   @override
@@ -109,8 +107,6 @@ class _TrainerProfileState extends State<TrainerProfile> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _buildPersonalDataSection(),
-                      const SizedBox(height: 24),
-                      _buildConfigurationsSection(),
                       const SizedBox(height: 24),
                       SizedBox(
                         width: double.infinity,
@@ -287,67 +283,6 @@ class _TrainerProfileState extends State<TrainerProfile> {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildConfigurationsSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const Icon(Icons.settings, color: AppColors.primary, size: 20),
-            const SizedBox(width: 8),
-            Text('Configurações',
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
-          ],
-        ),
-        const SizedBox(height: 12),
-        _buildToggleRow(
-          icon: Icons.notifications,
-          label: 'Notificações',
-          value: _notificationsEnabled,
-          onChanged: (v) => setState(() => _notificationsEnabled = v),
-        ),
-        _buildToggleRow(
-          icon: Icons.dark_mode,
-          label: 'Modo Escuro',
-          value: _darkModeEnabled,
-          onChanged: (v) => setState(() => _darkModeEnabled = v),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildToggleRow({
-    required IconData icon,
-    required String label,
-    required bool value,
-    required ValueChanged<bool> onChanged,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              Icon(icon, color: AppColors.primary, size: 20),
-              const SizedBox(width: 12),
-              Text(label,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w500)),
-            ],
-          ),
-          Switch(
-            value: value,
-            onChanged: onChanged,
-            activeThumbColor: Colors.white,
-            activeTrackColor: AppColors.primary,
-            inactiveThumbColor: AppColors.textMuted,
-            inactiveTrackColor: AppColors.textMuted.withValues(alpha: 0.3),
-          ),
-        ],
-      ),
     );
   }
 
