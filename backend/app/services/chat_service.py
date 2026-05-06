@@ -622,7 +622,7 @@ class ChatService:
         """
         Criar documento na KnowledgeBase e gerar embedding (RN-10).
 
-        O embedding é gerado via GoogleGenerativeAIEmbeddings (768 dims).
+        O embedding é gerado via HuggingFaceEmbeddings (384 dims).
         """
         from app.ai.rag_chain import rag_chain as rc
 
@@ -646,7 +646,7 @@ class ChatService:
             difficulty_level=difficulty_level,
             exercise_id=exercise_id,
             embedding=embedding_vector,
-            embedding_model="google:text-embedding-004",
+            embedding_model="huggingface:all-MiniLM-L6-v2",
             is_active=True,
         )
         self.session.add(doc)

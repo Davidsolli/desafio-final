@@ -32,8 +32,8 @@ except ImportError:  # pragma: no cover
 
 from app.models.user import Base
 
-# Dimensão do embedding Gemini (padrão GoogleGenerativeAIEmbeddings)
-EMBEDDING_DIM = 768
+# Dimensão do embedding all-MiniLM-L6-v2 (padrão HuggingFace)
+EMBEDDING_DIM = 384
 
 
 class KnowledgeBase(Base):
@@ -46,7 +46,7 @@ class KnowledgeBase(Base):
         title: Título do documento (ex: "Como fazer Supino Reto")
         content: Conteúdo completo em markdown
         category: Categoria temática ("exercicio", "forma", "nutricao", "periodizacao")
-        embedding: Vetor pgvector (768 dims — Gemini)
+        embedding: Vetor pgvector (384 dims — all-MiniLM-L6-v2)
         embedding_model: Nome do modelo usado para gerar o embedding
         exercise_id: UUID do exercício relacionado (FK futuro, opcional)
         muscle_group: Grupo muscular principal (ex: "Peito", "Costas")
@@ -90,7 +90,7 @@ class KnowledgeBase(Base):
     embedding_model = Column(
         String(100),
         nullable=False,
-        default="google:text-embedding-004",
+        default="huggingface:all-MiniLM-L6-v2",
     )
 
     # ── Metadados de Exercício ────────────────────────────────────────────

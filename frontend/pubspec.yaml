@@ -38,6 +38,7 @@ dependencies:
   http: ^1.1.0
   shared_preferences: ^2.2.2
   animate_do: ^3.1.0
+  web_socket_channel: ^3.0.3
 
 dev_dependencies:
   flutter_test:

@@ -3,6 +3,7 @@ services:
   api:
     image: davidsolli/backend-api:latest
     container_name: omniconnect-api
+    command: bash -c "pip install -r requirements.txt && uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
     ports:
       - "8000:8000"
     # O volume abaixo sincroniza a pasta local com o container, pra você não precisar dar "docker build" a toda hora que salvar o código
@@ -10,7 +11,8 @@ services:
       - .:/app
     environment:
       - DATABASE_URL=postgresql+asyncpg://omni_user:omni_pass@db:5432/omniconnect_db
-      # Futuramente outras variáveis (OPENAI_API_KEY) ficarão no arquivo .env
+      - ENV=development
+      # Futuramente outras variáveis (GROQ_API_KEY, etc) ficarão no arquivo .env
     depends_on:
       db:
         condition: service_healthy

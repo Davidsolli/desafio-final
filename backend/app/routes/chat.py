@@ -14,13 +14,16 @@ Rotas:
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, WebSocket, WebSocketDisconnect
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.database import get_db
-from app.dependencies.auth import get_current_user
+from app.config.settings import settings
+from app.dependencies.auth import get_current_user, get_user_from_token
 from app.models.user import User
 from app.dtos.chat_dto import (
     ConversationDetailDTO,
@@ -40,6 +43,8 @@ from app.services.chat_service import (
     RateLimitExceededError,
     UnauthorizedConversationError,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/chat", tags=["Chatbot"])
 
@@ -94,6 +99,153 @@ async def send_message(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Erro interno ao processar mensagem: {exc}",
         )
+
+
+@router.websocket("/ws")
+async def chat_websocket(
+    websocket: WebSocket,
+    session: AsyncSession = Depends(get_db),
+):
+    """
+    Endpoint de WebSocket para chat in-app.
+    Autenticação via JWT na primeira mensagem (tipo 'auth').
+    Cliente deve enviar:
+      1. { "type": "auth", "token": "<jwt>" } (obrigatório primeiro)
+      2. { "type": "message", "content": "...", "conversation_id": "uuid" (opcional) }
+    """
+    await websocket.accept()
+
+    user = None
+    service = ChatService(session)
+    auth_timeout = 5  # segundos para enviar auth
+    inactivity_timeout = 300  # 5 minutos
+
+    try:
+        # Espera autenticação (com timeout)
+        try:
+            first_msg = await asyncio.wait_for(
+                websocket.receive_json(),
+                timeout=auth_timeout,
+            )
+        except asyncio.TimeoutError:
+            await websocket.send_json({
+                "error": "Timeout na autenticação",
+                "type": "auth_error",
+            })
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+
+        if first_msg.get("type") != "auth":
+            await websocket.send_json({
+                "error": "Primeira mensagem deve ser autenticação com type='auth'",
+                "type": "auth_error",
+            })
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+
+        token = first_msg.get("token", "")
+        if not token:
+            await websocket.send_json({
+                "error": "Token JWT não fornecido",
+                "type": "auth_error",
+            })
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+
+        # Autentica usuário via JWT token (reutiliza função de auth.py)
+        user = await get_user_from_token(token, session)
+
+        if not user:
+            await websocket.send_json({
+                "error": "Token inválido ou usuário não encontrado",
+                "type": "auth_error",
+            })
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+
+        # Confirma autenticação
+        await websocket.send_json({
+            "type": "auth_success",
+            "message": "Autenticado com sucesso",
+        })
+
+        # Loop de mensagens (com timeout de inatividade)
+        while True:
+            try:
+                data = await asyncio.wait_for(
+                    websocket.receive_json(),
+                    timeout=inactivity_timeout,
+                )
+            except asyncio.TimeoutError:
+                logger.info(f"WebSocket inativo por {inactivity_timeout}s: user_id={user.id}")
+                await websocket.send_json({
+                    "error": "Sessão expirada por inatividade",
+                    "type": "timeout",
+                })
+                await websocket.close(code=status.WS_1000_NORMAL_CLOSURE)
+                return
+
+            msg_type = data.get("type")
+
+            if msg_type == "message":
+                content = data.get("content", "").strip()
+                conversation_id_str = data.get("conversation_id")
+
+                # Valida tamanho da mensagem (usando settings)
+                if len(content) > settings.CHAT_MAX_MESSAGE_LENGTH:
+                    await websocket.send_json({
+                        "error": f"Mensagem muito longa (máx {settings.CHAT_MAX_MESSAGE_LENGTH} caracteres)",
+                        "type": "error",
+                    })
+                    continue
+
+                if not content:
+                    await websocket.send_json({
+                        "error": "A mensagem não pode estar vazia.",
+                        "type": "error",
+                    })
+                    continue
+
+                try:
+                    conv_id = None
+                    if conversation_id_str:
+                        try:
+                            conv_id = UUID(conversation_id_str)
+                        except ValueError:
+                            await websocket.send_json({
+                                "error": "Formato de conversation_id inválido.",
+                                "type": "error",
+                            })
+                            continue
+
+                    result = await service.send_message(
+                        user_id=user.id,
+                        message=content,
+                        conversation_id=conv_id,
+                    )
+                    result["type"] = "response"
+                    await websocket.send_json(result)
+                except Exception as exc:
+                    logger.error(f"Erro ao processar mensagem: {exc}")
+                    await websocket.send_json({
+                        "error": str(exc),
+                        "type": "error",
+                    })
+            else:
+                await websocket.send_json({
+                    "error": f"Tipo de mensagem desconhecido: {msg_type}",
+                    "type": "error",
+                })
+
+    except WebSocketDisconnect:
+        if user:
+            logger.info(f"WebSocket desconectado: user_id={user.id}")
+    except Exception as exc:
+        logger.error(f"Erro no WebSocket: {exc}")
+        try:
+            await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+        except Exception:
+            pass
 
 
 @router.get(

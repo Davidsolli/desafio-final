@@ -1,8 +1,13 @@
+import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:animate_do/animate_do.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
 import '../../theme/app_colors.dart';
 import '../../routes/app_routes.dart';
+import '../../config/api_config.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -13,55 +18,184 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
-  final List<Map<String, String>> _messages = [
-    {
-      'role': 'assistant',
-      'text': 'Olá! 👋 Sou seu assistente fitness. Como posso te ajudar hoje?',
-      'time': '10:00',
-    },
-    {
-      'role': 'user',
-      'text': 'Qual exercício substituir o supino reto?',
-      'time': '10:01',
-    },
-    {
-      'role': 'assistant',
-      'text':
-          'Ótima pergunta! Algumas alternativas ao supino reto:\n\n1. **Supino com halteres** - maior amplitude de movimento\n2. **Flexão de braço** - usa o peso corporal\n\nQual movimento você prefere?',
-      'time': '10:02',
-    },
-  ];
+  final List<Map<String, String>> _messages = [];
+  WebSocketChannel? _channel;
+  bool _isConnected = false;
+  String? _conversationId;
 
   @override
-  void dispose() {
-    _messageController.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    _connectWebSocket();
   }
 
-  void _sendMessage() {
-    if (_messageController.text.isEmpty) return;
+  Future<void> _connectWebSocket() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('jwt_token');
 
-    setState(() {
-      _messages.add({
-        'role': 'user',
-        'text': _messageController.text,
-        'time': '${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')}',
-      });
-    });
-
-    _messageController.clear();
-
-    Future.delayed(const Duration(milliseconds: 800), () {
+    if (token == null || token.isEmpty) {
       if (mounted) {
         setState(() {
           _messages.add({
             'role': 'assistant',
-            'text': 'Ótima pergunta! Algumas alternativas:\n\n1. **Supino com halteres** - maior amplitude de movimento\n2. **Flexão de braço** - usa o peso corporal',
-            'time': '${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')}',
+            'text': 'Erro de autenticação. Por favor, faça login novamente.',
+            'time': _formatTime(),
           });
         });
       }
+      return;
+    }
+
+    // Usa ApiConfig para URL base (não hardcoded)
+    final wsBaseUrl = ApiConfig.wsBaseUrl ?? 'ws://localhost:8000';
+    final wsUrl = Uri.parse('$wsBaseUrl/api/v1/chat/ws');
+
+    try {
+      _channel = WebSocketChannel.connect(wsUrl);
+
+      // Aguarda confirmação de conexão e envia autenticação
+      _channel!.stream.listen(
+        (message) async {
+          final data = jsonDecode(message);
+
+          // Responde ao handshake de autenticação
+          if (data['type'] == 'auth_success') {
+            if (mounted) {
+              setState(() {
+                _isConnected = true;
+                _messages.add({
+                  'role': 'assistant',
+                  'text': 'Olá! 👋 Sou seu assistente fitness conectado. Como posso te ajudar hoje?',
+                  'time': _formatTime(),
+                });
+              });
+            }
+          } else if (data['type'] == 'auth_error') {
+            if (mounted) {
+              setState(() {
+                _isConnected = false;
+                _messages.add({
+                  'role': 'assistant',
+                  'text': 'Erro de autenticação: ${data['error'] ?? 'Desconhecido'}',
+                  'time': _formatTime(),
+                });
+              });
+            }
+            _channel?.sink.close();
+          } else if (data['type'] == 'response') {
+            if (data['conversation_id'] != null) {
+              _conversationId = data['conversation_id'];
+            }
+            if (mounted) {
+              setState(() {
+                _messages.add({
+                  'role': 'assistant',
+                  'text': data['content'] ?? '',
+                  'time': _formatTime(),
+                });
+              });
+            }
+          } else if (data['type'] == 'error' || data['type'] == 'timeout') {
+            if (mounted) {
+              setState(() {
+                _messages.add({
+                  'role': 'assistant',
+                  'text': 'Desculpe, ocorreu um erro: ${data['error'] ?? 'Desconhecido'}',
+                  'time': _formatTime(),
+                });
+              });
+            }
+            if (data['type'] == 'timeout') {
+              _channel?.sink.close();
+            }
+          }
+        },
+        onDone: () {
+          if (mounted) {
+            setState(() {
+              _isConnected = false;
+            });
+          }
+        },
+        onError: (error) {
+          if (mounted) {
+            setState(() {
+              _isConnected = false;
+              _messages.add({
+                'role': 'assistant',
+                'text': 'Erro de conexão com o servidor: $error',
+                'time': _formatTime(),
+              });
+            });
+          }
+        },
+      );
+
+      // Envia autenticação na primeira mensagem (após slight delay para garantir que stream está listening)
+      await Future.delayed(const Duration(milliseconds: 100));
+      final authMsg = jsonEncode({'type': 'auth', 'token': token});
+      _channel!.sink.add(authMsg);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isConnected = false;
+          _messages.add({
+            'role': 'assistant',
+            'text': 'Falha ao conectar no servidor: $e',
+            'time': _formatTime(),
+          });
+        });
+      }
+    }
+  }
+
+  String _formatTime() {
+    final now = DateTime.now();
+    return '${now.hour}:${now.minute.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  void dispose() {
+    _messageController.dispose();
+    _channel?.sink.close();
+    super.dispose();
+  }
+
+  void _sendMessage() {
+    if (_messageController.text.trim().isEmpty) return;
+
+    final text = _messageController.text.trim();
+    
+    setState(() {
+      _messages.add({
+        'role': 'user',
+        'text': text,
+        'time': _formatTime(),
+      });
     });
+
+    if (_isConnected && _channel != null) {
+      final payload = {
+        'type': 'message',
+        'content': text,
+      };
+      
+      if (_conversationId != null) {
+        payload['conversation_id'] = _conversationId!;
+      }
+
+      _channel!.sink.add(jsonEncode(payload));
+    } else {
+      setState(() {
+        _messages.add({
+          'role': 'assistant',
+          'text': 'Você está desconectado. Reinicie o aplicativo para tentar novamente.',
+          'time': _formatTime(),
+        });
+      });
+    }
+
+    _messageController.clear();
   }
 
   @override
@@ -86,8 +220,12 @@ class _ChatScreenState extends State<ChatScreen> {
               children: [
                 Text('Assistente IA',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
-                Text('Tire dúvidas sobre treino e nutrição',
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textSecondary)),
+                Text(
+                  _isConnected ? 'Online' : 'Desconectado',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: _isConnected ? Colors.green : AppColors.textSecondary,
+                  ),
+                ),
               ],
             ),
           ],
@@ -158,8 +296,9 @@ class _ChatScreenState extends State<ChatScreen> {
                   Expanded(
                     child: TextField(
                       controller: _messageController,
+                      enabled: _isConnected,
                       decoration: InputDecoration(
-                        hintText: 'Pergunte algo...',
+                        hintText: _isConnected ? 'Pergunte algo...' : 'Conectando...',
                         hintStyle: const TextStyle(color: AppColors.textMuted),
                         filled: true,
                         fillColor: AppColors.surfaceLight,
@@ -178,12 +317,12 @@ class _ChatScreenState extends State<ChatScreen> {
                   const SizedBox(width: 10),
                   Container(
                     decoration: BoxDecoration(
-                      color: AppColors.primary,
+                      color: _isConnected ? AppColors.primary : Colors.grey,
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: IconButton(
                       icon: const Icon(Icons.send, color: Colors.white, size: 20),
-                      onPressed: _sendMessage,
+                      onPressed: _isConnected ? _sendMessage : null,
                     ),
                   ),
                 ],
