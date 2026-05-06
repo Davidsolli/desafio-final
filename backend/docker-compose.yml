@@ -3,6 +3,7 @@ services:
   api:
     image: davidsolli/backend-api:latest
     container_name: omniconnect-api
+    command: bash -c "pip install langchain-groq langchain-huggingface sentence-transformers && uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
     ports:
       - "8000:8000"
     # O volume abaixo sincroniza a pasta local com o container, pra você não precisar dar "docker build" a toda hora que salvar o código

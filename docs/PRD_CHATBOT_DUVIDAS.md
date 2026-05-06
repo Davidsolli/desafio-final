@@ -67,8 +67,8 @@ class KnowledgeBase(Base):
     category: str                 # "exercicio", "forma", "nutricao", "periodizacao"
     
     # Vector embedding para RAG
-    embedding: List[float]        # pgvector (1536 dims com OpenAI/Claude)
-    embedding_model: str          # "openai:text-embedding-3-small"
+    embedding: List[float]        # pgvector (768 dims com Google Generative AI)
+    embedding_model: str          # "google:text-embedding-004"
     
     # Metadados
     exercise_id: UUID             # FK Exercises (se for exercício)
@@ -146,7 +146,7 @@ class ChatMessage(Base):
     channel: str                  # "app" (MVP 1), "whatsapp" (MVP 2)
     
     # Rastreamento
-    model_used: str               # "claude-3-sonnet", etc
+    model_used: str               # "gemini-1.5-pro", etc
     tokens_used: int              # Input + output tokens
     latency_ms: int               # Tempo resposta
     
@@ -212,7 +212,7 @@ class ChatFeedback(Base):
 ┌──────────────────────────────────────────────┐
 │  3. GENERATE: LLM gera resposta              │
 │  - Prompt: instruções + contexto + pergunta  │
-│  - Model: Claude 3.5 Sonnet (ou equivalente) │
+│  - Model: Google Gemini (ou equivalente)     │
 │  - Max tokens: 500                           │
 │  - Temperature: 0.3 (consistência)           │
 └────────────┬─────────────────────────────────┘
@@ -694,10 +694,10 @@ def test_escalation_flow():
 ## 🗂️ 10. Dependências e Stack
 
 ### Stack Técnico
-- **LLM:** Claude 3.5 Sonnet (via API Anthropic)
+- **LLM:** Google Gemini (via Google Generative AI)
 - **RAG Framework:** LangChain v0.1+
 - **Vector DB:** PostgreSQL + pgvector
-- **Embedding Model:** OpenAI text-embedding-3-small (1536 dims)
+- **Embedding Model:** Google text-embedding-004 (768 dims)
 - **Cache:** Redis (conversas recentes)
 - **Messaging:** WhatsApp Cloud API (Meta)
 - **Notificações:** Firebase FCM

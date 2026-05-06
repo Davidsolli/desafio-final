@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, WebSocket
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -48,5 +48,38 @@ async def get_current_user(
     user = await repo.get_by_id(user_id)
     if user is None:
         raise credentials_error
+
+    return user
+
+async def get_current_user_ws(
+    websocket: WebSocket,
+    session: AsyncSession,
+) -> User | None:
+    """Valida o token passado via query params e retorna o usuário."""
+    token = websocket.query_params.get("token")
+    if not token:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return None
+
+    try:
+        payload = jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM],
+        )
+        user_id_str: str | None = payload.get("sub")
+        if user_id_str is None:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return None
+        user_id = UUID(user_id_str)
+    except (JWTError, ValueError):
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return None
+
+    repo = UserRepository(session)
+    user = await repo.get_by_id(user_id)
+    if user is None:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return None
 
     return user

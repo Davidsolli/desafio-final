@@ -14,13 +14,14 @@ Rotas:
 
 from __future__ import annotations
 
+import logging
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, WebSocket, WebSocketDisconnect
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.database import get_db
-from app.dependencies.auth import get_current_user
+from app.dependencies.auth import get_current_user, get_current_user_ws
 from app.models.user import User
 from app.dtos.chat_dto import (
     ConversationDetailDTO,
@@ -40,6 +41,8 @@ from app.services.chat_service import (
     RateLimitExceededError,
     UnauthorizedConversationError,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/chat", tags=["Chatbot"])
 
@@ -94,6 +97,63 @@ async def send_message(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Erro interno ao processar mensagem: {exc}",
         )
+
+
+@router.websocket("/ws")
+async def chat_websocket(
+    websocket: WebSocket,
+    session: AsyncSession = Depends(get_db),
+):
+    """
+    Endpoint de WebSocket para chat in-app.
+    A autenticação ocorre via query param '?token=<jwt>'.
+    O cliente deve enviar JSON com { "type": "message", "content": "...", "conversation_id": "uuid" (opcional) }
+    """
+    await websocket.accept()
+    
+    # Valida usuário
+    user = await get_current_user_ws(websocket, session)
+    if not user:
+        return
+
+    service = ChatService(session)
+
+    try:
+        while True:
+            data = await websocket.receive_json()
+            msg_type = data.get("type")
+            
+            if msg_type == "message":
+                content = data.get("content", "")
+                conversation_id_str = data.get("conversation_id")
+                
+                try:
+                    conv_id = UUID(conversation_id_str) if conversation_id_str else None
+                except ValueError:
+                    await websocket.send_json({"error": "Formato de conversation_id inválido."})
+                    continue
+                
+                if not content:
+                    await websocket.send_json({"error": "A mensagem não pode estar vazia."})
+                    continue
+
+                try:
+                    result = await service.send_message(
+                        user_id=user.id,
+                        message=content,
+                        conversation_id=conv_id,
+                    )
+                    # Adiciona tipo para facilitar parsing no frontend
+                    result["type"] = "response"
+                    await websocket.send_json(result)
+                except Exception as exc:
+                    await websocket.send_json({"error": str(exc), "type": "error"})
+    except WebSocketDisconnect:
+        logger.info(f"WebSocket desconectado: user_id={user.id}")
+        pass
+    except Exception as exc:
+        logger.error(f"Erro no WebSocket: {exc}")
+        await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
 
 
 @router.get(

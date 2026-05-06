@@ -22,7 +22,8 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.output_parsers import StrOutputParser
-from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
+from langchain_groq import ChatGroq
+from langchain_huggingface import HuggingFaceEmbeddings
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -134,29 +135,28 @@ class RAGChain:
             - Inicializa clients do Gemini (lazy, apenas no primeiro uso)
             - Prepara embeddings model e LLM para posterior utilização
         """
-        self._embeddings: GoogleGenerativeAIEmbeddings | None = None
-        self._llm: ChatGoogleGenerativeAI | None = None
+        self._embeddings: HuggingFaceEmbeddings | None = None
+        self._llm: ChatGroq | None = None
+        self._last_model_name: str | None = None
 
     # ── Inicialização Lazy ─────────────────────────────────────────────────
 
-    def _get_embeddings(self) -> GoogleGenerativeAIEmbeddings:
+    def _get_embeddings(self) -> HuggingFaceEmbeddings:
         """Obter instância de embeddings (lazy init)."""
         if self._embeddings is None:
-            self._embeddings = GoogleGenerativeAIEmbeddings(
-                model="models/text-embedding-004",
-                google_api_key=settings.GOOGLE_API_KEY,
-                task_type="retrieval_query",
+            self._embeddings = HuggingFaceEmbeddings(
+                model_name="sentence-transformers/all-MiniLM-L6-v2",
             )
         return self._embeddings
 
-    def _get_llm(self) -> ChatGoogleGenerativeAI:
-        """Obter instância do LLM Gemini (lazy init)."""
+    def _get_llm(self) -> ChatGroq:
+        """Obter instância do LLM Groq (lazy init)."""
         if self._llm is None:
-            self._llm = ChatGoogleGenerativeAI(
-                model=settings.GEMINI_MODEL,
-                google_api_key=settings.GOOGLE_API_KEY,
+            self._llm = ChatGroq(
+                model_name=settings.GROQ_MODEL,
+                groq_api_key=settings.GROQ_API_KEY,
                 temperature=LLM_TEMPERATURE,
-                max_output_tokens=LLM_MAX_TOKENS,
+                max_tokens=LLM_MAX_TOKENS,
             )
         return self._llm
 
@@ -407,7 +407,7 @@ class RAGChain:
                     + getattr(response.usage_metadata, "output_tokens", 0)
                 )
 
-            return answer, int(tokens_used), settings.GEMINI_MODEL
+            return answer, int(tokens_used), settings.GROQ_MODEL
 
         except AttributeError as exc:
             logger.error("Erro de atributo (possível incompatibilidade LangChain): %s", exc)

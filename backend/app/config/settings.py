@@ -18,12 +18,12 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
 
-    # ── IA / Google Gemini ────────────────────────────────────────────────
-    GOOGLE_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-1.5-flash"  # ou "gemini-1.5-pro"
+    # ── IA / Groq ────────────────────────────────────────────────
+    GROQ_API_KEY: str = ""
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
 
     # ── RAG Pipeline ───────────────────────────────────────────────────────
-    RAG_EMBEDDING_DIM: int = 768                # Google Gemini embedding dimension
+    RAG_EMBEDDING_DIM: int = 384                # HuggingFace all-MiniLM-L6-v2 embedding dimension
     RAG_MIN_RELEVANCE_SCORE: float = 0.70       # RN-06: score mínimo para usar documento
     RAG_ESCALATE_THRESHOLD: float = 0.60        # RN-07: score abaixo disso → escalar
     RAG_TOP_K_DOCS: int = 5                     # Máximo de documentos recuperados
