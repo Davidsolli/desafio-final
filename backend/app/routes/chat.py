@@ -18,9 +18,11 @@ import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status, WebSocket, WebSocketDisconnect
+from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.database import get_db
+from app.config.settings import settings
 from app.dependencies.auth import get_current_user, get_current_user_ws
 from app.models.user import User
 from app.dtos.chat_dto import (
@@ -151,22 +153,29 @@ async def chat_websocket(
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
 
-        # Autentica usuário e inicia sessão fake com token
-        from app.dependencies.auth import decode_jwt_token
+        # Autentica usuário via JWT token
+        from app.repositories.user_repository import UserRepository
+
         try:
-            user_data = decode_jwt_token(token)
-            if not user_data or "user_id" not in user_data:
+            payload = jwt.decode(
+                token,
+                settings.SECRET_KEY,
+                algorithms=[settings.ALGORITHM],
+            )
+            user_id_str: str | None = payload.get("sub")
+            if user_id_str is None:
                 await websocket.send_json({
-                    "error": "Token inválido ou expirado",
+                    "error": "Token inválido",
                     "type": "auth_error",
                 })
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                 return
 
+            user_id = UUID(user_id_str)
+
             # Busca usuário no banco
-            from app.repositories.user_repository import UserRepository
             user_repo = UserRepository(session)
-            user = await user_repo.get_by_id(user_data["user_id"])
+            user = await user_repo.get_by_id(user_id)
 
             if not user:
                 await websocket.send_json({
