@@ -73,6 +73,22 @@ class UserRepository:
         result = await self.session.execute(query)
         return result.scalars().first()
 
+    async def get_by_id_all_states(self, user_id: UUID) -> Optional[User]:
+        """
+        Buscar usuário por ID (ativo ou inativo).
+
+        Útil para atualizar usuários inativos (ex: reativar).
+
+        Args:
+            user_id: UUID do usuário
+
+        Returns:
+            User ou None se não encontrado
+        """
+        query = select(User).where(User.id == user_id)
+        result = await self.session.execute(query)
+        return result.scalars().first()
+
     async def get_by_email_all_states(self, email: str) -> Optional[User]:
         """
         Buscar usuário por email (ativo ou inativo).
@@ -93,13 +109,19 @@ class UserRepository:
         self,
         page: int = 1,
         limit: int = 10,
+        role: Optional[str] = None,
+        trainer_id: Optional[UUID] = None,
+        include_inactive: bool = False,
     ) -> Tuple[List[User], int]:
         """
-        Listar usuários com paginação (apenas ativos).
+        Listar usuários com paginação.
 
         Args:
             page: Número da página (começa em 1)
             limit: Itens por página
+            role: Filtrar por role (admin, personal_trainer, client)
+            trainer_id: Filtrar alunos de um trainer específico
+            include_inactive: Se True, inclui usuários inativos (padrão: False, apenas ativos)
 
         Returns:
             Tuple[List[User], int]: Lista de usuários e total de registros
@@ -112,15 +134,24 @@ class UserRepository:
 
         offset = (page - 1) * limit
 
+        # Construir where clause com filtros opcionais
+        where_conditions = []
+        if not include_inactive:
+            where_conditions.append(User.is_active == True)
+        if role:
+            where_conditions.append(User.role == role)
+        if trainer_id:
+            where_conditions.append(User.trainer_id == trainer_id)
+
         # Query para contar total
-        count_query = select(func.count(User.id)).where(User.is_active == True)
+        count_query = select(func.count(User.id)).where(*where_conditions)
         count_result = await self.session.execute(count_query)
         total = count_result.scalar()
 
         # Query para buscar registros
         query = (
             select(User)
-            .where(User.is_active == True)
+            .where(*where_conditions)
             .order_by(User.created_at.desc())
             .offset(offset)
             .limit(limit)

@@ -20,7 +20,12 @@ import '../screens/trainer/trainer_student_detail.dart';
 import '../screens/trainer/trainer_sheets.dart';
 import '../screens/trainer/trainer_profile.dart';
 import '../screens/trainer/generate_invite_screen.dart';
-import '../screens/admin/admin_dashboard.dart';
+import '../screens/admin/admin_shell.dart';
+import '../screens/admin/admin_dashboard_screen.dart';
+import '../screens/admin/admin_pt_form_screen.dart';
+import '../screens/admin/admin_pt_details_screen.dart';
+import '../screens/admin/admin_settings_screen.dart';
+import '../screens/admin/admin_student_form_screen.dart';
 
 class AppRoutes {
   // Auth
@@ -48,7 +53,13 @@ class AppRoutes {
   static const String trainerProfile = '/trainer/profile';
 
   // Admin
-  static const String adminDashboard = '/admin/dashboard';
+  static const String adminDashboard = '/admin/trainers';
+  static const String adminAddTrainer = '/admin/add-trainer';
+  static const String adminEditTrainer = '/admin/edit-trainer';
+  static const String adminTrainerStudents = '/admin/trainer-students';
+  static const String adminAddStudent = '/admin/add-student';
+  static const String adminEditStudent = '/admin/edit-student';
+  static const String adminSettings = '/admin/settings';
 
   // Shared
   static const String notifications = '/notifications';
@@ -148,9 +159,64 @@ class AppRoutes {
           studentId: state.pathParameters['studentId'] ?? 's1',
         ),
       ),
+      ShellRoute(
+        builder: (context, state, child) => AdminShell(child: child),
+        routes: [
+          GoRoute(
+            path: adminDashboard,
+            builder: (context, state) => const AdminDashboardScreen(),
+          ),
+          GoRoute(
+            path: adminSettings,
+            builder: (context, state) => const AdminSettingsScreen(),
+          ),
+        ],
+      ),
       GoRoute(
-        path: '/admin/dashboard',
-        builder: (context, state) => const AdminDashboardPlaceholder(),
+        path: adminAddTrainer,
+        builder: (context, state) => const AdminPTFormScreen(isEditing: false),
+      ),
+      GoRoute(
+        path: adminEditTrainer,
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>?;
+          return AdminPTFormScreen(
+            isEditing: true,
+            trainerId: extra?['trainerId'] as String?,
+            trainerName: extra?['trainerName'] as String?,
+            trainerEmail: extra?['trainerEmail'] as String?,
+            trainerPhone: extra?['trainerPhone'] as String?,
+          );
+        },
+      ),
+      GoRoute(
+        path: adminTrainerStudents,
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>?;
+          final trainerId = extra?['trainerId'] as String? ?? 'unknown';
+          final trainerName = extra?['trainerName'] as String? ?? 'Trainer';
+          return AdminPTDetailsScreen(
+            trainerId: trainerId,
+            trainerName: trainerName,
+          );
+        },
+      ),
+      GoRoute(
+        path: adminAddStudent,
+        builder: (context, state) => const AdminPTFormScreen(isEditing: false),
+      ),
+      GoRoute(
+        path: adminEditStudent,
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>?;
+          return AdminStudentFormScreen(
+            isEditing: true,
+            studentId: extra?['studentId'] as String?,
+            studentName: extra?['studentName'] as String?,
+            studentEmail: extra?['studentEmail'] as String?,
+            studentPhone: extra?['studentPhone'] as String?,
+          );
+        },
       ),
     ],
   );

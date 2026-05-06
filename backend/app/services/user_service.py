@@ -161,6 +161,9 @@ class UserService:
         self,
         page: int = 1,
         limit: int = 10,
+        role: Optional[str] = None,
+        trainer_id: Optional[UUID] = None,
+        include_inactive: bool = False,
     ) -> Tuple[List[UserResponseDTO], int]:
         """
         Listar usuários com paginação.
@@ -168,11 +171,14 @@ class UserService:
         Args:
             page: Número da página
             limit: Itens por página
+            role: Filtrar por role (admin, personal_trainer, client)
+            trainer_id: Filtrar alunos de um trainer específico
+            include_inactive: Se True, inclui usuários inativos
 
         Returns:
             Tuple[List[UserResponseDTO], int]: Lista de usuários e total
         """
-        users, total = await self.repository.list_all(page, limit)
+        users, total = await self.repository.list_all(page, limit, role, trainer_id, include_inactive)
         user_dtos = [UserResponseDTO.model_validate(user) for user in users]
         return user_dtos, total
 
@@ -190,7 +196,7 @@ class UserService:
         Raises:
             UserNotFoundError: Se usuário não encontrado
         """
-        user = await self.repository.get_by_id(user_id)
+        user = await self.repository.get_by_id_all_states(user_id)
         if not user:
             raise UserNotFoundError(f"Usuário com ID {user_id} não encontrado")
 

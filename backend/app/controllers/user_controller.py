@@ -5,7 +5,7 @@ Orquestra as chamadas entre routes e services.
 Concentra a lógica de erro e validação de entrada/saída.
 """
 
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -64,6 +64,9 @@ class UserController:
         self,
         page: int = 1,
         limit: int = 10,
+        role: Optional[str] = None,
+        trainer_id: Optional[UUID] = None,
+        include_inactive: bool = False,
     ) -> PaginatedUsersResponseDTO:
         """
         Listar usuários com paginação.
@@ -71,11 +74,14 @@ class UserController:
         Args:
             page: Página
             limit: Itens por página
+            role: Filtrar por role (admin, personal_trainer, client)
+            trainer_id: Filtrar alunos de um trainer específico
+            include_inactive: Se True, inclui usuários inativos
 
         Returns:
             PaginatedUsersResponseDTO
         """
-        users, total = await self.service.list_all(page, limit)
+        users, total = await self.service.list_all(page, limit, role, trainer_id, include_inactive)
         return PaginatedUsersResponseDTO(
             total=total,
             page=page,
