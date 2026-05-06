@@ -75,7 +75,7 @@ async def create_goal(
 )
 async def list_goals(
     current_user: User = Depends(get_current_user),
-    user_id: Optional[UUID] = Query(None, description="Filtrar por aluno"),
+    user_id: Optional[UUID] = Query(None, description="Filtrar por aluno (padrão: usuário atual)"),
     status_filter: Optional[str] = Query(None, alias="status", description="Filtrar por status: active, completed, failed, paused"),
     page: int = Query(1, ge=1, description="Número da página"),
     limit: int = Query(10, ge=1, le=100, description="Itens por página"),
@@ -83,9 +83,10 @@ async def list_goals(
 ) -> PaginatedGoalsResponseDTO:
     """
     Listar metas com filtros opcionais por usuário e status.
+    Por padrão, retorna as metas do usuário autenticado.
     """
     controller = GoalController(session)
-    return await controller.list_goals(user_id, status_filter, page, limit)
+    return await controller.list_goals(user_id or current_user.id, status_filter, page, limit)
 
 
 @router.get(

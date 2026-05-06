@@ -6,7 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 
-VALID_CATEGORIES = {"strength", "endurance", "composition", "frequency"}
+VALID_CATEGORIES = {"strength", "endurance", "composition", "frequency", "general"}
 VALID_STATUSES = {"active", "paused", "failed"}
 
 
@@ -17,7 +17,7 @@ class CreateGoalDTO(BaseModel):
     created_by_id: Optional[UUID] = Field(None, description="ID do criador (padrão: user_id)")
     title: str = Field(..., min_length=3, max_length=255, description="Título da meta")
     description: Optional[str] = Field(None, max_length=1000, description="Descrição detalhada")
-    category: str = Field(..., description="strength, endurance, composition, frequency")
+    category: str = Field(..., description="strength, endurance, composition, frequency, general")
     target_value: float = Field(..., description="Valor alvo a atingir")
     current_value: float = Field(..., description="Valor atual ao criar a meta")
     unit: str = Field(..., min_length=1, max_length=50, description="Unidade: kg, %, cm, etc.")
@@ -106,6 +106,7 @@ class GoalResponseDTO(BaseModel):
     user_id: UUID
     created_by_id: UUID
     title: str
+    description: Optional[str]
     category: str
     target_value: float
     current_value: float
@@ -125,16 +126,21 @@ class GoalResponseDTO(BaseModel):
             "example": {
                 "id": "550e8400-e29b-41d4-a716-446655440000",
                 "user_id": "550e8400-e29b-41d4-a716-446655440001",
+                "created_by_id": "550e8400-e29b-41d4-a716-446655440001",
                 "title": "Aumentar supino em 10kg",
+                "description": "Do 80kg para 90kg",
                 "category": "strength",
                 "target_value": 90.0,
                 "current_value": 82.5,
                 "initial_value": 80.0,
                 "unit": "kg",
+                "start_date": "2026-05-06T10:00:00",
+                "target_date": "2026-12-31T23:59:59",
                 "status": "active",
                 "progress_percentage": 25.0,
-                "days_remaining": 55,
+                "days_remaining": 240,
                 "completed_at": None,
+                "created_at": "2026-05-06T10:00:00",
             }
         },
     )
@@ -143,7 +149,6 @@ class GoalResponseDTO(BaseModel):
 class GoalDetailResponseDTO(GoalResponseDTO):
     """DTO para resposta detalhada de meta (com histórico)."""
 
-    description: Optional[str]
     progress_entries: List[GoalProgressEntryResponseDTO] = []
 
 

@@ -424,8 +424,7 @@ class _HomeBody extends StatelessWidget {
   // ---------------------------------------------------------------------------
 
   Widget _buildGoalsSection(BuildContext context, HomeData data) {
-    final activeGoals =
-        data.goals.where((g) => !g.completed).take(2).toList();
+    final activeGoals = data.goals.where((g) => !g.completed).take(2).toList();
 
     return Column(
       children: [
