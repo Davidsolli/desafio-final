@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
 
+    # Seed/Admin bootstrap
+    ADMIN_NAME: str = "Administrador OmniConnect"
+    ADMIN_EMAIL: str = "admin@omniconnect.fit"
+    ADMIN_PASSWORD: str = "AdminForte123!"
+
     # ── IA / Groq ────────────────────────────────────────────────
     GROQ_API_KEY: str = ""
     GROQ_MODEL: str = "llama-3.3-70b-versatile"

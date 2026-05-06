@@ -115,9 +115,23 @@ async def init_db() -> None:
     if root_path not in sys.path:
         sys.path.insert(0, root_path)
 
-    from scripts.seed_exercises import seed
+    from scripts.seed_exercises import seed as seed_exercises
+    from scripts.seed_food import seed as seed_food
+    from scripts.seed_users_domain_data import seed as seed_users_domain_data
     try:
-        await seed(force=False)
+        await seed_exercises(force=False)
         logger.info("✓ Verificação/Seed do catálogo de exercícios concluída")
     except Exception as exc:
         logger.warning("Erro ao popular catálogo de exercícios: %s", exc)
+
+    try:
+        await seed_food(force=False)
+        logger.info("✓ Verificação/Seed do catálogo de alimentos concluída")
+    except Exception as exc:
+        logger.warning("Erro ao popular catálogo de alimentos: %s", exc)
+
+    try:
+        await seed_users_domain_data(force=False)
+        logger.info("✓ Seed de usuários e dados de domínio concluída")
+    except Exception as exc:
+        logger.warning("Erro ao popular dados de domínio iniciais: %s", exc)
