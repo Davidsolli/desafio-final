@@ -197,7 +197,10 @@ class ApiClient {
     final path = endpoint.startsWith('/') ? endpoint : '/$endpoint';
     final fullPath = '$_baseUrl$_apiPrefix$path';
 
-    return Uri.parse(fullPath).replace(queryParameters: queryParameters);
+    final Map<String, String>? stringParams =
+        queryParameters?.map((key, value) => MapEntry(key, value.toString()));
+
+    return Uri.parse(fullPath).replace(queryParameters: stringParams);
   }
 
   /// Retorna headers padrão com autenticação

@@ -83,7 +83,7 @@ class HomeGoalData {
     final pct = (json['progress_percentage'] as num?)?.toDouble() ?? 0.0;
     return HomeGoalData(
       id: json['id']?.toString() ?? '',
-      title: json['title'] as String,
+      title: json['title'] as String? ?? 'Sem título',
       progress: (pct / 100).clamp(0.0, 1.0),
       status: json['status'] as String? ?? 'active',
     );
