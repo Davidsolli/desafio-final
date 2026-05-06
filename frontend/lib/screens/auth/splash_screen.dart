@@ -68,26 +68,7 @@ class _SplashScreenState extends State<SplashScreen> {
               child: Image.asset('assets/images/logo-2.png'),
             ),
             const SizedBox(height: 32),
-            FadeInDown(
-              delay: const Duration(milliseconds: 200),
-              child: Column(
-                children: [
-                  Text(
-                    'OmniConnect',
-                    style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.bold,
-                        ),
-                  ),
-                  Text(
-                    'Fitness',
-                    style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                          color: AppColors.textPrimary,
-                        ),
-                  ),
-                ],
-              ),
-            ),
+
             const SizedBox(height: 16),
             FadeInUp(
               delay: const Duration(milliseconds: 400),
