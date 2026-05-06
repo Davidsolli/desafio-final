@@ -10,6 +10,7 @@ Endpoints:
 """
 
 from uuid import UUID
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -195,17 +196,23 @@ async def get_current_user_profile(
 async def list_users(
     page: int = Query(1, ge=1, description="Número da página"),
     limit: int = Query(10, ge=1, le=100, description="Itens por página"),
+    role: Optional[str] = Query(None, description="Filtrar por role (admin, personal_trainer, client)"),
+    trainer_id: Optional[UUID] = Query(None, description="Filtrar alunos de um trainer específico"),
+    include_inactive: bool = Query(False, description="Incluir usuários inativos"),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ) -> PaginatedUsersResponseDTO:
     """
-    Listar todos os usuários com suporte a paginação.
+    Listar todos os usuários com suporte a paginação e filtros.
 
     **Requer autenticação:** Apenas admin ou personal_trainer.
 
     **Query parameters:**
     - page: Página (padrão: 1)
     - limit: Itens por página (padrão: 10, máximo: 100)
+    - role: Filtrar por role (admin, personal_trainer, client)
+    - trainer_id: Filtrar alunos vinculados a um trainer específico
+    - include_inactive: Se true, inclui usuários inativos (padrão: false)
 
     **Response:**
     - total: Total de usuários no banco
@@ -222,7 +229,7 @@ async def list_users(
     controller = UserController(session)
 
     try:
-        return await controller.list_users(page=page, limit=limit)
+        return await controller.list_users(page=page, limit=limit, role=role, trainer_id=trainer_id, include_inactive=include_inactive)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
