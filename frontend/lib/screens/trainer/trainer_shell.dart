@@ -16,10 +16,10 @@ class TrainerShell extends StatefulWidget {
 
 class _TrainerShellState extends State<TrainerShell> {
   int _getSelectedNavIndex(String currentPath) {
-    if (currentPath.contains('/trainer/home')) return 0;
-    if (currentPath.contains('/trainer/students')) return 1;
-    if (currentPath.contains('/trainer/sheets')) return 2;
-    if (currentPath.contains('/trainer/profile')) return 3;
+    // if (currentPath.contains('/trainer/home')) return 0;
+    if (currentPath.contains('/trainer/students')) return 0;
+    if (currentPath.contains('/trainer/sheets')) return 1;
+    if (currentPath.contains('/trainer/profile')) return 2;
     return 0;
   }
 
@@ -45,7 +45,7 @@ class _TrainerShellState extends State<TrainerShell> {
         currentIndex: selectedIndex,
         onTap: (index) {
           final routes = [
-            '/trainer/home',
+            // '/trainer/home', // Removido temporariamente para apresentação
             '/trainer/students',
             '/trainer/sheets',
             '/trainer/profile',
@@ -57,7 +57,7 @@ class _TrainerShellState extends State<TrainerShell> {
         selectedItemColor: AppColors.primary,
         unselectedItemColor: AppColors.textMuted,
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.dashboard_outlined), label: 'Dashboard'),
+          // BottomNavigationBarItem(icon: Icon(Icons.dashboard_outlined), label: 'Dashboard'), // Removido temporariamente
           BottomNavigationBarItem(icon: Icon(Icons.people_outlined), label: 'Alunos'),
           BottomNavigationBarItem(icon: Icon(Icons.assignment_outlined), label: 'Fichas'),
           BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: 'Perfil'),
