@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/theme_colors.dart';
 import '../../providers/user_provider.dart';
 
 import 'widgets/profile_header.dart';
@@ -37,7 +38,7 @@ class _ProfileScreenV2State extends State<ProfileScreenV2> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.background,
       body: Consumer<UserProvider>(
         builder: (context, userProvider, _) {
           if (userProvider.isLoading) {

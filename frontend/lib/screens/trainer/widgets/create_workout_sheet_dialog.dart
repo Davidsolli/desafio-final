@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../theme/app_colors.dart';
+import '../../../theme/theme_colors.dart';
 import '../../../models/workout_sheet_model.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/workout_sheet_provider.dart';
@@ -159,7 +160,7 @@ class _CreateWorkoutSheetDialogState extends State<CreateWorkoutSheetDialog> {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      backgroundColor: AppColors.surface,
+      backgroundColor: context.colors.surface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       child: SizedBox(
@@ -234,13 +235,13 @@ class _CreateWorkoutSheetDialogState extends State<CreateWorkoutSheetDialog> {
                       DropdownButtonFormField<int>(
                         value: _selectedDayOfWeek,
                         decoration: _inputDecoration(null),
-                        dropdownColor: AppColors.surface,
+                        dropdownColor: context.colors.surface,
                         items: List.generate(7, (i) {
                           return DropdownMenuItem(
                             value: i,
                             child: Text('${dayOfWeekEmojis[i]} ${dayOfWeekLabels[i]}',
-                                style: const TextStyle(
-                                    color: AppColors.textPrimary)),
+                                style: TextStyle(
+                                    color: context.colors.textPrimary)),
                           );
                         }),
                         onChanged: (v) =>
@@ -309,9 +310,9 @@ class _CreateWorkoutSheetDialogState extends State<CreateWorkoutSheetDialog> {
                         Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: AppColors.surfaceLight,
+                            color: context.colors.surfaceLight,
                             borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: AppColors.border),
+                            border: Border.all(color: context.colors.border),
                           ),
                           child: Center(
                             child: Text(
@@ -320,7 +321,7 @@ class _CreateWorkoutSheetDialogState extends State<CreateWorkoutSheetDialog> {
                               style: Theme.of(context)
                                   .textTheme
                                   .labelSmall
-                                  ?.copyWith(color: AppColors.textMuted),
+                                  ?.copyWith(color: context.colors.textMuted),
                             ),
                           ),
                         ),
@@ -344,13 +345,13 @@ class _CreateWorkoutSheetDialogState extends State<CreateWorkoutSheetDialog> {
                             ? null
                             : () => Navigator.of(context).pop(false),
                         style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: AppColors.border),
+                          side: BorderSide(color: context.colors.border),
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(10)),
                         ),
-                        child: const Text('Cancelar',
-                            style: TextStyle(color: AppColors.textMuted)),
+                        child: Text('Cancelar',
+                            style: TextStyle(color: context.colors.textMuted)),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -391,8 +392,8 @@ class _CreateWorkoutSheetDialogState extends State<CreateWorkoutSheetDialog> {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.surfaceLight,
-        border: Border.all(color: AppColors.border),
+        color: context.colors.surfaceLight,
+        border: Border.all(color: context.colors.border),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -462,13 +463,13 @@ class _CreateWorkoutSheetDialogState extends State<CreateWorkoutSheetDialog> {
             value: entry.selectedMuscleGroup,
             decoration:
                 _inputDecoration(null).copyWith(labelText: 'Grupo Muscular'),
-            dropdownColor: AppColors.surface,
+            dropdownColor: context.colors.surface,
             items: validMuscleGroups.map((g) {
               return DropdownMenuItem(
                 value: g,
                 child: Text(g,
                     style:
-                        const TextStyle(color: AppColors.textPrimary)),
+                        TextStyle(color: context.colors.textPrimary)),
               );
             }).toList(),
             onChanged: (v) => setState(
@@ -552,7 +553,7 @@ class _CreateWorkoutSheetDialogState extends State<CreateWorkoutSheetDialog> {
       padding: const EdgeInsets.only(bottom: 6),
       child: Text(text,
           style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: AppColors.textMuted, fontWeight: FontWeight.w500)),
+              color: context.colors.textMuted, fontWeight: FontWeight.w500)),
     );
   }
 
@@ -560,10 +561,10 @@ class _CreateWorkoutSheetDialogState extends State<CreateWorkoutSheetDialog> {
     return InputDecoration(
       hintText: hint,
       filled: true,
-      fillColor: AppColors.surface,
+      fillColor: context.colors.surface,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: AppColors.border),
+        borderSide: BorderSide(color: context.colors.border),
       ),
       contentPadding:
           const EdgeInsets.symmetric(horizontal: 12, vertical: 10),

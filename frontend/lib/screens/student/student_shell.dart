@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/theme_colors.dart';
 import '../../routes/app_routes.dart';
 
 class StudentShell extends StatefulWidget {
@@ -31,7 +32,7 @@ class _StudentShellState extends State<StudentShell> {
     final selectedIndex = _getSelectedNavIndex(currentPath);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.background,
       body: widget.child,
       bottomNavigationBar: _buildBottomNav(selectedIndex),
     );
@@ -40,8 +41,8 @@ class _StudentShellState extends State<StudentShell> {
   Widget _buildBottomNav(int selectedIndex) {
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border(top: BorderSide(color: AppColors.border, width: 1)),
+        color: context.colors.surface,
+        border: Border(top: BorderSide(color: context.colors.border, width: 1)),
       ),
       child: BottomNavigationBar(
         currentIndex: selectedIndex,
@@ -55,10 +56,10 @@ class _StudentShellState extends State<StudentShell> {
           ];
           context.go(routes[index]);
         },
-        backgroundColor: AppColors.surface,
+        backgroundColor: context.colors.surface,
         type: BottomNavigationBarType.fixed,
         selectedItemColor: AppColors.primary,
-        unselectedItemColor: AppColors.textMuted,
+        unselectedItemColor: context.colors.textMuted,
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home_outlined), label: 'Home'),
           BottomNavigationBarItem(icon: Icon(Icons.fitness_center_outlined), label: 'Treinos'),

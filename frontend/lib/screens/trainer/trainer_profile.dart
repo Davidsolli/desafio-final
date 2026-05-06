@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/theme_colors.dart';
+import '../../theme/theme_provider.dart';
 import '../../routes/app_routes.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/user_provider.dart';
@@ -108,6 +110,8 @@ class _TrainerProfileState extends State<TrainerProfile> {
                     children: [
                       _buildPersonalDataSection(),
                       const SizedBox(height: 24),
+                      _buildThemeToggle(),
+                      const SizedBox(height: 16),
                       SizedBox(
                         width: double.infinity,
                         child: OutlinedButton(
@@ -144,7 +148,7 @@ class _TrainerProfileState extends State<TrainerProfile> {
     final email = user?.email ?? '';
 
     return Container(
-      color: AppColors.surface,
+      color: context.colors.surface,
       padding: const EdgeInsets.symmetric(vertical: 20),
       child: Column(
         children: [
@@ -168,7 +172,7 @@ class _TrainerProfileState extends State<TrainerProfile> {
           Text(name,
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
           Text(email,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.textSecondary)),
           const SizedBox(height: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -188,8 +192,8 @@ class _TrainerProfileState extends State<TrainerProfile> {
   Widget _buildPersonalDataSection() {
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border.all(color: AppColors.border, width: 1),
+        color: context.colors.surface,
+        border: Border.all(color: context.colors.border, width: 1),
         borderRadius: BorderRadius.circular(12),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -219,7 +223,7 @@ class _TrainerProfileState extends State<TrainerProfile> {
                 width: double.infinity,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: userProvider.isLoading ? AppColors.textMuted : AppColors.primary,
+                    backgroundColor: userProvider.isLoading ? context.colors.textMuted : AppColors.primary,
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
@@ -265,25 +269,80 @@ class _TrainerProfileState extends State<TrainerProfile> {
           readOnly: readOnly,
           decoration: InputDecoration(
             hintText: hint,
-            hintStyle: TextStyle(color: AppColors.textMuted),
+            hintStyle: TextStyle(color: context.colors.textMuted),
             filled: true,
-            fillColor: AppColors.surfaceLight,
+            fillColor: context.colors.surfaceLight,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: AppColors.border),
+              borderSide: BorderSide(color: context.colors.border),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: AppColors.border),
+              borderSide: BorderSide(color: context.colors.border),
             ),
             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           ),
           style: TextStyle(
-            color: readOnly ? AppColors.textMuted : AppColors.textPrimary,
+            color: readOnly ? context.colors.textMuted : context.colors.textPrimary,
           ),
         ),
       ],
     );
   }
 
+  Widget _buildThemeToggle() {
+    final themeProvider = context.watch<ThemeProvider>();
+    final isDark = themeProvider.isDark;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: context.colors.surface,
+        border: Border.all(color: context.colors.border),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+              color: AppColors.primary,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Aparência',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+                Text(
+                  isDark ? 'Tema escuro ativo' : 'Tema claro ativo',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: context.colors.textSecondary,
+                      ),
+                ),
+              ],
+            ),
+          ),
+          Switch.adaptive(
+            value: isDark,
+            activeColor: AppColors.primary,
+            onChanged: (_) => themeProvider.toggleTheme(),
+          ),
+        ],
+      ),
+    );
+  }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../theme/app_colors.dart';
+import '../../../theme/theme_colors.dart';
 import '../../../../providers/goal_provider.dart';
 import '../../../../providers/user_provider.dart';
 import '../../../../services/goal_service.dart';
@@ -132,19 +133,19 @@ class _ProfileGoalsSectionState extends State<ProfileGoalsSection> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
                     decoration: BoxDecoration(
-                      border: Border.all(color: AppColors.border),
+                      border: Border.all(color: context.colors.border),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.calendar_today, size: 16, color: AppColors.textMuted),
+                        Icon(Icons.calendar_today, size: 16, color: context.colors.textMuted),
                         const SizedBox(width: 8),
                         Text(
                           targetDate != null
                               ? '${targetDate!.day.toString().padLeft(2, '0')}/${targetDate!.month.toString().padLeft(2, '0')}/${targetDate!.year}'
                               : 'Prazo *',
                           style: TextStyle(
-                            color: targetDate != null ? null : AppColors.textMuted,
+                            color: targetDate != null ? null : context.colors.textMuted,
                           ),
                         ),
                       ],
@@ -229,7 +230,7 @@ class _ProfileGoalsSectionState extends State<ProfileGoalsSection> {
               const SizedBox(height: 4),
               Text(
                 'Meta: ${goal.targetValue.toStringAsFixed(1)} ${goal.unit}',
-                style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
+                style: TextStyle(color: context.colors.textMuted, fontSize: 13),
               ),
               const SizedBox(height: 16),
               TextFormField(
@@ -342,8 +343,8 @@ class _ProfileGoalsSectionState extends State<ProfileGoalsSection> {
         return Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: AppColors.surface,
-            border: Border.all(color: AppColors.border, width: 1),
+            color: context.colors.surface,
+            border: Border.all(color: context.colors.border, width: 1),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Column(
@@ -395,7 +396,7 @@ class _ProfileGoalsSectionState extends State<ProfileGoalsSection> {
                       style: Theme.of(context)
                           .textTheme
                           .bodySmall
-                          ?.copyWith(color: AppColors.textMuted),
+                          ?.copyWith(color: context.colors.textMuted),
                     ),
                   ),
                 )
@@ -409,7 +410,7 @@ class _ProfileGoalsSectionState extends State<ProfileGoalsSection> {
                     child: Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: AppColors.background,
+                        color: context.colors.background,
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Column(
@@ -435,7 +436,7 @@ class _ProfileGoalsSectionState extends State<ProfileGoalsSection> {
                                       style: Theme.of(context)
                                           .textTheme
                                           .labelSmall
-                                          ?.copyWith(color: AppColors.textMuted),
+                                          ?.copyWith(color: context.colors.textMuted),
                                     ),
                                   ],
                                 ),
@@ -444,7 +445,7 @@ class _ProfileGoalsSectionState extends State<ProfileGoalsSection> {
                                 children: [
                                   if (!isCompleted)
                                     IconButton(
-                                      icon: const Icon(Icons.edit, size: 16, color: AppColors.textMuted),
+                                      icon: Icon(Icons.edit, size: 16, color: context.colors.textMuted),
                                       onPressed: () => _showEditDialog(goal),
                                       tooltip: 'Atualizar progresso',
                                     ),
@@ -463,7 +464,7 @@ class _ProfileGoalsSectionState extends State<ProfileGoalsSection> {
                             child: LinearProgressIndicator(
                               value: progress,
                               minHeight: 6,
-                              backgroundColor: AppColors.surfaceLight,
+                              backgroundColor: context.colors.surfaceLight,
                               valueColor: AlwaysStoppedAnimation<Color>(
                                 GoalUtils.getStatusColor(goal.status),
                               ),
@@ -478,7 +479,7 @@ class _ProfileGoalsSectionState extends State<ProfileGoalsSection> {
                                 style: Theme.of(context)
                                     .textTheme
                                     .labelSmall
-                                    ?.copyWith(color: AppColors.textMuted),
+                                    ?.copyWith(color: context.colors.textMuted),
                               ),
                               Text(
                                 isCompleted
@@ -491,7 +492,7 @@ class _ProfileGoalsSectionState extends State<ProfileGoalsSection> {
                                           ? Colors.green
                                           : goal.daysRemaining <= 3
                                               ? AppColors.accentError
-                                              : AppColors.textMuted,
+                                              : context.colors.textMuted,
                                     ),
                               ),
                             ],
@@ -528,7 +529,7 @@ class _ErrorWidget extends StatelessWidget {
               style: Theme.of(context)
                   .textTheme
                   .bodySmall
-                  ?.copyWith(color: AppColors.textMuted),
+                  ?.copyWith(color: context.colors.textMuted),
             ),
             const SizedBox(height: 8),
             TextButton(

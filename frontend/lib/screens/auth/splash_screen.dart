@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:animate_do/animate_do.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/theme_colors.dart';
 import '../../routes/app_routes.dart';
 import '../../providers/auth_provider.dart';
 
@@ -44,7 +45,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
     switch (role) {
       case 'personal_trainer':
-        context.go(AppRoutes.trainerHome);
+        context.go(AppRoutes.trainerStudents);
         break;
       case 'admin':
         context.go(AppRoutes.adminDashboard);
@@ -58,7 +59,7 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.background,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -76,7 +77,7 @@ class _SplashScreenState extends State<SplashScreen> {
                 'Seu treino, nutrição e evolução em um só lugar.',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppColors.textSecondary,
+                      color: context.colors.textSecondary,
                     ),
               ),
             ),

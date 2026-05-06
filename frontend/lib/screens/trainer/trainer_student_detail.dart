@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:animate_do/animate_do.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/theme_colors.dart';
 import '../../models/workout_sheet_model.dart';
 import '../../models/diet_models.dart';
 import '../../providers/workout_sheet_provider.dart';
@@ -138,7 +139,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.background,
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.chevron_left, size: 28),
@@ -162,7 +163,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
         child: Column(
           children: [
             Container(
-              color: AppColors.surface,
+              color: context.colors.surface,
               child: TabBar(
                 controller: _tabController,
                 tabs: const [
@@ -171,7 +172,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                   Tab(icon: Icon(Icons.restaurant_outlined), text: 'Nutrição'),
                 ],
                 labelColor: AppColors.primary,
-                unselectedLabelColor: AppColors.textMuted,
+                unselectedLabelColor: context.colors.textMuted,
                 indicatorColor: AppColors.primary,
               ),
             ),
@@ -207,7 +208,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
             const Icon(Icons.error_outline, color: AppColors.accentError, size: 40),
             const SizedBox(height: 12),
             Text(_studentError!,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textMuted)),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.textMuted)),
           ],
         ),
       );
@@ -216,7 +217,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
     if (_student == null) {
       return Center(
         child: Text('Aluno não encontrado',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textMuted)),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.textMuted)),
       );
     }
 
@@ -250,8 +251,8 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(_student!.name, style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
-                  Text(_mapGoalTypeToPt(_student!.goalType), style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
-                  Text('${_student!.age} anos', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted)),
+                  Text(_mapGoalTypeToPt(_student!.goalType), style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.textSecondary)),
+                  Text('${_student!.age} anos', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.colors.textMuted)),
                 ],
               ),
             ],
@@ -264,8 +265,8 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                   child: Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: AppColors.surface,
-                      border: Border.all(color: AppColors.border, width: 1),
+                      color: context.colors.surface,
+                      border: Border.all(color: context.colors.border, width: 1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Column(
@@ -273,7 +274,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                         const Icon(Icons.scale, color: AppColors.primary, size: 20),
                         const SizedBox(height: 6),
                         Text('${_student!.weight.toStringAsFixed(1)} kg', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                        Text('Peso', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted)),
+                        Text('Peso', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.colors.textMuted)),
                       ],
                     ),
                   ),
@@ -285,8 +286,8 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                   child: Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: AppColors.surface,
-                      border: Border.all(color: AppColors.border, width: 1),
+                      color: context.colors.surface,
+                      border: Border.all(color: context.colors.border, width: 1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Column(
@@ -294,7 +295,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                         const Icon(Icons.height, color: AppColors.primary, size: 20),
                         const SizedBox(height: 6),
                         Text('${_student!.height.toStringAsFixed(1)} cm', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                        Text('Altura', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted)),
+                        Text('Altura', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.colors.textMuted)),
                       ],
                     ),
                   ),
@@ -310,8 +311,8 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                   child: Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: AppColors.surface,
-                      border: Border.all(color: AppColors.border, width: 1),
+                      color: context.colors.surface,
+                      border: Border.all(color: context.colors.border, width: 1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Column(
@@ -319,7 +320,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                         const Icon(Icons.cake, color: AppColors.primary, size: 20),
                         const SizedBox(height: 6),
                         Text('${_student!.age} anos', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                        Text('Idade', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted)),
+                        Text('Idade', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.colors.textMuted)),
                       ],
                     ),
                   ),
@@ -331,8 +332,8 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                   child: Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: AppColors.surface,
-                      border: Border.all(color: AppColors.border, width: 1),
+                      color: context.colors.surface,
+                      border: Border.all(color: context.colors.border, width: 1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Column(
@@ -340,7 +341,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                         const Icon(Icons.trending_up, color: AppColors.primary, size: 20),
                         const SizedBox(height: 6),
                         Text('${imc.toStringAsFixed(1)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                        Text('IMC', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted)),
+                        Text('IMC', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.colors.textMuted)),
                       ],
                     ),
                   ),
@@ -409,7 +410,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                   const Icon(Icons.error_outline, color: AppColors.accentError, size: 40),
                   const SizedBox(height: 8),
                   Text(_sheetsError!,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textMuted)),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.textMuted)),
                   const SizedBox(height: 12),
                   TextButton.icon(
                     onPressed: _loadStudentSheets,
@@ -426,10 +427,10 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                 padding: const EdgeInsets.all(32),
                 child: Column(
                   children: [
-                    const Icon(Icons.fitness_center_outlined, color: AppColors.textMuted, size: 40),
+                    Icon(Icons.fitness_center_outlined, color: context.colors.textMuted, size: 40),
                     const SizedBox(height: 8),
                     Text('Nenhuma ficha atribuída',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textMuted)),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.textMuted)),
                   ],
                 ),
               ),
@@ -442,8 +443,8 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                   margin: const EdgeInsets.only(bottom: 12),
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    border: Border.all(color: AppColors.border, width: 1),
+                    color: context.colors.surface,
+                    border: Border.all(color: context.colors.border, width: 1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Column(
@@ -464,7 +465,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                                       Text(sheet.name,
                                           style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
                                       Text('${sheet.dayOfWeekLabel} • ${sheet.exerciseCount} exercícios',
-                                          style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted)),
+                                          style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.colors.textMuted)),
                                     ],
                                   ),
                                 ),
@@ -475,12 +476,12 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                             children: [
                               GestureDetector(
                                 onTap: () => _duplicateSheetForStudent(sheet),
-                                child: const Icon(Icons.copy, color: AppColors.textMuted, size: 16),
+                                child: Icon(Icons.copy, color: context.colors.textMuted, size: 16),
                               ),
                               const SizedBox(width: 8),
                               GestureDetector(
                                 onTap: () => _showEditSheetDialog(sheet),
-                                child: const Icon(Icons.edit, color: AppColors.textMuted, size: 16),
+                                child: Icon(Icons.edit, color: context.colors.textMuted, size: 16),
                               ),
                               const SizedBox(width: 8),
                               GestureDetector(
@@ -542,7 +543,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surface,
+        backgroundColor: context.colors.surface,
         title: const Text('Confirmar exclusão'),
         content: Text('Deseja realmente remover a ficha "${sheet.name}"?'),
         actions: [
@@ -599,7 +600,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
             const SizedBox(height: 8),
             Text(
               _nutritionError!,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.textMuted),
             ),
             const SizedBox(height: 12),
             TextButton.icon(
@@ -616,7 +617,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
       return Center(
         child: Text(
           'Nenhum plano nutricional cadastrado para este aluno.',
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.textMuted),
         ),
       );
     }
@@ -634,7 +635,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
               Text(
                 activeDiet.name,
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: AppColors.textMuted,
+                      color: context.colors.textMuted,
                       fontWeight: FontWeight.w600,
                     ),
               ),
@@ -647,8 +648,8 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                 margin: const EdgeInsets.only(bottom: 12),
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  border: Border.all(color: AppColors.border, width: 1),
+                  color: context.colors.surface,
+                  border: Border.all(color: context.colors.border, width: 1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Column(
@@ -663,13 +664,13 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                             Text(m.name, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
                             Text(
                               '${m.time ?? "--:--"} • ${m.subtotalKcal.toStringAsFixed(0)} kcal',
-                              style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted),
+                              style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.colors.textMuted),
                             ),
                           ],
                         ),
                         GestureDetector(
                           onTap: () => _showEditMealDialog(activeDiet, m),
-                          child: const Icon(Icons.edit, color: AppColors.textMuted, size: 16),
+                          child: Icon(Icons.edit, color: context.colors.textMuted, size: 16),
                         ),
                       ],
                     ),
@@ -677,9 +678,9 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('P: ${m.subtotalProtein.toStringAsFixed(1)}g', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted)),
-                        Text('C: ${m.subtotalCarbs.toStringAsFixed(1)}g', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted)),
-                        Text('G: ${m.subtotalFats.toStringAsFixed(1)}g', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted)),
+                        Text('P: ${m.subtotalProtein.toStringAsFixed(1)}g', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.colors.textMuted)),
+                        Text('C: ${m.subtotalCarbs.toStringAsFixed(1)}g', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.colors.textMuted)),
+                        Text('G: ${m.subtotalFats.toStringAsFixed(1)}g', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.colors.textMuted)),
                       ],
                     ),
                   ],
@@ -693,7 +694,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
             'P ${activeDiet.totalProtein.toStringAsFixed(1)}g • '
             'C ${activeDiet.totalCarbs.toStringAsFixed(1)}g • '
             'G ${activeDiet.totalFats.toStringAsFixed(1)}g',
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textSecondary),
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.colors.textSecondary),
           ),
         ],
       ),
@@ -704,14 +705,14 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border.all(color: AppColors.border, width: 1),
+        color: context.colors.surface,
+        border: Border.all(color: context.colors.border, width: 1),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(question, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textMuted)),
+          Text(question, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.textMuted)),
           Text(answer, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600)),
         ],
       ),
@@ -807,7 +808,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setModalState) => AlertDialog(
-          backgroundColor: AppColors.surface,
+          backgroundColor: context.colors.surface,
           title: Text('Editar ${targetMeal.name}'),
           content: SizedBox(
             width: 520,
@@ -988,8 +989,8 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
 
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border(top: BorderSide(color: AppColors.border, width: 1)),
+        color: context.colors.surface,
+        border: Border(top: BorderSide(color: context.colors.border, width: 1)),
       ),
       child: BottomNavigationBar(
         currentIndex: 1,
@@ -1002,10 +1003,10 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
           ];
           context.go(routes[index]);
         },
-        backgroundColor: AppColors.surface,
+        backgroundColor: context.colors.surface,
         type: BottomNavigationBarType.fixed,
         selectedItemColor: AppColors.primary,
-        unselectedItemColor: AppColors.textMuted,
+        unselectedItemColor: context.colors.textMuted,
         items: trainerNavItems
             .map((item) => BottomNavigationBarItem(
                   icon: Icon(item['icon'] as IconData, size: 24),

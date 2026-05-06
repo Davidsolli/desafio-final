@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../theme/app_colors.dart';
+import '../../../../theme/theme_colors.dart';
+import '../../../../theme/theme_provider.dart';
 import '../../../../routes/app_routes.dart';
 import '../../../../providers/user_provider.dart';
 import '../../../../providers/auth_provider.dart';
@@ -54,8 +56,64 @@ class _ProfileSettingsState extends State<ProfileSettings> {
 
   @override
   Widget build(BuildContext context) {
+    final themeProvider = context.watch<ThemeProvider>();
+    final isDark = themeProvider.isDark;
+
     return Column(
       children: [
+        // ── Toggle de Tema ─────────────────────────────────────────────────
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: context.colors.surface,
+            border: Border.all(color: context.colors.border),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+                  color: AppColors.primary,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Aparência',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                    Text(
+                      isDark ? 'Tema escuro ativo' : 'Tema claro ativo',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: context.colors.textSecondary,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+              Switch.adaptive(
+                value: isDark,
+                activeColor: AppColors.primary,
+                onChanged: (_) => themeProvider.toggleTheme(),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        // ── Logout ────────────────────────────────────────────────────────
         SizedBox(
           width: double.infinity,
           child: ElevatedButton.icon(

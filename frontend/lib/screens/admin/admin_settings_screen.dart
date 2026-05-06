@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/theme_colors.dart';
 import '../../routes/app_routes.dart';
 import '../../providers/admin_provider.dart';
 import '../../models/admin_models.dart';
@@ -38,7 +39,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.background,
       body: SafeArea(
         child: Consumer<AdminProvider>(
           builder: (context, provider, _) {
@@ -94,7 +95,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text('Meus',
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.textSecondary)),
                         Text('Dados',
                             style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
                       ],
@@ -143,9 +144,9 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: context.colors.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: context.colors.border),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withAlpha(5),
@@ -189,14 +190,14 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                     Text(
                       admin.email,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppColors.textSecondary,
+                        color: context.colors.textSecondary,
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       admin.phoneWhatsapp ?? 'Sem telefone',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppColors.textMuted,
+                        color: context.colors.textMuted,
                       ),
                     ),
                   ],
@@ -236,10 +237,10 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
             labelText: 'Nome completo',
             prefixIcon: const Icon(Icons.person_outline),
             filled: true,
-            fillColor: AppColors.surface,
+            fillColor: context.colors.surface,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: AppColors.border),
+              borderSide: BorderSide(color: context.colors.border),
             ),
             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           ),
@@ -252,10 +253,10 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
             labelText: 'Email',
             prefixIcon: const Icon(Icons.email_outlined),
             filled: true,
-            fillColor: AppColors.surface,
+            fillColor: context.colors.surface,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: AppColors.border),
+              borderSide: BorderSide(color: context.colors.border),
             ),
             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           ),
@@ -269,10 +270,10 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
             prefixIcon: const Icon(Icons.phone_outlined),
             helperText: 'Formato: (XX) XXXXX-XXXX',
             filled: true,
-            fillColor: AppColors.surface,
+            fillColor: context.colors.surface,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: AppColors.border),
+              borderSide: BorderSide(color: context.colors.border),
             ),
             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           ),
@@ -333,7 +334,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                 onPressed: () => setState(() => _isEditing = false),
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 12),
-                  side: const BorderSide(color: AppColors.border),
+                  side: BorderSide(color: context.colors.border),
                 ),
                 child: Text(
                   'Cancelar',

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:animate_do/animate_do.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/theme_colors.dart';
 import '../../providers/user_provider.dart';
 import '../../providers/goal_provider.dart';
 import '../../providers/logbook_provider.dart';
@@ -49,7 +50,7 @@ class _MetricsScreenState extends State<MetricsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.background,
       body: SafeArea(
         child: SingleChildScrollView(
           child: Column(
@@ -114,7 +115,7 @@ class _MetricsScreenState extends State<MetricsScreen> {
             child: Text(
               'Acompanhe seu progresso e desempenho',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.textSecondary,
+                    color: context.colors.textSecondary,
                   ),
             ),
           ),
@@ -142,10 +143,10 @@ class _MetricsScreenState extends State<MetricsScreen> {
               child: FilterChip(
                 label: Text(period.$2),
                 selected: isSelected,
-                backgroundColor: AppColors.surface,
+                backgroundColor: context.colors.surface,
                 selectedColor: AppColors.primary,
                 labelStyle: TextStyle(
-                  color: isSelected ? Colors.white : AppColors.textPrimary,
+                  color: isSelected ? Colors.white : context.colors.textPrimary,
                   fontWeight: FontWeight.w600,
                 ),
                 onSelected: (selected) {
@@ -176,8 +177,8 @@ class _MetricsScreenState extends State<MetricsScreen> {
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: AppColors.surface,
-              border: Border.all(color: AppColors.border, width: 1),
+              color: context.colors.surface,
+              border: Border.all(color: context.colors.border, width: 1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Column(
@@ -210,7 +211,7 @@ class _MetricsScreenState extends State<MetricsScreen> {
       child: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: AppColors.background,
+          color: context.colors.background,
           borderRadius: BorderRadius.circular(10),
         ),
         child: Column(
@@ -224,11 +225,11 @@ class _MetricsScreenState extends State<MetricsScreen> {
             const SizedBox(height: 2),
             Text(
               label,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted),
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.colors.textMuted),
             ),
             Text(
               unit,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted, fontSize: 10),
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.colors.textMuted, fontSize: 10),
             ),
           ],
         ),
@@ -258,8 +259,8 @@ class _MetricsScreenState extends State<MetricsScreen> {
               Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  border: Border.all(color: AppColors.border, width: 1),
+                  color: context.colors.surface,
+                  border: Border.all(color: context.colors.border, width: 1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Column(
@@ -313,8 +314,8 @@ class _MetricsScreenState extends State<MetricsScreen> {
               Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  border: Border.all(color: AppColors.border, width: 1),
+                  color: context.colors.surface,
+                  border: Border.all(color: context.colors.border, width: 1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Column(

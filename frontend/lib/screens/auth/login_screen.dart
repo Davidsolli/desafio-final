@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/theme_colors.dart';
 import '../../routes/app_routes.dart';
 import '../../providers/auth_provider.dart';
 
@@ -65,7 +66,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     switch (role) {
       case 'personal_trainer':
-        context.go(AppRoutes.trainerHome);
+        context.go(AppRoutes.trainerStudents);
         break;
       case 'admin':
         context.go(AppRoutes.adminDashboard);
@@ -89,7 +90,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.background,
       body: SafeArea(
         child: Column(
           children: [
@@ -115,7 +116,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     Text(
                       'Acesse sua conta',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: AppColors.textSecondary,
+                            color: context.colors.textSecondary,
                           ),
                     ),
                     const SizedBox(height: 16),
@@ -184,7 +185,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       children: [
                         Expanded(
                           child: Divider(
-                            color: AppColors.textSecondary.withValues(alpha: 0.3),
+                            color: context.colors.textSecondary.withValues(alpha: 0.3),
                           ),
                         ),
                         Padding(
@@ -192,13 +193,13 @@ class _LoginScreenState extends State<LoginScreen> {
                           child: Text(
                             'OU',
                             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: AppColors.textSecondary,
+                                  color: context.colors.textSecondary,
                                 ),
                           ),
                         ),
                         Expanded(
                           child: Divider(
-                            color: AppColors.textSecondary.withValues(alpha: 0.3),
+                            color: context.colors.textSecondary.withValues(alpha: 0.3),
                           ),
                         ),
                       ],

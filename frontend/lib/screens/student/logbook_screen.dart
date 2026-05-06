@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:animate_do/animate_do.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/theme_colors.dart';
 import '../../providers/logbook_provider.dart';
 import '../../services/logbook_service.dart';
 
@@ -34,7 +35,7 @@ class _LogbookScreenState extends State<LogbookScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.background,
       body: SafeArea(
         child: Column(
           children: [
@@ -74,12 +75,12 @@ class _LogbookScreenState extends State<LogbookScreen> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(Icons.notes_outlined, size: 48, color: AppColors.textMuted),
+                          Icon(Icons.notes_outlined, size: 48, color: context.colors.textMuted),
                           const SizedBox(height: 16),
                           Text(
                             'Nenhuma sessão registrada',
                             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  color: AppColors.textSecondary,
+                                  color: context.colors.textSecondary,
                                 ),
                           ),
                           const SizedBox(height: 24),
@@ -137,7 +138,7 @@ class _LogbookScreenState extends State<LogbookScreen> {
             child: Text(
               'Histórico de suas sessões de treino',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.textSecondary,
+                    color: context.colors.textSecondary,
                   ),
             ),
           ),
@@ -166,10 +167,10 @@ class _LogbookScreenState extends State<LogbookScreen> {
               child: FilterChip(
                 label: Text(filter.$2),
                 selected: isSelected,
-                backgroundColor: AppColors.surface,
+                backgroundColor: context.colors.surface,
                 selectedColor: AppColors.primary,
                 labelStyle: TextStyle(
-                  color: isSelected ? Colors.white : AppColors.textPrimary,
+                  color: isSelected ? Colors.white : context.colors.textPrimary,
                   fontWeight: FontWeight.w600,
                 ),
                 onSelected: (selected) {
@@ -195,8 +196,8 @@ class _LogbookScreenState extends State<LogbookScreen> {
           margin: const EdgeInsets.only(bottom: 12),
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: AppColors.surface,
-            border: Border.all(color: AppColors.border, width: 1),
+            color: context.colors.surface,
+            border: Border.all(color: context.colors.border, width: 1),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Column(
@@ -223,13 +224,13 @@ class _LogbookScreenState extends State<LogbookScreen> {
                             Icon(
                               Icons.calendar_today_outlined,
                               size: 14,
-                              color: AppColors.textMuted,
+                              color: context.colors.textMuted,
                             ),
                             const SizedBox(width: 4),
                             Text(
                               session.formattedDate,
                               style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                    color: AppColors.textMuted,
+                                    color: context.colors.textMuted,
                                   ),
                             ),
                           ],
@@ -306,13 +307,13 @@ class _LogbookScreenState extends State<LogbookScreen> {
           value,
           style: Theme.of(context).textTheme.labelSmall?.copyWith(
                 fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary,
+                color: context.colors.textPrimary,
               ),
         ),
         Text(
           label,
           style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: AppColors.textMuted,
+                color: context.colors.textMuted,
                 fontSize: 10,
               ),
         ),
@@ -377,7 +378,7 @@ class _LogbookScreenState extends State<LogbookScreen> {
                   child: Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: AppColors.background,
+                      color: context.colors.background,
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Column(
@@ -396,7 +397,7 @@ class _LogbookScreenState extends State<LogbookScreen> {
                             Text(
                               '${exercise.sets}x${exercise.reps} × ${exercise.weight}kg',
                               style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                    color: AppColors.textMuted,
+                                    color: context.colors.textMuted,
                                   ),
                             ),
                             Text(
@@ -434,7 +435,7 @@ class _LogbookScreenState extends State<LogbookScreen> {
           Text(
             label,
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: AppColors.textMuted,
+                  color: context.colors.textMuted,
                 ),
           ),
           const SizedBox(height: 2),
@@ -702,7 +703,7 @@ class _LogbookScreenState extends State<LogbookScreen> {
       case 'intensa':
         return const Color(0xFFe74c3c);
       default:
-        return AppColors.textMuted;
+        return context.colors.textMuted;
     }
   }
 

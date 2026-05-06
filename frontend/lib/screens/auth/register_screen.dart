@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/theme_colors.dart';
 import '../../routes/app_routes.dart';
 import '../../providers/auth_provider.dart';
 
@@ -135,7 +136,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.background,
       body: SafeArea(
         child: Column(
           children: [
@@ -164,7 +165,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         children: [
           GestureDetector(
             onTap: _back,
-            child: const Icon(Icons.chevron_left, color: AppColors.textSecondary, size: 28),
+            child: Icon(Icons.chevron_left, color: context.colors.textSecondary, size: 28),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -176,7 +177,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     margin: EdgeInsets.only(right: i < 2 ? 6 : 0),
                     height: 4,
                     decoration: BoxDecoration(
-                      color: active ? AppColors.primary : AppColors.surfaceLighter,
+                      color: active ? AppColors.primary : context.colors.surfaceLighter,
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -187,7 +188,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           const SizedBox(width: 12),
           Text(
             '${_currentStep + 1}/3',
-            style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+            style: TextStyle(color: context.colors.textSecondary, fontSize: 13),
           ),
         ],
       ),
@@ -199,8 +200,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 4),
-        const Text('Dados Pessoais',
-            style: TextStyle(color: AppColors.textPrimary, fontSize: 22, fontWeight: FontWeight.bold)),
+        Text('Dados Pessoais',
+            style: TextStyle(color: context.colors.textPrimary, fontSize: 22, fontWeight: FontWeight.bold)),
         const SizedBox(height: 2),
         const Text('Vamos começar com o básico',
             style: TextStyle(color: AppColors.primary, fontSize: 14)),
@@ -214,9 +215,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
         _label('Senha'),
         _inputPassword(),
         const SizedBox(height: 4),
-        const Text(
+        Text(
           'Mín. 8 caracteres: maiúscula, minúscula, número e caractere especial',
-          style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
+          style: TextStyle(color: context.colors.textSecondary, fontSize: 11),
         ),
         const SizedBox(height: 8),
       ],
@@ -228,8 +229,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 4),
-        const Text('Dados Corporais',
-            style: TextStyle(color: AppColors.textPrimary, fontSize: 22, fontWeight: FontWeight.bold)),
+        Text('Dados Corporais',
+            style: TextStyle(color: context.colors.textPrimary, fontSize: 22, fontWeight: FontWeight.bold)),
         const SizedBox(height: 2),
         const Text('Para cálculos personalizados',
             style: TextStyle(color: AppColors.primary, fontSize: 14)),
@@ -252,8 +253,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 4),
-        const Text('Seu Objetivo',
-            style: TextStyle(color: AppColors.textPrimary, fontSize: 22, fontWeight: FontWeight.bold)),
+        Text('Seu Objetivo',
+            style: TextStyle(color: context.colors.textPrimary, fontSize: 22, fontWeight: FontWeight.bold)),
         const SizedBox(height: 2),
         const Text('Escolha seu foco principal',
             style: TextStyle(color: AppColors.primary, fontSize: 14)),
@@ -272,9 +273,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          color: selected ? AppColors.primary.withValues(alpha: 0.12) : AppColors.surface,
+          color: selected ? AppColors.primary.withValues(alpha: 0.12) : context.colors.surface,
           border: Border.all(
-            color: selected ? AppColors.primary : AppColors.border,
+            color: selected ? AppColors.primary : context.colors.border,
           ),
           borderRadius: BorderRadius.circular(12),
         ),
@@ -287,11 +288,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
               children: [
                 Text(goal['title']!,
                     style: TextStyle(
-                        color: selected ? AppColors.primary : AppColors.textPrimary,
+                        color: selected ? AppColors.primary : context.colors.textPrimary,
                         fontWeight: FontWeight.bold,
                         fontSize: 15)),
                 Text(goal['subtitle']!,
-                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                    style: TextStyle(color: context.colors.textSecondary, fontSize: 12)),
               ],
             ),
           ],
@@ -341,8 +342,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Widget _label(String text) => Padding(
         padding: const EdgeInsets.only(bottom: 6),
         child: Text(text,
-            style: const TextStyle(
-                color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w500)),
+            style: TextStyle(
+                color: context.colors.textPrimary, fontSize: 13, fontWeight: FontWeight.w500)),
       );
 
   Widget _input(
@@ -353,12 +354,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
       TextField(
         controller: controller,
         keyboardType: keyboardType,
-        style: const TextStyle(color: AppColors.textPrimary),
+        style: TextStyle(color: context.colors.textPrimary),
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: const TextStyle(color: AppColors.textMuted),
+          hintStyle: TextStyle(color: context.colors.textMuted),
           filled: true,
-          fillColor: AppColors.surfaceLight,
+          fillColor: context.colors.surfaceLight,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
             borderSide: BorderSide.none,
@@ -370,12 +371,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Widget _inputPassword() => TextField(
         controller: _passwordController,
         obscureText: _obscurePassword,
-        style: const TextStyle(color: AppColors.textPrimary),
+        style: TextStyle(color: context.colors.textPrimary),
         decoration: InputDecoration(
           hintText: '••••••••',
-          hintStyle: const TextStyle(color: AppColors.textMuted),
+          hintStyle: TextStyle(color: context.colors.textMuted),
           filled: true,
-          fillColor: AppColors.surfaceLight,
+          fillColor: context.colors.surfaceLight,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
             borderSide: BorderSide.none,
@@ -384,7 +385,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           suffixIcon: IconButton(
             icon: Icon(
               _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-              color: AppColors.textMuted,
+              color: context.colors.textMuted,
             ),
             onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
           ),

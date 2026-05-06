@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/theme_colors.dart';
 import '../../services/goal_service.dart';
 import '../../utils/goal_utils.dart';
 
@@ -58,9 +59,9 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
     final goal = _detail ?? widget.initialGoal;
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.background,
       appBar: AppBar(
-        backgroundColor: AppColors.background,
+        backgroundColor: context.colors.background,
         elevation: 0,
         title: const Text('Detalhe da Meta'),
         leading: IconButton(
@@ -124,8 +125,8 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border.all(color: AppColors.border),
+        color: context.colors.surface,
+        border: Border.all(color: context.colors.border),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -149,7 +150,7 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
             Text(
               goal.description!,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.textSecondary,
+                    color: context.colors.textSecondary,
                   ),
             ),
           ],
@@ -164,8 +165,8 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border.all(color: AppColors.border),
+        color: context.colors.surface,
+        border: Border.all(color: context.colors.border),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -202,7 +203,7 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
             child: LinearProgressIndicator(
               value: (goal.progressPercentage / 100).clamp(0.0, 1.0),
               minHeight: 10,
-              backgroundColor: AppColors.surfaceLight,
+              backgroundColor: context.colors.surfaceLight,
               valueColor: AlwaysStoppedAnimation(
                 goal.isCompleted ? Colors.green : AppColors.primary,
               ),
@@ -215,13 +216,13 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
               Text(
                 'Inicial',
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: AppColors.textMuted,
+                      color: context.colors.textMuted,
                     ),
               ),
               Text(
                 'Alvo: ${goal.targetValue.toStringAsFixed(1)} ${goal.unit}',
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: AppColors.textMuted,
+                      color: context.colors.textMuted,
                     ),
               ),
             ],
@@ -235,8 +236,8 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border.all(color: AppColors.border),
+        color: context.colors.surface,
+        border: Border.all(color: context.colors.border),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -285,8 +286,8 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border.all(color: AppColors.border),
+        color: context.colors.surface,
+        border: Border.all(color: context.colors.border),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -333,7 +334,7 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
                             Text(
                               entry.notes!,
                               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: AppColors.textSecondary,
+                                    color: context.colors.textSecondary,
                                   ),
                             ),
                         ],
@@ -342,7 +343,7 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
                     Text(
                       _formatDateTime(entry.recordedAt),
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: AppColors.textMuted,
+                            color: context.colors.textMuted,
                           ),
                     ),
                   ],
@@ -358,12 +359,12 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
   Widget _buildInfoRow(BuildContext context, IconData icon, String label, String value, {Color? color}) {
     return Row(
       children: [
-        Icon(icon, size: 16, color: color ?? AppColors.textMuted),
+        Icon(icon, size: 16, color: color ?? context.colors.textMuted),
         const SizedBox(width: 8),
         Text(
           '$label: ',
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: AppColors.textSecondary,
+                color: context.colors.textSecondary,
               ),
         ),
         Text(
@@ -401,13 +402,13 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: AppColors.surfaceLight,
+        color: context.colors.surfaceLight,
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
         label,
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: AppColors.textSecondary,
+              color: context.colors.textSecondary,
             ),
       ),
     );

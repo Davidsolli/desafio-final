@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:animate_do/animate_do.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/theme_colors.dart';
 import '../../providers/nutrition_provider.dart';
 import '../../models/diet_models.dart';
 import 'widgets/food_search_modal.dart';
@@ -36,20 +37,20 @@ class _NutritionScreenState extends State<NutritionScreen> {
     return DefaultTabController(
       length: 2,
       child: Scaffold(
-        backgroundColor: AppColors.background,
+        backgroundColor: context.colors.background,
         appBar: AppBar(
-          backgroundColor: AppColors.background,
+          backgroundColor: context.colors.background,
           elevation: 0,
           title: Text(
             'Nutrição',
             style: Theme.of(context).textTheme.displaySmall?.copyWith(
                   fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
+                  color: context.colors.textPrimary,
                 ),
           ),
-          bottom: const TabBar(
+          bottom: TabBar(
             labelColor: AppColors.primary,
-            unselectedLabelColor: AppColors.textSecondary,
+            unselectedLabelColor: context.colors.textSecondary,
             indicatorColor: AppColors.primary,
             tabs: [
               Tab(icon: Icon(Icons.menu_book), text: 'Diário Alimentar'),
@@ -128,17 +129,17 @@ class _NutritionScreenState extends State<NutritionScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: context.colors.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: context.colors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             padding: const EdgeInsets.all(12),
-            decoration: const BoxDecoration(
-              border: Border(bottom: BorderSide(color: AppColors.border)),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: context.colors.border)),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -158,7 +159,7 @@ class _NutritionScreenState extends State<NutritionScreen> {
                 title: Text(entry.foodName, style: const TextStyle(fontSize: 14)),
                 subtitle: Text('${entry.quantityG}g • ${entry.kcal.toStringAsFixed(0)} kcal', style: const TextStyle(fontSize: 12)),
                 trailing: IconButton(
-                  icon: const Icon(Icons.delete_outline, size: 20, color: AppColors.textMuted),
+                  icon: Icon(Icons.delete_outline, size: 20, color: context.colors.textMuted),
                   onPressed: () => _deleteLogbookEntry(context, entry.id),
                 ),
               )),
@@ -190,7 +191,7 @@ class _NutritionScreenState extends State<NutritionScreen> {
           const SizedBox(height: 4),
           Text(
             'Objetivo: ${diet.goal ?? "Não definido"}',
-            style: const TextStyle(color: AppColors.textSecondary),
+            style: TextStyle(color: context.colors.textSecondary),
           ),
           const SizedBox(height: 16),
           _buildCalorieCard(
@@ -215,26 +216,26 @@ class _NutritionScreenState extends State<NutritionScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: context.colors.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: context.colors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             padding: const EdgeInsets.all(12),
-            decoration: const BoxDecoration(
-              border: Border(bottom: BorderSide(color: AppColors.border)),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: context.colors.border)),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.access_time, size: 16, color: AppColors.textMuted),
+                    Icon(Icons.access_time, size: 16, color: context.colors.textMuted),
                     const SizedBox(width: 6),
-                    Text(meal.time ?? '--:--', style: const TextStyle(color: AppColors.textMuted)),
+                    Text(meal.time ?? '--:--', style: TextStyle(color: context.colors.textMuted)),
                     const SizedBox(width: 8),
                     Text(
                       meal.name,
@@ -264,7 +265,7 @@ class _NutritionScreenState extends State<NutritionScreen> {
                 if (item.observations != null && item.observations!.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 4),
-                    child: Text('Obs: ${item.observations}', style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                    child: Text('Obs: ${item.observations}', style: TextStyle(fontSize: 12, color: context.colors.textMuted)),
                   ),
               ],
             ),
@@ -286,8 +287,8 @@ class _NutritionScreenState extends State<NutritionScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border.all(color: AppColors.border, width: 1),
+        color: context.colors.surface,
+        border: Border.all(color: context.colors.border, width: 1),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -306,7 +307,7 @@ class _NutritionScreenState extends State<NutritionScreen> {
                   const SizedBox(height: 2),
                   Text(
                     subtitleLabel,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.textSecondary),
                   ),
                 ],
               ),
@@ -314,7 +315,7 @@ class _NutritionScreenState extends State<NutritionScreen> {
                 Container(
                   width: 60,
                   height: 60,
-                  decoration: const BoxDecoration(shape: BoxShape.circle, color: AppColors.surfaceLight),
+                  decoration: BoxDecoration(shape: BoxShape.circle, color: context.colors.surfaceLight),
                   child: Center(
                     child: Text(
                       '${percent.toStringAsFixed(0)}%',
@@ -331,7 +332,7 @@ class _NutritionScreenState extends State<NutritionScreen> {
               child: LinearProgressIndicator(
                 value: (percent / 100).clamp(0, 1),
                 minHeight: 8,
-                backgroundColor: AppColors.surfaceLight,
+                backgroundColor: context.colors.surfaceLight,
                 valueColor: const AlwaysStoppedAnimation(AppColors.primary),
               ),
             ),
@@ -355,7 +356,7 @@ class _NutritionScreenState extends State<NutritionScreen> {
       children: [
         Container(width: 12, height: 12, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
         const SizedBox(height: 6),
-        Text(label, style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
+        Text(label, style: TextStyle(fontSize: 12, color: context.colors.textMuted)),
         const SizedBox(height: 2),
         Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
       ],
@@ -368,12 +369,12 @@ class _NutritionScreenState extends State<NutritionScreen> {
         padding: const EdgeInsets.symmetric(vertical: 60),
         child: Column(
           children: [
-            const Icon(Icons.restaurant_menu, size: 64, color: AppColors.surfaceLight),
+            Icon(Icons.restaurant_menu, size: 64, color: context.colors.surfaceLight),
             const SizedBox(height: 16),
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: AppColors.textSecondary, fontSize: 16),
+              style: TextStyle(color: context.colors.textSecondary, fontSize: 16),
             ),
           ],
         ),

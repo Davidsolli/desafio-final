@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:animate_do/animate_do.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/theme_colors.dart';
 import '../../providers/admin_provider.dart';
 
 class AdminPTDetailsScreen extends StatefulWidget {
@@ -43,7 +44,7 @@ class _AdminPTDetailsScreenState extends State<AdminPTDetailsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.background,
       body: SafeArea(
         child: Consumer<AdminProvider>(
           builder: (context, provider, _) {
@@ -82,9 +83,9 @@ class _AdminPTDetailsScreenState extends State<AdminPTDetailsScreen> {
                         child: Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: AppColors.surface,
+                            color: context.colors.surface,
                             borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: AppColors.border),
+                            border: Border.all(color: context.colors.border),
                           ),
                           child: const Icon(Icons.arrow_back, size: 20),
                         ),
@@ -95,7 +96,7 @@ class _AdminPTDetailsScreenState extends State<AdminPTDetailsScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text('Alunos de',
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.textSecondary)),
                             Text(widget.trainerName,
                                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
                           ],
@@ -115,13 +116,13 @@ class _AdminPTDetailsScreenState extends State<AdminPTDetailsScreen> {
                     controller: _searchController,
                     decoration: InputDecoration(
                       hintText: 'Buscar aluno...',
-                      hintStyle: const TextStyle(color: AppColors.textMuted),
-                      prefixIcon: const Icon(Icons.search, color: AppColors.textMuted),
+                      hintStyle: TextStyle(color: context.colors.textMuted),
+                      prefixIcon: Icon(Icons.search, color: context.colors.textMuted),
                       filled: true,
-                      fillColor: AppColors.surface,
+                      fillColor: context.colors.surface,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: AppColors.border),
+                        borderSide: BorderSide(color: context.colors.border),
                       ),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                     ),
@@ -132,7 +133,7 @@ class _AdminPTDetailsScreenState extends State<AdminPTDetailsScreen> {
                   child: filteredStudents.isEmpty
                       ? Center(
                           child: Text('Nenhum aluno encontrado',
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textMuted)),
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.textMuted)),
                         )
                       : ListView.builder(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -192,15 +193,15 @@ class _AdminPTDetailsScreenState extends State<AdminPTDetailsScreen> {
             child: Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: _filterStatus == 'all' ? AppColors.primary.withAlpha(20) : AppColors.surface,
+                color: _filterStatus == 'all' ? AppColors.primary.withAlpha(20) : context.colors.surface,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.border),
+                border: Border.all(color: context.colors.border),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('Total',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.textSecondary)),
                   const SizedBox(height: 4),
                   Text('$total',
                       style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
@@ -216,9 +217,9 @@ class _AdminPTDetailsScreenState extends State<AdminPTDetailsScreen> {
             child: Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: _filterStatus == 'active' ? Colors.green.withAlpha(20) : AppColors.surface,
+                color: _filterStatus == 'active' ? Colors.green.withAlpha(20) : context.colors.surface,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.border),
+                border: Border.all(color: context.colors.border),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -240,9 +241,9 @@ class _AdminPTDetailsScreenState extends State<AdminPTDetailsScreen> {
             child: Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: _filterStatus == 'inactive' ? Colors.red.withAlpha(20) : AppColors.surface,
+                color: _filterStatus == 'inactive' ? Colors.red.withAlpha(20) : context.colors.surface,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.border),
+                border: Border.all(color: context.colors.border),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -311,7 +312,7 @@ class _AdminPTDetailsScreenState extends State<AdminPTDetailsScreen> {
                     email,
                     style: TextStyle(
                       fontSize: 12,
-                      color: AppColors.textSecondary,
+                      color: context.colors.textSecondary,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -319,7 +320,7 @@ class _AdminPTDetailsScreenState extends State<AdminPTDetailsScreen> {
                     phone,
                     style: TextStyle(
                       fontSize: 12,
-                      color: AppColors.textSecondary,
+                      color: context.colors.textSecondary,
                     ),
                   ),
                 ],

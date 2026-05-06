@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/theme_colors.dart';
 import '../../providers/invitation_provider.dart';
 
 class GenerateInviteScreen extends StatefulWidget {
@@ -70,7 +71,7 @@ class _GenerateInviteScreenState extends State<GenerateInviteScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.background,
       appBar: AppBar(
         title: const Text('Gerar Códigos de Acesso'),
         leading: IconButton(
@@ -100,7 +101,7 @@ class _GenerateInviteScreenState extends State<GenerateInviteScreen> {
                           Text(
                             'Crie um novo código único para seus alunos se cadastrarem',
                             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: AppColors.textSecondary,
+                                  color: context.colors.textSecondary,
                                 ),
                           ),
                           const SizedBox(height: 16),
@@ -131,7 +132,7 @@ class _GenerateInviteScreenState extends State<GenerateInviteScreen> {
                                               .textTheme
                                               .bodySmall
                                               ?.copyWith(
-                                                color: AppColors.textSecondary,
+                                                color: context.colors.textSecondary,
                                               ),
                                         ),
                                         const SizedBox(height: 4),
@@ -251,7 +252,7 @@ class _GenerateInviteScreenState extends State<GenerateInviteScreen> {
                                   Icon(
                                     Icons.inbox_outlined,
                                     size: 48,
-                                    color: AppColors.textSecondary,
+                                    color: context.colors.textSecondary,
                                   ),
                                   const SizedBox(height: 12),
                                   Text(
@@ -260,7 +261,7 @@ class _GenerateInviteScreenState extends State<GenerateInviteScreen> {
                                         .textTheme
                                         .bodyMedium
                                         ?.copyWith(
-                                          color: AppColors.textSecondary,
+                                          color: context.colors.textSecondary,
                                         ),
                                   ),
                                 ],
@@ -370,7 +371,7 @@ class _GenerateInviteScreenState extends State<GenerateInviteScreen> {
             Text(
               label,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.textSecondary,
+                    color: context.colors.textSecondary,
                   ),
             ),
           ],

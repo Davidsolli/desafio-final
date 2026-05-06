@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:animate_do/animate_do.dart';
 import '../../../../theme/app_colors.dart';
+import '../../../theme/theme_colors.dart';
 import '../../../../services/user_service.dart';
 
 class ProfileHeader extends StatelessWidget {
@@ -41,17 +42,17 @@ class ProfileHeader extends StatelessWidget {
                   width: 28,
                   height: 28,
                   decoration: BoxDecoration(
-                    color: AppColors.surfaceLighter,
+                    color: context.colors.surfaceLighter,
                     border: Border.all(
-                      color: AppColors.border,
+                      color: context.colors.border,
                       width: 1,
                     ),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.camera_alt,
                     size: 14,
-                    color: AppColors.textMuted,
+                    color: context.colors.textMuted,
                   ),
                 ),
               ),
@@ -62,13 +63,13 @@ class ProfileHeader extends StatelessWidget {
             user.name,
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.bold,
-                  color: Colors.white,
+                  color: context.colors.textPrimary,
                 ),
           ),
           Text(
             user.email,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: AppColors.textSecondary,
+                  color: context.colors.textSecondary,
                 ),
           ),
         ],

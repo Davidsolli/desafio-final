@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/theme_colors.dart';
 import '../../routes/app_routes.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/dashboard_provider.dart';
@@ -40,7 +41,7 @@ class _TrainerHomeScreenState extends State<TrainerHomeScreen> {
     return ChangeNotifierProvider.value(
       value: _dashboardProvider,
       child: Scaffold(
-        backgroundColor: AppColors.background,
+        backgroundColor: context.colors.background,
         body: SafeArea(
           child: Consumer<DashboardProvider>(
             builder: (context, provider, _) {
@@ -55,7 +56,7 @@ class _TrainerHomeScreenState extends State<TrainerHomeScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.error_outline, size: 48, color: AppColors.textSecondary),
+                      Icon(Icons.error_outline, size: 48, color: context.colors.textSecondary),
                       const SizedBox(height: 16),
                       Text(provider.error ?? 'Erro ao carregar',
                           style: Theme.of(context).textTheme.bodyLarge),
@@ -73,7 +74,7 @@ class _TrainerHomeScreenState extends State<TrainerHomeScreen> {
                 slivers: [
                   // Header
                   SliverAppBar(
-                    backgroundColor: AppColors.background,
+                    backgroundColor: context.colors.background,
                     elevation: 0,
                     pinned: false,
                   ),
@@ -91,7 +92,7 @@ class _TrainerHomeScreenState extends State<TrainerHomeScreen> {
                                 children: [
                                   Text('Olá, ${provider.trainerName}',
                                       style: Theme.of(context).textTheme.bodySmall
-                                          ?.copyWith(color: AppColors.textSecondary)),
+                                          ?.copyWith(color: context.colors.textSecondary)),
                                   Text('Painel Profissional 👨‍🏫',
                                       style: Theme.of(context).textTheme.headlineSmall
                                           ?.copyWith(fontWeight: FontWeight.bold)),
@@ -139,15 +140,15 @@ class _TrainerHomeScreenState extends State<TrainerHomeScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(Icons.people_outline,
-                                size: 48, color: AppColors.textMuted),
+                            Icon(Icons.people_outline,
+                                size: 48, color: context.colors.textMuted),
                             const SizedBox(height: 16),
                             Text('Nenhum aluno vinculado ainda',
                                 style: Theme.of(context).textTheme.bodyLarge),
                             const SizedBox(height: 8),
                             Text('Crie uma ficha de treino para começar',
                                 style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(color: AppColors.textSecondary)),
+                                    ?.copyWith(color: context.colors.textSecondary)),
                           ],
                         ),
                       ),
@@ -192,9 +193,9 @@ class _StatsCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: context.colors.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border, width: 1),
+        border: Border.all(color: context.colors.border, width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -211,7 +212,7 @@ class _StatsCard extends StatelessWidget {
               style: Theme.of(context)
                   .textTheme
                   .bodySmall
-                  ?.copyWith(color: AppColors.textSecondary)),
+                  ?.copyWith(color: context.colors.textSecondary)),
         ],
       ),
     );
@@ -232,9 +233,9 @@ class _StudentCard extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: AppColors.surface,
+          color: context.colors.surface,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.border, width: 1),
+          border: Border.all(color: context.colors.border, width: 1),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -267,7 +268,7 @@ class _StudentCard extends StatelessWidget {
                       style: Theme.of(context)
                           .textTheme
                           .bodySmall
-                          ?.copyWith(color: AppColors.textSecondary),
+                          ?.copyWith(color: context.colors.textSecondary),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis),
                 ],
@@ -282,7 +283,7 @@ class _StudentCard extends StatelessWidget {
                     style: Theme.of(context)
                         .textTheme
                         .bodySmall
-                        ?.copyWith(color: AppColors.textSecondary),
+                        ?.copyWith(color: context.colors.textSecondary),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis),
                 const SizedBox(height: 8),
@@ -296,7 +297,7 @@ class _StudentCard extends StatelessWidget {
                         borderRadius: BorderRadius.circular(3),
                         child: LinearProgressIndicator(
                           value: student.adherencePercent / 100,
-                          backgroundColor: AppColors.textMuted.withOpacity(0.2),
+                          backgroundColor: context.colors.textMuted.withOpacity(0.2),
                           valueColor:
                               const AlwaysStoppedAnimation<Color>(AppColors.primary),
                         ),

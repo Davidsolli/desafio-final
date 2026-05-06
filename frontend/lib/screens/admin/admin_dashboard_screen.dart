@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:animate_do/animate_do.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/theme_colors.dart';
 import '../../providers/admin_provider.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
@@ -36,7 +37,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.background,
       body: SafeArea(
         child: Consumer<AdminProvider>(
           builder: (context, provider, _) {
@@ -72,7 +73,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('Gerenciar',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.textSecondary)),
                       Text('Trainers',
                           style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
                     ],
@@ -92,13 +93,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                           controller: _searchController,
                           decoration: InputDecoration(
                             hintText: 'Buscar trainer...',
-                            hintStyle: const TextStyle(color: AppColors.textMuted),
-                            prefixIcon: const Icon(Icons.search, color: AppColors.textMuted),
+                            hintStyle: TextStyle(color: context.colors.textMuted),
+                            prefixIcon: Icon(Icons.search, color: context.colors.textMuted),
                             filled: true,
-                            fillColor: AppColors.surface,
+                            fillColor: context.colors.surface,
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(color: AppColors.border),
+                              borderSide: BorderSide(color: context.colors.border),
                             ),
                             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                           ),
@@ -122,7 +123,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   child: filteredTrainers.isEmpty
                       ? Center(
                           child: Text('Nenhum trainer encontrado',
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textMuted)),
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.textMuted)),
                         )
                       : ListView.builder(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -182,10 +183,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             child: Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: _filterStatus == 'all' ? AppColors.primary.withAlpha(20) : AppColors.surface,
+                color: _filterStatus == 'all' ? AppColors.primary.withAlpha(20) : context.colors.surface,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: _filterStatus == 'all' ? AppColors.primary : AppColors.border,
+                  color: _filterStatus == 'all' ? AppColors.primary : context.colors.border,
                   width: _filterStatus == 'all' ? 2 : 1,
                 ),
               ),
@@ -193,7 +194,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('Total',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.textSecondary)),
                   const SizedBox(height: 4),
                   Text('$total',
                       style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
@@ -209,10 +210,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             child: Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: _filterStatus == 'active' ? Colors.green.withAlpha(20) : AppColors.surface,
+                color: _filterStatus == 'active' ? Colors.green.withAlpha(20) : context.colors.surface,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: _filterStatus == 'active' ? Colors.green : AppColors.border,
+                  color: _filterStatus == 'active' ? Colors.green : context.colors.border,
                   width: _filterStatus == 'active' ? 2 : 1,
                 ),
               ),
@@ -236,10 +237,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             child: Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: _filterStatus == 'inactive' ? Colors.red.withAlpha(20) : AppColors.surface,
+                color: _filterStatus == 'inactive' ? Colors.red.withAlpha(20) : context.colors.surface,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: _filterStatus == 'inactive' ? Colors.red : AppColors.border,
+                  color: _filterStatus == 'inactive' ? Colors.red : context.colors.border,
                   width: _filterStatus == 'inactive' ? 2 : 1,
                 ),
               ),
@@ -275,9 +276,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: AppColors.surface,
+          color: context.colors.surface,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.border),
+          border: Border.all(color: context.colors.border),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withAlpha(5),
@@ -332,12 +333,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       const SizedBox(height: 4),
                       Text(
                         email,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.textSecondary),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         phone,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.textMuted),
                       ),
                     ],
                   ),
@@ -376,7 +377,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             Container(
               padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
               decoration: BoxDecoration(
-                color: AppColors.background,
+                color: context.colors.background,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
@@ -389,13 +390,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   const SizedBox(width: 6),
                   Text(
                     'Ver alunos',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.textSecondary),
                   ),
                   const Spacer(),
                   Icon(
                     Icons.arrow_forward_ios,
                     size: 12,
-                    color: AppColors.textMuted,
+                    color: context.colors.textMuted,
                   ),
                 ],
               ),

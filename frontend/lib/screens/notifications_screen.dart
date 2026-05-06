@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../theme/app_colors.dart';
+import '../theme/theme_colors.dart';
 import '../routes/app_routes.dart';
 import '../models/mock_data.dart';
 
@@ -10,7 +11,7 @@ class NotificationsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.background,
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.chevron_left, size: 28),
@@ -34,9 +35,9 @@ class NotificationsScreen extends StatelessWidget {
               margin: const EdgeInsets.only(bottom: 12),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppColors.surface,
+                color: context.colors.surface,
                 border: Border.all(
-                  color: notif.unread ? AppColors.primary : AppColors.border,
+                  color: notif.unread ? AppColors.primary : context.colors.border,
                   width: notif.unread ? 1.5 : 1,
                 ),
                 borderRadius: BorderRadius.circular(12),
@@ -67,7 +68,7 @@ class NotificationsScreen extends StatelessWidget {
                                 notif.title,
                                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                                       fontWeight: notif.unread ? FontWeight.bold : FontWeight.w500,
-                                      color: AppColors.textPrimary,
+                                      color: context.colors.textPrimary,
                                     ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -88,7 +89,7 @@ class NotificationsScreen extends StatelessWidget {
                         Text(
                           notif.message,
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: AppColors.textSecondary,
+                                color: context.colors.textSecondary,
                               ),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
@@ -97,7 +98,7 @@ class NotificationsScreen extends StatelessWidget {
                         Text(
                           notif.time,
                           style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                color: AppColors.textMuted,
+                                color: context.colors.textMuted,
                               ),
                         ),
                       ],

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/theme_colors.dart';
 import '../../routes/app_routes.dart';
 import '../../providers/invitation_provider.dart';
 
@@ -76,7 +77,7 @@ class _InviteCodeScreenState extends State<InviteCodeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.background,
       body: SafeArea(
         child: Column(
           children: [
@@ -125,7 +126,7 @@ class _InviteCodeScreenState extends State<InviteCodeScreen> {
                     Text(
                       'Digite o código enviado pelo seu personal trainer para se cadastrar',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: AppColors.textSecondary,
+                            color: context.colors.textSecondary,
                           ),
                       textAlign: TextAlign.center,
                     ),

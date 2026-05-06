@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:animate_do/animate_do.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/theme_colors.dart';
 import '../../models/workout_sheet_model.dart';
 import '../../providers/workout_sheet_provider.dart';
 import '../../services/workout_sheet_service.dart';
@@ -131,7 +132,7 @@ class _TrainerSheetsState extends State<TrainerSheets> {
                           const SizedBox(height: 12),
                           Text(
                             provider.error!,
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textMuted),
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: context.colors.textMuted),
                             textAlign: TextAlign.center,
                           ),
                           const SizedBox(height: 16),
@@ -154,16 +155,16 @@ class _TrainerSheetsState extends State<TrainerSheets> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(Icons.fitness_center_outlined, color: AppColors.textMuted, size: 48),
+                          Icon(Icons.fitness_center_outlined, color: context.colors.textMuted, size: 48),
                           const SizedBox(height: 12),
                           Text(
                             'Nenhuma ficha de treino',
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppColors.textMuted),
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: context.colors.textMuted),
                           ),
                           const SizedBox(height: 4),
                           Text(
                             'Crie a primeira ficha para começar',
-                            style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted),
+                            style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.colors.textMuted),
                           ),
                         ],
                       ),
@@ -198,8 +199,8 @@ class _TrainerSheetsState extends State<TrainerSheets> {
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: AppColors.surface,
-          border: Border.all(color: AppColors.border, width: 1),
+          color: context.colors.surface,
+          border: Border.all(color: context.colors.border, width: 1),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
@@ -220,7 +221,7 @@ class _TrainerSheetsState extends State<TrainerSheets> {
                             Text(sheet.name,
                                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
                             Text('${sheet.dayOfWeekLabel} • ${sheet.exerciseCount} exercícios',
-                                style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted)),
+                                style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.colors.textMuted)),
                           ],
                         ),
                       ),
@@ -231,7 +232,7 @@ class _TrainerSheetsState extends State<TrainerSheets> {
                   children: [
                     GestureDetector(
                       onTap: () => _duplicateSheet(sheet),
-                      child: const Icon(Icons.copy, color: AppColors.textMuted, size: 18),
+                      child: Icon(Icons.copy, color: context.colors.textMuted, size: 18),
                     ),
                     const SizedBox(width: 12),
                     GestureDetector(
