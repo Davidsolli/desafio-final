@@ -92,6 +92,64 @@ async def create_user(
 
 
 @router.get(
+    "/students",
+    response_model=PaginatedUsersResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Listar alunos do personal trainer autenticado",
+    responses={
+        200: {"description": "Lista de alunos retornada"},
+        401: {"description": "Não autenticado"},
+        403: {"description": "Acesso negado (requer personal_trainer)"},
+    },
+)
+async def list_students(
+    page: int = Query(1, ge=1, description="Número da página"),
+    limit: int = Query(10, ge=1, le=100, description="Itens por página"),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> PaginatedUsersResponseDTO:
+    """
+    Listar todos os alunos (clientes) do personal trainer autenticado.
+
+    **Requer autenticação:** Apenas personal_trainer podem listar seus alunos.
+
+    **Query parameters:**
+    - page: Página (padrão: 1)
+    - limit: Itens por página (padrão: 10, máximo: 100)
+
+    **Response:**
+    - total: Total de alunos do trainer
+    - page: Página atual
+    - limit: Itens por página
+    - data: Lista de alunos (clientes)
+
+    **Segurança:**
+    - Personal trainer só vê seus próprios alunos
+    - Admin pode listar alunos de qualquer trainer
+    """
+    if current_user.role == "personal_trainer":
+        target_trainer_id = current_user.id
+    elif current_user.role == "admin":
+        # Admin pode listar alunos de qualquer trainer (por enquanto, lista seus próprios)
+        target_trainer_id = current_user.id
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Apenas personal_trainer ou admin podem listar alunos",
+        )
+
+    controller = UserController(session)
+
+    try:
+        return await controller.get_students(target_trainer_id, page=page, limit=limit)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro ao listar alunos",
+        )
+
+
+@router.get(
     "/me",
     response_model=UserResponseDTO,
     status_code=status.HTTP_200_OK,
@@ -186,7 +244,8 @@ async def get_user(
 
     **Requer autenticação:**
     - Usuário autenticado vê apenas seus próprios dados
-    - Admin ou personal_trainer veem dados de qualquer usuário
+    - Personal trainer vê dados de seus alunos (role=client com trainer_id correspondente)
+    - Admin vê dados de qualquer usuário
 
     **Path parameters:**
     - user_id: UUID do usuário
@@ -195,28 +254,61 @@ async def get_user(
     - Dados completos do usuário (sem senha)
     """
     is_owner = user_id == current_user.id
-    is_privileged = current_user.role in ["admin", "personal_trainer"]
+    is_admin = current_user.role == "admin"
 
-    if not (is_owner or is_privileged):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Você só pode visualizar seus próprios dados",
-        )
+    if is_owner or is_admin:
+        controller = UserController(session)
+        try:
+            return await controller.get_user_by_id(user_id)
+        except UserNotFoundError as e:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(e),
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Erro ao buscar usuário",
+            )
 
-    controller = UserController(session)
+    # Personal trainer: validar se é seu aluno
+    if current_user.role == "personal_trainer":
+        controller = UserController(session)
+        try:
+            target_user = await controller.get_user_by_id(user_id)
+            # Verificar se é aluno (client) e se belongs ao trainer
+            if target_user.role != "client":
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Você só pode visualizar dados de seus alunos",
+                )
+            # Verificar trainer_id no banco (não disponível em DTO)
+            from app.repositories.user_repository import UserRepository
+            repo = UserRepository(session)
+            target_db_user = await repo.get_by_id(user_id)
+            if not target_db_user or target_db_user.trainer_id != current_user.id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Este aluno não está vinculado a você",
+                )
+            return target_user
+        except HTTPException:
+            raise
+        except UserNotFoundError as e:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(e),
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Erro ao buscar usuário",
+            )
 
-    try:
-        return await controller.get_user_by_id(user_id)
-    except UserNotFoundError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Erro ao buscar usuário",
-        )
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Você só pode visualizar seus próprios dados",
+    )
 
 
 @router.put(

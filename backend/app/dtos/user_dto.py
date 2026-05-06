@@ -210,6 +210,7 @@ class UserResponseDTO(BaseModel):
     gender: Optional[str] = None
     phone_whatsapp: Optional[str] = None
     goal_type: Optional[str] = None
+    trainer_id: Optional[UUID] = None
 
     model_config = ConfigDict(
         from_attributes=True,
