@@ -187,6 +187,56 @@ class UserRepository:
         await self.session.flush()
         return True
 
+    async def list_by_trainer(
+        self,
+        trainer_id: UUID = None,
+        page: int = 1,
+        limit: int = 10,
+    ) -> Tuple[List[User], int]:
+        """
+        Listar usuários (alunos) de um personal trainer específico ou todos.
+
+        Args:
+            trainer_id: UUID do personal trainer. Se None, retorna todos os alunos
+            page: Número da página (começa em 1)
+            limit: Itens por página
+
+        Returns:
+            Tuple[List[User], int]: Lista de alunos e total de registros
+        """
+        if limit > 100:
+            limit = 100
+        if page < 1:
+            page = 1
+
+        offset = (page - 1) * limit
+
+        # Construir condição dinamicamente
+        conditions = [
+            User.role == "client",
+            User.is_active == True,
+        ]
+        if trainer_id is not None:
+            conditions.append(User.trainer_id == trainer_id)
+
+        # Query para contar total
+        count_query = select(func.count(User.id)).where(*conditions)
+        count_result = await self.session.execute(count_query)
+        total = count_result.scalar()
+
+        # Query para buscar registros
+        query = (
+            select(User)
+            .where(*conditions)
+            .order_by(User.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        result = await self.session.execute(query)
+        users = result.scalars().all()
+
+        return users, total
+
     async def commit(self) -> None:
         """Commitar transação."""
         await self.session.commit()

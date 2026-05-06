@@ -257,3 +257,24 @@ class UserService:
         if not user:
             return None
         return UserResponseDTO.model_validate(user)
+
+    async def list_students_for_trainer(
+        self,
+        trainer_id: UUID = None,
+        page: int = 1,
+        limit: int = 10,
+    ) -> Tuple[List[UserResponseDTO], int]:
+        """
+        Listar alunos (clientes) de um personal trainer específico ou todos.
+
+        Args:
+            trainer_id: UUID do personal trainer. Se None, retorna todos os alunos
+            page: Número da página
+            limit: Itens por página
+
+        Returns:
+            Tuple[List[UserResponseDTO], int]: Lista de alunos e total
+        """
+        users, total = await self.repository.list_by_trainer(trainer_id, page, limit)
+        user_dtos = [UserResponseDTO.model_validate(user) for user in users]
+        return user_dtos, total

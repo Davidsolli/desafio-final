@@ -117,3 +117,28 @@ class UserController:
             UserNotFoundError: Se não encontrado
         """
         return await self.service.delete(user_id)
+
+    async def get_students(
+        self,
+        trainer_id: UUID = None,
+        page: int = 1,
+        limit: int = 10,
+    ) -> PaginatedUsersResponseDTO:
+        """
+        Listar alunos de um personal trainer ou todos.
+
+        Args:
+            trainer_id: UUID do personal trainer. Se None, lista todos os alunos
+            page: Página
+            limit: Itens por página
+
+        Returns:
+            PaginatedUsersResponseDTO
+        """
+        students, total = await self.service.list_students_for_trainer(trainer_id, page, limit)
+        return PaginatedUsersResponseDTO(
+            total=total,
+            page=page,
+            limit=limit,
+            data=students,
+        )

@@ -11,6 +11,7 @@ class UserResponse {
   final int age;
   final String? gender;
   final String? phoneWhatsapp;
+  final String? goalType;
   final DateTime createdAt;
 
   UserResponse({
@@ -23,6 +24,7 @@ class UserResponse {
     required this.age,
     this.gender,
     this.phoneWhatsapp,
+    this.goalType,
     required this.createdAt,
   });
 
@@ -37,6 +39,7 @@ class UserResponse {
       age: json['age'] as int? ?? 0,
       gender: json['gender'] as String?,
       phoneWhatsapp: json['phone_whatsapp'] as String?,
+      goalType: json['goal_type'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String? ?? DateTime.now().toString()),
     );
   }
@@ -106,6 +109,26 @@ class UserService {
         fromJson: (data) => UserResponse.fromJson(data as Map<String, dynamic>),
       );
       return response;
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  /// Busca lista de alunos do personal trainer autenticado
+  Future<List<UserResponse>> getStudents({
+    int page = 1,
+    int limit = 10,
+  }) async {
+    try {
+      final response = await _apiClient.get<Map<String, dynamic>>(
+        '/users/students?page=$page&limit=$limit',
+        fromJson: (data) => data as Map<String, dynamic>,
+      );
+
+      final List<dynamic> students = response['data'] as List<dynamic>;
+      return students
+          .map((student) => UserResponse.fromJson(student as Map<String, dynamic>))
+          .toList();
     } catch (e) {
       rethrow;
     }
