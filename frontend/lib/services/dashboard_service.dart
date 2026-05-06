@@ -189,6 +189,58 @@ class DashboardService {
     }
   }
 
+  /// Retorna frequência de treinos agrupados por período (weekly/monthly)
+  Future<Map<String, dynamic>?> getFrequency({
+    required String period,
+    int? limit,
+  }) async {
+    try {
+      final queryParams = {'period': period};
+      if (limit != null) {
+        queryParams['limit'] = limit.toString();
+      }
+
+      final response = await _apiClient.get<Map<String, dynamic>>(
+        '/logbook/frequency',
+        queryParameters: queryParams,
+        fromJson: (data) => data as Map<String, dynamic>,
+      );
+
+      return response;
+    } catch (e) {
+      print('Erro ao buscar frequência: $e');
+      return null;
+    }
+  }
+
+  /// Retorna progressão de exercício com agrupamento opcional
+  Future<Map<String, dynamic>?> getExerciseProgression({
+    required String exerciseId,
+    String? groupBy,
+    int? weeks,
+  }) async {
+    try {
+      final queryParams = <String, String>{};
+      if (groupBy != null) {
+        queryParams['group_by'] = groupBy;
+      }
+      if (weeks != null) {
+        queryParams['weeks'] = weeks.toString();
+      }
+
+      final response = await _apiClient.get<Map<String, dynamic>>(
+        '/logbook/progression/$exerciseId',
+        queryParameters: queryParams,
+        fromJson: (data) => data as Map<String, dynamic>,
+      );
+
+      return response;
+    } catch (e) {
+      print('Erro ao buscar progressão: $e');
+      return null;
+    }
+  }
+
   /// Retorna lista completa de `StudentDashboardData` para todos os alunos
   Future<List<StudentDashboardData>> loadDashboard() async {
     try {
