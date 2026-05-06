@@ -84,6 +84,19 @@ class UserService {
     }
   }
 
+  /// Busca dados de um usuário específico por ID.
+  Future<UserResponse> getUserById(String userId) async {
+    try {
+      final response = await _apiClient.get<UserResponse>(
+        '/users/$userId',
+        fromJson: (data) => UserResponse.fromJson(data as Map<String, dynamic>),
+      );
+      return response;
+    } catch (e) {
+      rethrow;
+    }
+  }
+
   Future<UserResponse> updateUser({
     required String id,
     required String name,

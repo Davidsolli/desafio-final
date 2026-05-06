@@ -4,11 +4,13 @@ import 'package:animate_do/animate_do.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_colors.dart';
 import '../../models/workout_sheet_model.dart';
+import '../../models/diet_models.dart';
 import '../../providers/workout_sheet_provider.dart';
+import '../../services/nutrition_service.dart';
 import '../../services/user_service.dart';
 import '../../services/workout_sheet_service.dart';
-import '../../models/mock_data.dart';
 import 'widgets/create_workout_sheet_dialog.dart';
+import 'widgets/edit_workout_sheet_dialog.dart';
 
 class TrainerStudentDetail extends StatefulWidget {
   final String studentId;
@@ -29,17 +31,29 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
   List<WorkoutSheetListItem> _studentSheets = [];
   bool _sheetsLoading = false;
   String? _sheetsError;
+  List<Diet> _studentDiets = [];
+  bool _nutritionLoading = false;
+  String? _nutritionError;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
+    _tabController.addListener(_handleTabChanged);
 
     // Carrega dados do aluno e fichas via API
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadStudentData();
       _loadStudentSheets();
+      _loadStudentNutrition();
     });
+  }
+
+  void _handleTabChanged() {
+    // Garante recarga quando a aba Nutrição for selecionada, inclusive após hot reload.
+    if (_tabController.index == 2 && !_nutritionLoading && _studentDiets.isEmpty) {
+      _loadStudentNutrition();
+    }
   }
 
   Future<void> _loadStudentData() async {
@@ -50,8 +64,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
 
     try {
       final userService = context.read<UserService>();
-      final student = await userService.getCurrentUser();
-      // Se for admin/trainer, buscar detalhes especificos do aluno
+      final student = await userService.getUserById(widget.studentId);
       setState(() {
         _student = student;
         _studentLoading = false;
@@ -61,6 +74,33 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
         _studentError = 'Erro ao carregar aluno';
         _studentLoading = false;
       });
+    }
+  }
+
+  Future<void> _loadStudentNutrition() async {
+    setState(() {
+      _nutritionLoading = true;
+      _nutritionError = null;
+    });
+    try {
+      final nutritionService = context.read<NutritionService>();
+      final diets = await nutritionService.getDiets(
+        userId: widget.studentId,
+        limit: 20,
+      );
+      if (mounted) {
+        setState(() {
+          _studentDiets = diets.where((d) => d.isActive).toList();
+          _nutritionLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _nutritionError = 'Erro ao carregar dados de nutrição: ${e.toString()}';
+          _nutritionLoading = false;
+        });
+      }
     }
   }
 
@@ -90,6 +130,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
 
   @override
   void dispose() {
+    _tabController.removeListener(_handleTabChanged);
     _tabController.dispose();
     super.dispose();
   }
@@ -111,7 +152,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold),
             ),
             Text(
-              _student?.goalType ?? 'Sem objetivo',
+              _mapGoalTypeToPt(_student?.goalType),
               style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.primary),
             ),
           ],
@@ -128,7 +169,6 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                   Tab(icon: Icon(Icons.info_outline), text: 'Info'),
                   Tab(icon: Icon(Icons.fitness_center), text: 'Treinos'),
                   Tab(icon: Icon(Icons.restaurant_outlined), text: 'Nutrição'),
-                  Tab(icon: Icon(Icons.emoji_events), text: 'Conquistas'),
                 ],
                 labelColor: AppColors.primary,
                 unselectedLabelColor: AppColors.textMuted,
@@ -142,7 +182,6 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                   _buildInfoTab(),
                   _buildWorkoutsTab(),
                   _buildNutritionTab(),
-                  _buildBadgesTab(),
                 ],
               ),
             ),
@@ -211,7 +250,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(_student!.name, style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
-                  Text(_student!.goalType ?? 'Sem objetivo', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
+                  Text(_mapGoalTypeToPt(_student!.goalType), style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
                   Text('${_student!.age} anos', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted)),
                 ],
               ),
@@ -312,9 +351,9 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
           const SizedBox(height: 20),
           Text('Informações do Aluno', style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
           const SizedBox(height: 12),
-          _buildQuestionRow('Objetivo', _student!.goalType ?? 'Não informado'),
+          _buildQuestionRow('Objetivo', _mapGoalTypeToPt(_student!.goalType)),
           const SizedBox(height: 8),
-          _buildQuestionRow('Gênero', _student!.gender ?? 'Não informado'),
+          _buildQuestionRow('Gênero', _mapGenderToPt(_student!.gender)),
           const SizedBox(height: 8),
           _buildQuestionRow('Email', _student!.email),
         ],
@@ -439,7 +478,10 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                                 child: const Icon(Icons.copy, color: AppColors.textMuted, size: 16),
                               ),
                               const SizedBox(width: 8),
-                              const Icon(Icons.edit, color: AppColors.textMuted, size: 16),
+                              GestureDetector(
+                                onTap: () => _showEditSheetDialog(sheet),
+                                child: const Icon(Icons.edit, color: AppColors.textMuted, size: 16),
+                              ),
                               const SizedBox(width: 8),
                               GestureDetector(
                                 onTap: () => _deleteSheet(sheet),
@@ -542,6 +584,44 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
   }
 
   Widget _buildNutritionTab() {
+    if (_nutritionLoading) {
+      return const Center(
+        child: CircularProgressIndicator(color: AppColors.primary),
+      );
+    }
+
+    if (_nutritionError != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, color: AppColors.accentError, size: 40),
+            const SizedBox(height: 8),
+            Text(
+              _nutritionError!,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
+            ),
+            const SizedBox(height: 12),
+            TextButton.icon(
+              onPressed: _loadStudentNutrition,
+              icon: const Icon(Icons.refresh, size: 16),
+              label: const Text('Tentar novamente'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_studentDiets.isEmpty) {
+      return Center(
+        child: Text(
+          'Nenhum plano nutricional cadastrado para este aluno.',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
+        ),
+      );
+    }
+
+    final activeDiet = _studentDiets.first;
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       child: Column(
@@ -551,25 +631,17 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('Plano Nutricional', style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: AppColors.primary,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.add, color: Colors.white, size: 14),
-                    const SizedBox(width: 4),
-                    Text('Nova',
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
-                  ],
-                ),
+              Text(
+                activeDiet.name,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: AppColors.textMuted,
+                      fontWeight: FontWeight.w600,
+                    ),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          ...meals.map((m) {
+          ...activeDiet.meals.map((m) {
             return FadeInUp(
               child: Container(
                 margin: const EdgeInsets.only(bottom: 12),
@@ -589,16 +661,15 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(m.name, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
-                            Text('${m.time} • ${m.calories} kcal',
-                                style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted)),
+                            Text(
+                              '${m.time ?? "--:--"} • ${m.subtotalKcal.toStringAsFixed(0)} kcal',
+                              style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted),
+                            ),
                           ],
                         ),
-                        Row(
-                          children: [
-                            Icon(Icons.edit, color: AppColors.textMuted, size: 16),
-                            const SizedBox(width: 8),
-                            Icon(Icons.delete, color: AppColors.accentError, size: 16),
-                          ],
+                        GestureDetector(
+                          onTap: () => _showEditMealDialog(activeDiet, m),
+                          child: const Icon(Icons.edit, color: AppColors.textMuted, size: 16),
                         ),
                       ],
                     ),
@@ -606,9 +677,9 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('P: ${m.protein}g', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted)),
-                        Text('C: ${m.carbs}g', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted)),
-                        Text('G: ${m.fat}g', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted)),
+                        Text('P: ${m.subtotalProtein.toStringAsFixed(1)}g', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted)),
+                        Text('C: ${m.subtotalCarbs.toStringAsFixed(1)}g', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted)),
+                        Text('G: ${m.subtotalFats.toStringAsFixed(1)}g', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted)),
                       ],
                     ),
                   ],
@@ -616,60 +687,13 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
               ),
             );
           }),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBadgesTab() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Ativo/desative conquistas para este aluno:',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
           const SizedBox(height: 12),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              childAspectRatio: 1.2,
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
-            ),
-            itemCount: badges.length,
-            itemBuilder: (context, index) {
-              final badge = badges[index];
-              return FadeInUp(
-                delay: Duration(milliseconds: index * 50),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: badge.unlocked ? AppColors.primary.withValues(alpha: 0.1) : AppColors.surface,
-                    border: Border.all(
-                      color: badge.unlocked ? AppColors.primary : AppColors.border,
-                      width: 1,
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(badge.emoji, style: const TextStyle(fontSize: 32)),
-                      const SizedBox(height: 8),
-                      Text(badge.title,
-                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                              color: badge.unlocked ? AppColors.primary : AppColors.textMuted,
-                              fontWeight: FontWeight.w600),
-                          textAlign: TextAlign.center,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis),
-                    ],
-                  ),
-                ),
-              );
-            },
+          Text(
+            'Totais da dieta: ${activeDiet.totalKcal.toStringAsFixed(0)} kcal • '
+            'P ${activeDiet.totalProtein.toStringAsFixed(1)}g • '
+            'C ${activeDiet.totalCarbs.toStringAsFixed(1)}g • '
+            'G ${activeDiet.totalFats.toStringAsFixed(1)}g',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textSecondary),
           ),
         ],
       ),
@@ -694,6 +718,37 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
     );
   }
 
+  String _mapGoalTypeToPt(String? goalType) {
+    switch (goalType) {
+      case 'gain_mass':
+        return 'ganho de massa';
+      case 'lose_weight':
+        return 'perda de peso';
+      case 'maintain':
+      case 'maintenance':
+        return 'manutenção';
+      case 'endurance':
+        return 'resistência';
+      case 'bulking':
+        return 'bulking';
+      case 'cutting':
+        return 'cutting';
+      default:
+        return goalType == null || goalType.isEmpty ? 'Não informado' : goalType;
+    }
+  }
+
+  String _mapGenderToPt(String? gender) {
+    switch (gender) {
+      case 'male':
+        return 'masculino';
+      case 'female':
+        return 'feminino';
+      default:
+        return gender == null || gender.isEmpty ? 'Não informado' : gender;
+    }
+  }
+
   Future<void> _showCreateWorkoutDialog() async {
     final result = await showDialog<bool>(
       context: context,
@@ -709,6 +764,217 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
           backgroundColor: AppColors.accentSuccess,
         ),
       );
+    }
+  }
+
+  Future<void> _showEditSheetDialog(WorkoutSheetListItem sheet) async {
+    final updated = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => EditWorkoutSheetDialog(sheetId: sheet.id),
+    );
+
+    if (updated == true && mounted) {
+      await _loadStudentSheets();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Ficha atualizada com sucesso.'),
+          backgroundColor: AppColors.accentSuccess,
+        ),
+      );
+    }
+  }
+
+  Future<void> _showEditMealDialog(Diet activeDiet, DietMeal targetMeal) async {
+    final nutritionService = context.read<NutritionService>();
+    final mealNameController = TextEditingController(text: targetMeal.name);
+    final mealTimeController = TextEditingController(text: targetMeal.time ?? '');
+    final editableItems = targetMeal.items
+        .map((item) => _EditableDietItem(
+              foodId: item.foodId,
+              customFoodId: item.customFoodId,
+              foodName: item.foodName,
+              quantityG: item.quantityG,
+              observations: item.observations,
+            ))
+        .toList();
+
+    List<FoodCatalogItem> searchResults = [];
+    bool searching = false;
+    final searchController = TextEditingController();
+
+    final shouldSave = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) => AlertDialog(
+          backgroundColor: AppColors.surface,
+          title: Text('Editar ${targetMeal.name}'),
+          content: SizedBox(
+            width: 520,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: mealNameController,
+                    decoration: const InputDecoration(labelText: 'Nome da refeição'),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: mealTimeController,
+                    decoration: const InputDecoration(labelText: 'Horário (HH:MM)'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: searchController,
+                    decoration: InputDecoration(
+                      labelText: 'Buscar alimento',
+                      suffixIcon: IconButton(
+                        icon: const Icon(Icons.search),
+                        onPressed: () async {
+                          final query = searchController.text.trim();
+                          if (query.length < 2) return;
+                          setModalState(() => searching = true);
+                          try {
+                            final result = await nutritionService.searchFoodCatalog(query);
+                            setModalState(() => searchResults = result.items);
+                          } finally {
+                            setModalState(() => searching = false);
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                  if (searching)
+                    const Padding(
+                      padding: EdgeInsets.all(8.0),
+                      child: CircularProgressIndicator(color: AppColors.primary),
+                    ),
+                  ...searchResults.take(5).map(
+                    (food) => ListTile(
+                      dense: true,
+                      title: Text(food.name),
+                      subtitle: Text('${food.energyKcal.toStringAsFixed(0)} kcal/100g'),
+                      trailing: const Icon(Icons.add, size: 18),
+                      onTap: () {
+                        setModalState(() {
+                          editableItems.add(
+                            _EditableDietItem(
+                              foodId: int.tryParse(food.id),
+                              customFoodId: null,
+                              foodName: food.name,
+                              quantityG: 100,
+                            ),
+                          );
+                        });
+                      },
+                    ),
+                  ),
+                  const Divider(),
+                  ...editableItems.asMap().entries.map(
+                    (entry) {
+                      final index = entry.key;
+                      final item = entry.value;
+                      return Row(
+                        children: [
+                          Expanded(
+                            child: Text(item.foodName, overflow: TextOverflow.ellipsis),
+                          ),
+                          const SizedBox(width: 8),
+                          SizedBox(
+                            width: 90,
+                            child: TextFormField(
+                              initialValue: item.quantityG.toStringAsFixed(0),
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              decoration: const InputDecoration(suffixText: 'g'),
+                              onChanged: (v) => item.quantityG = double.tryParse(v) ?? item.quantityG,
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline, color: AppColors.accentError),
+                            onPressed: () => setModalState(() => editableItems.removeAt(index)),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Salvar'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (shouldSave != true) return;
+
+    try {
+      final updatedMeals = activeDiet.meals.map((meal) {
+        if (meal.id != targetMeal.id) {
+          return {
+            'name': meal.name,
+            'time': meal.time,
+            'order': meal.order,
+            'items': meal.items
+                .map((i) => {
+                      if (i.foodId != null) 'food_id': i.foodId,
+                      if (i.customFoodId != null) 'custom_food_id': i.customFoodId,
+                      'quantity_g': i.quantityG,
+                      if (i.observations != null) 'observations': i.observations,
+                    })
+                .toList(),
+          };
+        }
+
+        return {
+          'name': mealNameController.text.trim().isEmpty ? targetMeal.name : mealNameController.text.trim(),
+          'time': mealTimeController.text.trim().isEmpty ? null : mealTimeController.text.trim(),
+          'order': targetMeal.order,
+          'items': editableItems
+              .map((i) => {
+                    if (i.foodId != null) 'food_id': i.foodId,
+                    if (i.customFoodId != null) 'custom_food_id': i.customFoodId,
+                    'quantity_g': i.quantityG,
+                    if (i.observations != null) 'observations': i.observations,
+                  })
+              .toList(),
+        };
+      }).toList();
+
+      await nutritionService.updateDiet(
+        dietId: activeDiet.id,
+        name: activeDiet.name,
+        goal: activeDiet.goal,
+        meals: updatedMeals,
+      );
+      await _loadStudentNutrition();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Refeição atualizada com sucesso.'),
+            backgroundColor: AppColors.accentSuccess,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erro ao atualizar refeição: ${e.toString()}'),
+            backgroundColor: AppColors.accentError,
+          ),
+        );
+      }
     }
   }
 
@@ -749,4 +1015,20 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
       ),
     );
   }
+}
+
+class _EditableDietItem {
+  int? foodId;
+  String? customFoodId;
+  String foodName;
+  double quantityG;
+  String? observations;
+
+  _EditableDietItem({
+    required this.foodId,
+    required this.customFoodId,
+    required this.foodName,
+    required this.quantityG,
+    this.observations,
+  });
 }

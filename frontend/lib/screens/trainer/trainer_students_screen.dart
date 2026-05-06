@@ -180,7 +180,7 @@ class _TrainerStudentsScreenState extends State<TrainerStudentsScreen> {
                                               children: [
                                                 Text(student.name,
                                                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
-                                                Text(student.goalType ?? 'Sem objetivo',
+                                                Text(_mapGoalTypeToPt(student.goalType),
                                                     style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted)),
                                               ],
                                             ),
@@ -251,5 +251,21 @@ class _TrainerStudentsScreenState extends State<TrainerStudentsScreen> {
         ),
       ],
     );
+  }
+
+  String _mapGoalTypeToPt(String? goalType) {
+    switch (goalType) {
+      case 'gain_mass':
+        return 'ganho de massa';
+      case 'lose_weight':
+        return 'perda de peso';
+      case 'maintain':
+      case 'maintenance':
+        return 'manutenção';
+      case 'endurance':
+        return 'resistência';
+      default:
+        return goalType == null || goalType.isEmpty ? 'Sem objetivo' : goalType;
+    }
   }
 }
