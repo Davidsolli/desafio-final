@@ -24,20 +24,45 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
   @override
   void initState() {
     super.initState();
-    _loadUserSheets();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadUserSheets();
+    });
   }
 
   Future<void> _loadUserSheets() async {
     final authProvider = context.read<AuthProvider>();
     final userId = authProvider.user?.id;
-    if (userId != null) {
+
+    if (userId == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Erro: Usuário não autenticado'),
+            backgroundColor: AppColors.accentError,
+          ),
+        );
+      }
+      return;
+    }
+
+    try {
       await context.read<WorkoutSheetProvider>().loadSheets(userId: userId);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erro ao carregar fichas: $e'),
+            backgroundColor: AppColors.accentError,
+          ),
+        );
+      }
     }
   }
 
   @override
   void dispose() {
     _restTimer?.cancel();
+    _restTimer = null;
     super.dispose();
   }
 
@@ -244,7 +269,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
   Widget _buildWorkoutDetail() {
     if (_selectedSheet == null) return const SizedBox.shrink();
 
-    final exercisesCount = _selectedSheet!.exercises.length;
+    final exercisesCount = _selectedSheet?.exercises.length ?? 0;
     final progress = exercisesCount > 0 ? (_completedExercises.length / exercisesCount) * 100 : 0;
 
     return Scaffold(
@@ -350,9 +375,10 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
             Expanded(
               child: ListView.builder(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: _selectedSheet!.exercises.length,
+                itemCount: _selectedSheet?.exercises.length ?? 0,
                 itemBuilder: (context, index) {
-                  final exercise = _selectedSheet!.exercises[index];
+                  final exercise = _selectedSheet?.exercises[index];
+                  if (exercise == null) return const SizedBox.shrink();
                   final isCompleted = _completedExercises.contains(exercise.id);
 
                   return FadeInUp(
@@ -456,7 +482,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                 },
               ),
             ),
-            if (_completedExercises.length == _selectedSheet!.exercises.length)
+            if (_selectedSheet != null && _completedExercises.length == _selectedSheet!.exercises.length)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                 child: SizedBox(
@@ -503,7 +529,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
       ),
       child: Text(text,
           style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: AppColors.textMuted, fontSize: 11, fontWeight: FontWeight.w500));
+              color: AppColors.textMuted, fontSize: 11, fontWeight: FontWeight.w500)),
     );
   }
 }

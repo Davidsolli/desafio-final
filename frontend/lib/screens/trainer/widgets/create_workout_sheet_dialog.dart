@@ -93,7 +93,17 @@ class _CreateWorkoutSheetDialogState extends State<CreateWorkoutSheetDialog> {
     if (!_formKey.currentState!.validate()) return;
 
     final userId = widget.targetUserId ?? context.read<AuthProvider>().user?.id;
-    if (userId == null) return;
+    if (userId == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Erro: ID do aluno não encontrado'),
+            backgroundColor: AppColors.accentError,
+          ),
+        );
+      }
+      return;
+    }
 
     final exerciseDTOs = _exercises.asMap().entries.map((entry) {
       final i = entry.key;
