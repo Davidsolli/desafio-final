@@ -106,54 +106,171 @@ async def chat_websocket(
 ):
     """
     Endpoint de WebSocket para chat in-app.
-    A autenticação ocorre via query param '?token=<jwt>'.
-    O cliente deve enviar JSON com { "type": "message", "content": "...", "conversation_id": "uuid" (opcional) }
+    Autenticação via JWT na primeira mensagem (tipo 'auth').
+    Cliente deve enviar:
+      1. { "type": "auth", "token": "<jwt>" } (obrigatório primeiro)
+      2. { "type": "message", "content": "...", "conversation_id": "uuid" (opcional) }
     """
     await websocket.accept()
-    
-    # Valida usuário
-    user = await get_current_user_ws(websocket, session)
-    if not user:
-        return
 
+    user = None
     service = ChatService(session)
+    auth_timeout = 5  # segundos para enviar auth
 
     try:
+        import asyncio
+
+        # Espera autenticação  (com timeout)
+        try:
+            first_msg = await asyncio.wait_for(
+                websocket.receive_json(),
+                timeout=auth_timeout,
+            )
+        except asyncio.TimeoutError:
+            await websocket.send_json({
+                "error": "Timeout na autenticação",
+                "type": "auth_error",
+            })
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+
+        if first_msg.get("type") != "auth":
+            await websocket.send_json({
+                "error": "Primeira mensagem deve ser autenticação com type='auth'",
+                "type": "auth_error",
+            })
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+
+        token = first_msg.get("token", "")
+        if not token:
+            await websocket.send_json({
+                "error": "Token JWT não fornecido",
+                "type": "auth_error",
+            })
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+
+        # Autentica usuário e inicia sessão fake com token
+        from app.dependencies.auth import decode_jwt_token
+        try:
+            user_data = decode_jwt_token(token)
+            if not user_data or "user_id" not in user_data:
+                await websocket.send_json({
+                    "error": "Token inválido ou expirado",
+                    "type": "auth_error",
+                })
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                return
+
+            # Busca usuário no banco
+            from app.repositories.user_repository import UserRepository
+            user_repo = UserRepository(session)
+            user = await user_repo.get_by_id(user_data["user_id"])
+
+            if not user:
+                await websocket.send_json({
+                    "error": "Usuário não encontrado",
+                    "type": "auth_error",
+                })
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                return
+
+            # Confirma autenticação
+            await websocket.send_json({
+                "type": "auth_success",
+                "message": "Autenticado com sucesso",
+            })
+
+        except Exception as exc:
+            logger.error(f"Erro na autenticação WebSocket: {exc}")
+            await websocket.send_json({
+                "error": "Erro ao autenticar",
+                "type": "auth_error",
+            })
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+
+        # Loop de mensagens (com timeout de inatividade)
+        inactivity_timeout = 300  # 5 minutos
+
         while True:
-            data = await websocket.receive_json()
+            try:
+                data = await asyncio.wait_for(
+                    websocket.receive_json(),
+                    timeout=inactivity_timeout,
+                )
+            except asyncio.TimeoutError:
+                logger.info(f"WebSocket inativo por {inactivity_timeout}s: user_id={user.id}")
+                await websocket.send_json({
+                    "error": "Sessão expirada por inatividade",
+                    "type": "timeout",
+                })
+                await websocket.close(code=status.WS_1000_NORMAL_CLOSURE)
+                return
+
             msg_type = data.get("type")
-            
+
             if msg_type == "message":
-                content = data.get("content", "")
+                content = data.get("content", "").strip()
                 conversation_id_str = data.get("conversation_id")
-                
-                try:
-                    conv_id = UUID(conversation_id_str) if conversation_id_str else None
-                except ValueError:
-                    await websocket.send_json({"error": "Formato de conversation_id inválido."})
+
+                # Valida tamanho da mensagem
+                max_msg_len = 1000
+                if len(content) > max_msg_len:
+                    await websocket.send_json({
+                        "error": f"Mensagem muito longa (máx {max_msg_len} caracteres)",
+                        "type": "error",
+                    })
                     continue
-                
+
                 if not content:
-                    await websocket.send_json({"error": "A mensagem não pode estar vazia."})
+                    await websocket.send_json({
+                        "error": "A mensagem não pode estar vazia.",
+                        "type": "error",
+                    })
                     continue
 
                 try:
+                    conv_id = None
+                    if conversation_id_str:
+                        try:
+                            conv_id = UUID(conversation_id_str)
+                        except ValueError:
+                            await websocket.send_json({
+                                "error": "Formato de conversation_id inválido.",
+                                "type": "error",
+                            })
+                            continue
+
                     result = await service.send_message(
                         user_id=user.id,
                         message=content,
                         conversation_id=conv_id,
                     )
-                    # Adiciona tipo para facilitar parsing no frontend
                     result["type"] = "response"
                     await websocket.send_json(result)
                 except Exception as exc:
-                    await websocket.send_json({"error": str(exc), "type": "error"})
+                    logger.error(f"Erro ao processar mensagem: {exc}")
+                    await websocket.send_json({
+                        "error": str(exc),
+                        "type": "error",
+                    })
+            else:
+                await websocket.send_json({
+                    "error": f"Tipo de mensagem desconhecido: {msg_type}",
+                    "type": "error",
+                })
+
     except WebSocketDisconnect:
-        logger.info(f"WebSocket desconectado: user_id={user.id}")
-        pass
+        if user:
+            logger.info(f"WebSocket desconectado: user_id={user.id}")
     except Exception as exc:
         logger.error(f"Erro no WebSocket: {exc}")
-        await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+        try:
+            await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+        except Exception:
+            pass
 
 
 @router.get(

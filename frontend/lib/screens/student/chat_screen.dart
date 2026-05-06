@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:animate_do/animate_do.dart';
@@ -6,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../../theme/app_colors.dart';
 import '../../routes/app_routes.dart';
+import '../../config/api_config.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -44,24 +46,43 @@ class _ChatScreenState extends State<ChatScreen> {
       return;
     }
 
-    final wsUrl = Uri.parse('ws://localhost:8000/api/v1/chat/ws?token=$token');
-    
+    // Usa ApiConfig para URL base (não hardcoded)
+    final wsBaseUrl = ApiConfig.wsBaseUrl ?? 'ws://localhost:8000';
+    final wsUrl = Uri.parse('$wsBaseUrl/api/v1/chat/ws');
+
     try {
       _channel = WebSocketChannel.connect(wsUrl);
-      setState(() {
-        _isConnected = true;
-        _messages.add({
-          'role': 'assistant',
-          'text': 'Olá! 👋 Sou seu assistente fitness conectado. Como posso te ajudar hoje?',
-          'time': _formatTime(),
-        });
-      });
 
+      // Aguarda confirmação de conexão e envia autenticação
       _channel!.stream.listen(
-        (message) {
+        (message) async {
           final data = jsonDecode(message);
-          
-          if (data['type'] == 'response') {
+
+          // Responde ao handshake de autenticação
+          if (data['type'] == 'auth_success') {
+            if (mounted) {
+              setState(() {
+                _isConnected = true;
+                _messages.add({
+                  'role': 'assistant',
+                  'text': 'Olá! 👋 Sou seu assistente fitness conectado. Como posso te ajudar hoje?',
+                  'time': _formatTime(),
+                });
+              });
+            }
+          } else if (data['type'] == 'auth_error') {
+            if (mounted) {
+              setState(() {
+                _isConnected = false;
+                _messages.add({
+                  'role': 'assistant',
+                  'text': 'Erro de autenticação: ${data['error'] ?? 'Desconhecido'}',
+                  'time': _formatTime(),
+                });
+              });
+            }
+            _channel?.sink.close();
+          } else if (data['type'] == 'response') {
             if (data['conversation_id'] != null) {
               _conversationId = data['conversation_id'];
             }
@@ -74,15 +95,18 @@ class _ChatScreenState extends State<ChatScreen> {
                 });
               });
             }
-          } else if (data['type'] == 'error') {
+          } else if (data['type'] == 'error' || data['type'] == 'timeout') {
             if (mounted) {
               setState(() {
                 _messages.add({
                   'role': 'assistant',
-                  'text': 'Desculpe, ocorreu um erro: ${data['error']}',
+                  'text': 'Desculpe, ocorreu um erro: ${data['error'] ?? 'Desconhecido'}',
                   'time': _formatTime(),
                 });
               });
+            }
+            if (data['type'] == 'timeout') {
+              _channel?.sink.close();
             }
           }
         },
@@ -99,13 +123,18 @@ class _ChatScreenState extends State<ChatScreen> {
               _isConnected = false;
               _messages.add({
                 'role': 'assistant',
-                'text': 'Erro de conexão com o servidor.',
+                'text': 'Erro de conexão com o servidor: $error',
                 'time': _formatTime(),
               });
             });
           }
         },
       );
+
+      // Envia autenticação na primeira mensagem (após slight delay para garantir que stream está listening)
+      await Future.delayed(const Duration(milliseconds: 100));
+      final authMsg = jsonEncode({'type': 'auth', 'token': token});
+      _channel!.sink.add(authMsg);
     } catch (e) {
       if (mounted) {
         setState(() {
