@@ -17,10 +17,11 @@ class _ProfileGoalsSectionState extends State<ProfileGoalsSection> {
   @override
   void initState() {
     super.initState();
+    // #6: só carrega se ainda não há dados e não está carregando
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        context.read<GoalProvider>().loadGoals();
-      }
+      if (!mounted) return;
+      final p = context.read<GoalProvider>();
+      if (p.goals.isEmpty && !p.isLoading) p.loadGoals();
     });
   }
 
@@ -32,10 +33,12 @@ class _ProfileGoalsSectionState extends State<ProfileGoalsSection> {
     String targetValueStr = '';
     String unit = 'kg';
     DateTime? targetDate;
+    bool isSubmitting = false;
 
+    // #3: ctx externo renomeado para dialogCtx — evita shadowing pelo StatefulBuilder
     showDialog(
       context: context,
-      builder: (ctx) => StatefulBuilder(
+      builder: (dialogCtx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
           title: const Text('Nova Meta'),
           content: SingleChildScrollView(
@@ -124,9 +127,7 @@ class _ProfileGoalsSectionState extends State<ProfileGoalsSection> {
                       firstDate: DateTime.now(),
                       lastDate: DateTime.now().add(const Duration(days: 365 * 3)),
                     );
-                    if (picked != null) {
-                      setDialogState(() => targetDate = picked);
-                    }
+                    if (picked != null) setDialogState(() => targetDate = picked);
                   },
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
@@ -155,42 +156,55 @@ class _ProfileGoalsSectionState extends State<ProfileGoalsSection> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(ctx),
+              onPressed: isSubmitting ? null : () => Navigator.pop(ctx),
               child: const Text('Cancelar'),
             ),
             ElevatedButton(
-              onPressed: () async {
-                final target = double.tryParse(targetValueStr);
-                if (title.trim().isEmpty || target == null || targetDate == null) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Preencha título, meta e prazo')),
-                  );
-                  return;
-                }
-                Navigator.pop(ctx);
-                try {
-                  await context.read<GoalProvider>().createGoal(
-                        CreateGoalDTO(
-                          userId: userId,
-                          title: title.trim(),
-                          description: description.trim().isEmpty ? null : description.trim(),
-                          category: category,
-                          currentValue: double.tryParse(currentValueStr) ?? 0,
-                          targetValue: target,
-                          unit: unit,
-                          targetDate: targetDate!,
-                        ),
-                      );
-                } catch (_) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Erro ao criar meta')),
-                    );
-                  }
-                }
-              },
+              // #7: dialog fica aberto durante a chamada à API
+              onPressed: isSubmitting
+                  ? null
+                  : () async {
+                      final target = double.tryParse(targetValueStr);
+                      if (title.trim().isEmpty || target == null || targetDate == null) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Preencha título, meta e prazo')),
+                        );
+                        return;
+                      }
+                      setDialogState(() => isSubmitting = true);
+                      try {
+                        await context.read<GoalProvider>().createGoal(
+                              CreateGoalDTO(
+                                userId: userId,
+                                title: title.trim(),
+                                description: description.trim().isEmpty ? null : description.trim(),
+                                category: category,
+                                currentValue: double.tryParse(currentValueStr) ?? 0,
+                                targetValue: target,
+                                unit: unit,
+                                targetDate: targetDate!,
+                              ),
+                            );
+                        if (ctx.mounted) Navigator.pop(ctx);
+                      } catch (e) {
+                        // #2: loga o erro para facilitar depuração
+                        debugPrint('[ProfileGoalsSection] erro ao criar meta: $e');
+                        setDialogState(() => isSubmitting = false);
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Erro ao criar meta')),
+                          );
+                        }
+                      }
+                    },
               style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
-              child: const Text('Salvar Meta'),
+              child: isSubmitting
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Text('Salvar Meta'),
             ),
           ],
         ),
@@ -200,94 +214,128 @@ class _ProfileGoalsSectionState extends State<ProfileGoalsSection> {
 
   void _showEditDialog(GoalResponse goal) {
     double currentValue = goal.currentValue;
+    bool isSubmitting = false;
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Atualizar Progresso'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(goal.title, style: const TextStyle(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 4),
-            Text(
-              'Meta: ${goal.targetValue.toStringAsFixed(1)} ${goal.unit}',
-              style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              initialValue: currentValue.toStringAsFixed(1),
-              keyboardType: TextInputType.number,
-              onChanged: (v) => currentValue = double.tryParse(v) ?? currentValue,
-              decoration: InputDecoration(
-                labelText: 'Valor atual (${goal.unit})',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Atualizar Progresso'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(goal.title, style: const TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 4),
+              Text(
+                'Meta: ${goal.targetValue.toStringAsFixed(1)} ${goal.unit}',
+                style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
               ),
+              const SizedBox(height: 16),
+              TextFormField(
+                initialValue: currentValue.toStringAsFixed(1),
+                keyboardType: TextInputType.number,
+                onChanged: (v) => currentValue = double.tryParse(v) ?? currentValue,
+                decoration: InputDecoration(
+                  labelText: 'Valor atual (${goal.unit})',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: isSubmitting ? null : () => Navigator.pop(ctx),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              // #7: dialog fica aberto durante a chamada à API
+              onPressed: isSubmitting
+                  ? null
+                  : () async {
+                      setDialogState(() => isSubmitting = true);
+                      try {
+                        await context.read<GoalProvider>().updateGoalProgress(goal.id, currentValue);
+                        if (ctx.mounted) Navigator.pop(ctx);
+                      } catch (e) {
+                        // #2: loga o erro para facilitar depuração
+                        debugPrint('[ProfileGoalsSection] erro ao atualizar progresso: $e');
+                        setDialogState(() => isSubmitting = false);
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Erro ao atualizar progresso')),
+                          );
+                        }
+                      }
+                    },
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+              child: isSubmitting
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Text('Salvar'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              try {
-                await context.read<GoalProvider>().updateGoalProgress(goal.id, currentValue);
-              } catch (_) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Erro ao atualizar progresso')),
-                  );
-                }
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
-            child: const Text('Salvar'),
-          ),
-        ],
       ),
     );
   }
 
   void _confirmDelete(String goalId) {
+    bool isDeleting = false;
+
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Excluir Meta'),
-        content: const Text('Tem certeza que deseja excluir esta meta?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              try {
-                await context.read<GoalProvider>().deleteGoal(goalId);
-              } catch (_) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Erro ao excluir meta')),
-                  );
-                }
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentError),
-            child: const Text('Excluir'),
-          ),
-        ],
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Excluir Meta'),
+          content: const Text('Tem certeza que deseja excluir esta meta?'),
+          actions: [
+            TextButton(
+              onPressed: isDeleting ? null : () => Navigator.pop(ctx),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              // #7: dialog fica aberto durante a chamada à API
+              onPressed: isDeleting
+                  ? null
+                  : () async {
+                      setDialogState(() => isDeleting = true);
+                      try {
+                        await context.read<GoalProvider>().deleteGoal(goalId);
+                        if (ctx.mounted) Navigator.pop(ctx);
+                      } catch (e) {
+                        // #2: loga o erro para facilitar depuração
+                        debugPrint('[ProfileGoalsSection] erro ao excluir meta: $e');
+                        setDialogState(() => isDeleting = false);
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Erro ao excluir meta')),
+                          );
+                        }
+                      }
+                    },
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentError),
+              child: isDeleting
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Text('Excluir'),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final userId = context.read<UserProvider>().user?.id ?? '';
+    // #1: context.watch garante rebuild quando o usuário mudar
+    final userId = context.watch<UserProvider>().user?.id;
 
     return Consumer<GoalProvider>(
       builder: (context, provider, _) {
@@ -317,8 +365,9 @@ class _ProfileGoalsSectionState extends State<ProfileGoalsSection> {
                       ),
                     ],
                   ),
+                  // #1 + #5: botão desabilitado quando userId é nulo
                   TextButton.icon(
-                    onPressed: () => _showCreateDialog(userId),
+                    onPressed: userId == null ? null : () => _showCreateDialog(userId),
                     icon: const Icon(Icons.add, size: 16, color: AppColors.primary),
                     label: const Text('Nova', style: TextStyle(color: AppColors.primary)),
                   ),
