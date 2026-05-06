@@ -134,7 +134,7 @@ class WorkoutSheetService:
             personal_id = None
         elif role == "personal_trainer":
             effective_user_id = user_id_filter
-            personal_id = None
+            personal_id = requester_id if user_id_filter is None else None
         else:
             # Admin vê tudo
             effective_user_id = user_id_filter
