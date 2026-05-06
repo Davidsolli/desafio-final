@@ -95,43 +95,51 @@ async def create_user(
     "/students",
     response_model=PaginatedUsersResponseDTO,
     status_code=status.HTTP_200_OK,
-    summary="Listar alunos do personal trainer autenticado",
+    summary="Listar alunos do personal trainer ou todos (admin)",
     responses={
         200: {"description": "Lista de alunos retornada"},
         401: {"description": "Não autenticado"},
-        403: {"description": "Acesso negado (requer personal_trainer)"},
+        403: {"description": "Acesso negado (requer personal_trainer ou admin)"},
     },
 )
 async def list_students(
+    trainer_id: UUID = Query(None, description="UUID do trainer (admin only)"),
     page: int = Query(1, ge=1, description="Número da página"),
     limit: int = Query(10, ge=1, le=100, description="Itens por página"),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ) -> PaginatedUsersResponseDTO:
     """
-    Listar todos os alunos (clientes) do personal trainer autenticado.
+    Listar alunos (clientes).
 
-    **Requer autenticação:** Apenas personal_trainer podem listar seus alunos.
+    **Requer autenticação:** Apenas personal_trainer e admin.
 
     **Query parameters:**
+    - trainer_id: UUID do trainer (apenas admin, para filtrar alunos de um trainer específico)
     - page: Página (padrão: 1)
     - limit: Itens por página (padrão: 10, máximo: 100)
 
+    **Comportamento:**
+    - Personal trainer: Lista seus próprios alunos (ignora trainer_id)
+    - Admin: Lista alunos do trainer_id especificado, ou TODOS se trainer_id not provided
+
     **Response:**
-    - total: Total de alunos do trainer
+    - total: Total de alunos
     - page: Página atual
     - limit: Itens por página
     - data: Lista de alunos (clientes)
 
     **Segurança:**
     - Personal trainer só vê seus próprios alunos
-    - Admin pode listar alunos de qualquer trainer
+    - Admin pode filtrar por trainer_id ou ver todos
+    - Trainer_id ignorado para personal_trainer (sempre vê seus alunos)
     """
     if current_user.role == "personal_trainer":
+        # Personal trainer sempre vê seus alunos (ignora trainer_id param)
         target_trainer_id = current_user.id
     elif current_user.role == "admin":
-        # Admin pode listar alunos de qualquer trainer (por enquanto, lista seus próprios)
-        target_trainer_id = current_user.id
+        # Admin pode filtrar por trainer_id ou ver todos
+        target_trainer_id = trainer_id  # None = todos os alunos
     else:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

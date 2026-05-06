@@ -189,15 +189,15 @@ class UserRepository:
 
     async def list_by_trainer(
         self,
-        trainer_id: UUID,
+        trainer_id: UUID = None,
         page: int = 1,
         limit: int = 10,
     ) -> Tuple[List[User], int]:
         """
-        Listar usuários (alunos) de um personal trainer específico.
+        Listar usuários (alunos) de um personal trainer específico ou todos.
 
         Args:
-            trainer_id: UUID do personal trainer
+            trainer_id: UUID do personal trainer. Se None, retorna todos os alunos
             page: Número da página (começa em 1)
             limit: Itens por página
 
@@ -211,23 +211,23 @@ class UserRepository:
 
         offset = (page - 1) * limit
 
-        # Query para contar total
-        count_query = select(func.count(User.id)).where(
-            User.trainer_id == trainer_id,
+        # Construir condição dinamicamente
+        conditions = [
             User.role == "client",
             User.is_active == True,
-        )
+        ]
+        if trainer_id is not None:
+            conditions.append(User.trainer_id == trainer_id)
+
+        # Query para contar total
+        count_query = select(func.count(User.id)).where(*conditions)
         count_result = await self.session.execute(count_query)
         total = count_result.scalar()
 
         # Query para buscar registros
         query = (
             select(User)
-            .where(
-                User.trainer_id == trainer_id,
-                User.role == "client",
-                User.is_active == True,
-            )
+            .where(*conditions)
             .order_by(User.created_at.desc())
             .offset(offset)
             .limit(limit)

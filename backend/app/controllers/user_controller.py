@@ -120,15 +120,15 @@ class UserController:
 
     async def get_students(
         self,
-        trainer_id: UUID,
+        trainer_id: UUID = None,
         page: int = 1,
         limit: int = 10,
     ) -> PaginatedUsersResponseDTO:
         """
-        Listar alunos de um personal trainer.
+        Listar alunos de um personal trainer ou todos.
 
         Args:
-            trainer_id: UUID do personal trainer
+            trainer_id: UUID do personal trainer. Se None, lista todos os alunos
             page: Página
             limit: Itens por página
 

@@ -233,3 +233,111 @@ class TestListStudentsEndpoint:
         )
 
         assert response.status_code == 422  # Validation error
+
+    @pytest.mark.asyncio
+    async def test_admin_list_all_students(self, async_client, test_db_session, sample_personal_trainer, sample_students):
+        """Teste 9: Admin lista TODOS os alunos (sem trainer_id)."""
+        from app.services.user_service import UserService
+        from app.dtos.user_dto import CreateUserDTO
+
+        # Criar admin
+        service = UserService(test_db_session)
+        admin_dto = CreateUserDTO(
+            name="Admin Sistema",
+            email="admin@test.com",
+            password="SenhaForte123!",
+            role="admin",
+        )
+        admin_response = await service.create(admin_dto)
+
+        # Login como admin
+        response = await async_client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": "admin@test.com",
+                "password": "SenhaForte123!",
+            },
+        )
+        assert response.status_code == 200
+        token = response.json()["access_token"]
+
+        # Admin lista TODOS os alunos (sem trainer_id param)
+        headers = {"Authorization": f"Bearer {token}"}
+        response = await async_client.get(
+            "/api/v1/users/students",
+            headers=headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        # Admin vê todos os alunos (3 do sample_personal_trainer)
+        assert data["total"] >= 3
+
+    @pytest.mark.asyncio
+    async def test_admin_list_specific_trainer_students(
+        self, async_client, test_db_session, sample_personal_trainer, sample_students
+    ):
+        """Teste 10: Admin filtra alunos por trainer_id específico."""
+        from app.services.user_service import UserService
+        from app.dtos.user_dto import CreateUserDTO
+
+        # Criar admin
+        service = UserService(test_db_session)
+        admin_dto = CreateUserDTO(
+            name="Admin Sistema",
+            email="admin.filter@test.com",
+            password="SenhaForte123!",
+            role="admin",
+        )
+        admin_response = await service.create(admin_dto)
+
+        # Login como admin
+        response = await async_client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": "admin.filter@test.com",
+                "password": "SenhaForte123!",
+            },
+        )
+        token = response.json()["access_token"]
+
+        # Admin filtra por trainer_id específico
+        headers = {"Authorization": f"Bearer {token}"}
+        response = await async_client.get(
+            f"/api/v1/users/students?trainer_id={sample_personal_trainer.id}",
+            headers=headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        # Deve retornar os 3 alunos do trainer
+        assert data["total"] == 3
+        for student in data["data"]:
+            assert student["role"] == "client"
+
+    @pytest.mark.asyncio
+    async def test_trainer_ignores_trainer_id_param(self, async_client, sample_personal_trainer, sample_students):
+        """Teste 11: Personal trainer ignora param trainer_id (sempre vê seus alunos)."""
+        response = await async_client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": sample_personal_trainer.email,
+                "password": "SenhaForte123!",
+            },
+        )
+        token = response.json()["access_token"]
+
+        # Tentar passar um trainer_id diferente (deve ser ignorado)
+        headers = {"Authorization": f"Bearer {token}"}
+        fake_uuid = "00000000-0000-0000-0000-000000000000"
+        response = await async_client.get(
+            f"/api/v1/users/students?trainer_id={fake_uuid}",
+            headers=headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        # Deve retornar seus alunos (param foi ignorado)
+        assert data["total"] == 3
+        for student in data["data"]:
+            assert student["trainer_id"] == str(sample_personal_trainer.id)

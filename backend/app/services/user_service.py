@@ -260,15 +260,15 @@ class UserService:
 
     async def list_students_for_trainer(
         self,
-        trainer_id: UUID,
+        trainer_id: UUID = None,
         page: int = 1,
         limit: int = 10,
     ) -> Tuple[List[UserResponseDTO], int]:
         """
-        Listar alunos (clientes) de um personal trainer específico.
+        Listar alunos (clientes) de um personal trainer específico ou todos.
 
         Args:
-            trainer_id: UUID do personal trainer
+            trainer_id: UUID do personal trainer. Se None, retorna todos os alunos
             page: Número da página
             limit: Itens por página
 
