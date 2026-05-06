@@ -153,7 +153,7 @@ class _HomeBody extends StatelessWidget {
         ),
         const Spacer(),
         GestureDetector(
-          onTap: () => context.go(AppRoutes.notifications),
+          onTap: () => context.push(AppRoutes.notifications),
           child: Stack(
             children: [
               Container(
