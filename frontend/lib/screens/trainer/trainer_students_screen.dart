@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:animate_do/animate_do.dart';
+import 'package:provider/provider.dart';
 import '../../theme/app_colors.dart';
-import '../../models/mock_data.dart';
+import '../../services/user_service.dart';
 
 class TrainerStudentsScreen extends StatefulWidget {
   const TrainerStudentsScreen({super.key});
@@ -12,14 +13,19 @@ class TrainerStudentsScreen extends StatefulWidget {
 }
 
 class _TrainerStudentsScreenState extends State<TrainerStudentsScreen> {
-  late List<Student> _filteredStudents;
+  late List<UserResponse> _allStudents = [];
+  late List<UserResponse> _filteredStudents = [];
   final TextEditingController _searchController = TextEditingController();
+  bool _isLoading = true;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
-    _filteredStudents = List.from(students);
     _searchController.addListener(_filterStudents);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadStudents();
+    });
   }
 
   @override
@@ -28,10 +34,32 @@ class _TrainerStudentsScreenState extends State<TrainerStudentsScreen> {
     super.dispose();
   }
 
+  Future<void> _loadStudents() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      final userService = context.read<UserService>();
+      final students = await userService.getStudents();
+      setState(() {
+        _allStudents = students;
+        _filteredStudents = List.from(students);
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = 'Erro ao carregar alunos';
+        _isLoading = false;
+      });
+    }
+  }
+
   void _filterStudents() {
     final query = _searchController.text.toLowerCase();
     setState(() {
-      _filteredStudents = students
+      _filteredStudents = _allStudents
           .where((s) => s.name.toLowerCase().contains(query))
           .toList();
     });
@@ -82,84 +110,90 @@ class _TrainerStudentsScreenState extends State<TrainerStudentsScreen> {
             ),
             const SizedBox(height: 16),
             Expanded(
-              child: _filteredStudents.isEmpty
-                  ? Center(
-                      child: Text('Nenhum aluno encontrado',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textMuted)),
+              child: _isLoading
+                  ? const Center(
+                      child: CircularProgressIndicator(color: AppColors.primary),
                     )
-                  : ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: _filteredStudents.length,
-                      itemBuilder: (context, index) {
-                        final student = _filteredStudents[index];
-                        return FadeInUp(
-                          delay: Duration(milliseconds: index * 100),
-                          child: GestureDetector(
-                            onTap: () => context.push('/trainer/student/${student.id}'),
-                            child: Container(
-                              margin: const EdgeInsets.only(bottom: 12),
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: AppColors.surface,
-                                border: Border.all(color: AppColors.border, width: 1),
-                                borderRadius: BorderRadius.circular(12),
+                  : _error != null
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.error_outline, color: AppColors.accentError, size: 40),
+                              const SizedBox(height: 12),
+                              Text(_error!,
+                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textMuted)),
+                              const SizedBox(height: 16),
+                              TextButton.icon(
+                                onPressed: _loadStudents,
+                                icon: const Icon(Icons.refresh, size: 16),
+                                label: const Text('Tentar novamente'),
                               ),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 44,
-                                    height: 44,
-                                    decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        colors: [AppColors.primary, AppColors.primaryLight],
-                                        begin: Alignment.topLeft,
-                                        end: Alignment.bottomRight,
-                                      ),
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: Center(
-                                      child: Text(student.name[0],
-                                          style: const TextStyle(
-                                              color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(student.name,
-                                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
-                                        Text('${student.goal} • ${student.lastSession}',
-                                            style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted)),
-                                      ],
-                                    ),
-                                  ),
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(4),
-                                    child: SizedBox(
-                                      width: 60,
-                                      height: 24,
-                                      child: LinearProgressIndicator(
-                                        value: student.progress / 100,
-                                        backgroundColor: AppColors.surfaceLight,
-                                        valueColor: const AlwaysStoppedAnimation(AppColors.primary),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text('${student.progress.toInt()}%',
-                                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                          color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 11)),
-                                  const SizedBox(width: 8),
-                                  const Icon(Icons.chevron_right, color: AppColors.textMuted, size: 20),
-                                ],
-                              ),
-                            ),
+                            ],
                           ),
-                        );
-                      },
-                    ),
+                        )
+                      : _filteredStudents.isEmpty
+                          ? Center(
+                              child: Text('Nenhum aluno encontrado',
+                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textMuted)),
+                            )
+                          : ListView.builder(
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              itemCount: _filteredStudents.length,
+                              itemBuilder: (context, index) {
+                                final student = _filteredStudents[index];
+                                return FadeInUp(
+                                  delay: Duration(milliseconds: index * 100),
+                                  child: GestureDetector(
+                                    onTap: () => context.push('/trainer/student/${student.id}'),
+                                    child: Container(
+                                      margin: const EdgeInsets.only(bottom: 12),
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.surface,
+                                        border: Border.all(color: AppColors.border, width: 1),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Container(
+                                            width: 44,
+                                            height: 44,
+                                            decoration: BoxDecoration(
+                                              gradient: LinearGradient(
+                                                colors: [AppColors.primary, AppColors.primaryLight],
+                                                begin: Alignment.topLeft,
+                                                end: Alignment.bottomRight,
+                                              ),
+                                              borderRadius: BorderRadius.circular(10),
+                                            ),
+                                            child: Center(
+                                              child: Text(student.name[0],
+                                                  style: const TextStyle(
+                                                      color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(student.name,
+                                                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                                                Text(student.goalType ?? 'Sem objetivo',
+                                                    style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted)),
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          const Icon(Icons.chevron_right, color: AppColors.textMuted, size: 20),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
             ),
           ],
         ),
@@ -184,7 +218,7 @@ class _TrainerStudentsScreenState extends State<TrainerStudentsScreen> {
                 children: [
                   const Icon(Icons.people, color: AppColors.primary, size: 20),
                   const SizedBox(height: 6),
-                  Text('${students.length}', style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
+                  Text('${_allStudents.length}', style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
                   Text('Alunos Ativos',
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted), textAlign: TextAlign.center),
                 ],
@@ -207,8 +241,8 @@ class _TrainerStudentsScreenState extends State<TrainerStudentsScreen> {
                 children: [
                   const Icon(Icons.calendar_today, color: AppColors.accentInfo, size: 20),
                   const SizedBox(height: 6),
-                  Text('3x', style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
-                  Text('Freq. Média',
+                  Text('${_allStudents.length}x', style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
+                  Text('Acompanhando',
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted), textAlign: TextAlign.center),
                 ],
               ),

@@ -18,6 +18,7 @@ from httpx import ASGITransport
 from main import app as fastapi_app
 from app.config.database import get_db
 from app.models.user import Base, User
+from app.models.invitation import Invitation  # noqa: F401 — registra invitations no Base.metadata
 import app.models.logbook  # noqa: F401 — garante que workout_sessions/session_exercises entram no Base.metadata
 from app.models.goal import Goal as _Goal, GoalProgressEntry as _GoalProgressEntry  # noqa: F401
 from app.models import workout_sheet  # noqa: F401 — registra workout_sheets/exercises no Base.metadata
@@ -154,17 +155,106 @@ async def sample_user_data():
 
 
 @pytest_asyncio.fixture
-async def sample_user(test_db_session, sample_user_data):
+async def sample_user(test_db_session, sample_user_data, sample_personal_trainer):
     """Criar usuário de exemplo no banco."""
-    service = UserService(test_db_session)
+    from app.services.user_service import UserService
+    from app.services.invitation_service import InvitationService
     from app.dtos.user_dto import CreateUserDTO
 
-    dto = CreateUserDTO(**sample_user_data)
-    user_response = await service.create(dto)
+    user_service = UserService(test_db_session)
+    invitation_service = InvitationService(test_db_session)
+
+    # Gerar convite
+    inv_response = await invitation_service.generate(sample_personal_trainer.id)
+
+    # Criar cliente com convite
+    dto = CreateUserDTO(
+        **sample_user_data,
+        invitation_code=inv_response.code,
+    )
+    user_response = await user_service.create(dto)
 
     # Buscar o usuário criado para retornar a instância completa
     user = await test_db_session.get(User, user_response.id)
     return user
+
+
+@pytest_asyncio.fixture
+async def sample_personal_trainer_data():
+    """Dados de exemplo de personal trainer válido."""
+    return {
+        "name": "Maria Treinadora",
+        "email": "maria.trainer@example.com",
+        "password": "SenhaForte123!",
+        "role": "personal_trainer",
+    }
+
+
+@pytest_asyncio.fixture
+async def sample_personal_trainer(test_db_session, sample_personal_trainer_data):
+    """Criar personal trainer de exemplo no banco."""
+    service = UserService(test_db_session)
+    from app.dtos.user_dto import CreateUserDTO
+
+    dto = CreateUserDTO(**sample_personal_trainer_data)
+    user_response = await service.create(dto)
+
+    user = await test_db_session.get(User, user_response.id)
+    return user
+
+
+@pytest_asyncio.fixture
+async def sample_personal_trainer_no_students(test_db_session):
+    """Criar personal trainer sem alunos."""
+    service = UserService(test_db_session)
+    from app.dtos.user_dto import CreateUserDTO
+
+    dto = CreateUserDTO(
+        name="Trainer Sem Alunos",
+        email="trainer.no.students@example.com",
+        password="SenhaForte123!",
+        role="personal_trainer",
+    )
+    user_response = await service.create(dto)
+
+    user = await test_db_session.get(User, user_response.id)
+    return user
+
+
+@pytest_asyncio.fixture
+async def sample_students(test_db_session, sample_personal_trainer):
+    """Criar 3 alunos vinculados ao personal trainer de exemplo."""
+    from app.services.user_service import UserService
+    from app.services.invitation_service import InvitationService
+    from app.dtos.user_dto import CreateUserDTO
+
+    user_service = UserService(test_db_session)
+    invitation_service = InvitationService(test_db_session)
+
+    students = []
+    student_names = ["Ana Silva", "Bruno Santos", "Carlos Ferreira"]
+    for i, name in enumerate(student_names):
+        # Gerar convite
+        inv_response = await invitation_service.generate(sample_personal_trainer.id)
+
+        # Criar aluno com o convite
+        dto = CreateUserDTO(
+            name=name,
+            email=f"student{i+1}@example.com",
+            password="SenhaForte123!",
+            role="client",
+            weight_kg=70 + i * 5,
+            height_cm=170 + i,
+            age=25 + i,
+            goal_type="gain_mass",
+            invitation_code=inv_response.code,
+        )
+        user_response = await user_service.create(dto)
+        user = await test_db_session.get(User, user_response.id)
+        students.append(user)
+
+    await test_db_session.commit()
+    return students
 
 
 @pytest.fixture(scope="session")
