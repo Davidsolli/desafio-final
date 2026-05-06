@@ -7,6 +7,7 @@ import '../../models/mock_data.dart';
 import '../../models/workout_sheet_model.dart';
 import '../../providers/workout_sheet_provider.dart';
 import '../../services/workout_sheet_service.dart';
+import 'widgets/create_workout_sheet_dialog.dart';
 
 class TrainerStudentDetail extends StatefulWidget {
   final String studentId;
@@ -313,19 +314,22 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('Fichas Atribuídas', style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: AppColors.primary,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.add, color: Colors.white, size: 14),
-                    const SizedBox(width: 4),
-                    Text('Novo',
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
-                  ],
+              GestureDetector(
+                onTap: _showCreateWorkoutDialog,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.add, color: Colors.white, size: 14),
+                      const SizedBox(width: 4),
+                      Text('Novo',
+                          style: Theme.of(context).textTheme.labelSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -670,6 +674,24 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
         ],
       ),
     );
+  }
+
+  Future<void> _showCreateWorkoutDialog() async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (_) => CreateWorkoutSheetDialog(
+        targetUserId: widget.studentId,
+      ),
+    );
+    if (result == true && mounted) {
+      await _loadStudentSheets();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Ficha criada com sucesso!'),
+          backgroundColor: AppColors.accentSuccess,
+        ),
+      );
+    }
   }
 
   Widget _buildBottomNav() {

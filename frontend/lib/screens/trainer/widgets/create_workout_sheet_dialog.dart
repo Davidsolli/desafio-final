@@ -13,8 +13,13 @@ import 'exercise_catalog_picker.dart';
 /// - Nome e descrição da ficha
 /// - Dia da semana (RN-01: único por aluno)
 /// - Exercícios via busca no catálogo da API ou adição manual
+///
+/// [targetUserId] - Se fornecido, a ficha será criada para este aluno.
+///                  Se null, usa o ID do usuário logado (trainer/admin).
 class CreateWorkoutSheetDialog extends StatefulWidget {
-  const CreateWorkoutSheetDialog({super.key});
+  final String? targetUserId;
+
+  const CreateWorkoutSheetDialog({super.key, this.targetUserId});
 
   @override
   State<CreateWorkoutSheetDialog> createState() =>
@@ -87,8 +92,18 @@ class _CreateWorkoutSheetDialogState extends State<CreateWorkoutSheetDialog> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final userId = context.read<AuthProvider>().user?.id;
-    if (userId == null) return;
+    final userId = widget.targetUserId ?? context.read<AuthProvider>().user?.id;
+    if (userId == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Erro: ID do aluno não encontrado'),
+            backgroundColor: AppColors.accentError,
+          ),
+        );
+      }
+      return;
+    }
 
     final exerciseDTOs = _exercises.asMap().entries.map((entry) {
       final i = entry.key;
