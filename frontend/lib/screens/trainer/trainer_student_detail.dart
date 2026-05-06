@@ -3,10 +3,11 @@ import 'package:go_router/go_router.dart';
 import 'package:animate_do/animate_do.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_colors.dart';
-import '../../models/mock_data.dart';
 import '../../models/workout_sheet_model.dart';
 import '../../providers/workout_sheet_provider.dart';
+import '../../services/user_service.dart';
 import '../../services/workout_sheet_service.dart';
+import '../../models/mock_data.dart';
 import 'widgets/create_workout_sheet_dialog.dart';
 
 class TrainerStudentDetail extends StatefulWidget {
@@ -20,7 +21,9 @@ class TrainerStudentDetail extends StatefulWidget {
 
 class _TrainerStudentDetailState extends State<TrainerStudentDetail> with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  late Student _student;
+  UserResponse? _student;
+  bool _studentLoading = true;
+  String? _studentError;
 
   // Estado local para fichas do aluno (carregadas via API)
   List<WorkoutSheetListItem> _studentSheets = [];
@@ -31,12 +34,34 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
-    _student = students.firstWhere((s) => s.id == widget.studentId, orElse: () => students[0]);
 
-    // Carrega fichas do aluno via API
+    // Carrega dados do aluno e fichas via API
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadStudentData();
       _loadStudentSheets();
     });
+  }
+
+  Future<void> _loadStudentData() async {
+    setState(() {
+      _studentLoading = true;
+      _studentError = null;
+    });
+
+    try {
+      final userService = context.read<UserService>();
+      final student = await userService.getCurrentUser();
+      // Se for admin/trainer, buscar detalhes especificos do aluno
+      setState(() {
+        _student = student;
+        _studentLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _studentError = 'Erro ao carregar aluno';
+        _studentLoading = false;
+      });
+    }
   }
 
   Future<void> _loadStudentSheets() async {
@@ -81,8 +106,14 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(_student.name, style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
-            Text(_student.goal, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.primary)),
+            Text(
+              _student?.name ?? 'Carregando...',
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            Text(
+              _student?.goalType ?? 'Sem objetivo',
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.primary),
+            ),
           ],
         ),
       ),
@@ -123,6 +154,35 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
   }
 
   Widget _buildInfoTab() {
+    if (_studentLoading) {
+      return const Center(
+        child: CircularProgressIndicator(color: AppColors.primary),
+      );
+    }
+
+    if (_studentError != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, color: AppColors.accentError, size: 40),
+            const SizedBox(height: 12),
+            Text(_studentError!,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textMuted)),
+          ],
+        ),
+      );
+    }
+
+    if (_student == null) {
+      return Center(
+        child: Text('Aluno não encontrado',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textMuted)),
+      );
+    }
+
+    final imc = _student!.height > 0 ? _student!.weight / ((_student!.height / 100) * (_student!.height / 100)) : 0.0;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       child: Column(
@@ -142,7 +202,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Center(
-                  child: Text(_student.name[0],
+                  child: Text(_student!.name[0],
                       style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 24)),
                 ),
               ),
@@ -150,9 +210,9 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(_student.name, style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
-                  Text(_student.goal, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
-                  Text('4x/semana', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted)),
+                  Text(_student!.name, style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
+                  Text(_student!.goalType ?? 'Sem objetivo', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
+                  Text('${_student!.age} anos', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted)),
                 ],
               ),
             ],
@@ -173,7 +233,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                       children: [
                         const Icon(Icons.scale, color: AppColors.primary, size: 20),
                         const SizedBox(height: 6),
-                        const Text('78 kg', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        Text('${_student!.weight.toStringAsFixed(1)} kg', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                         Text('Peso', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted)),
                       ],
                     ),
@@ -194,7 +254,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                       children: [
                         const Icon(Icons.height, color: AppColors.primary, size: 20),
                         const SizedBox(height: 6),
-                        const Text('175 cm', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        Text('${_student!.height.toStringAsFixed(1)} cm', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                         Text('Altura', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted)),
                       ],
                     ),
@@ -219,7 +279,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                       children: [
                         const Icon(Icons.cake, color: AppColors.primary, size: 20),
                         const SizedBox(height: 6),
-                        const Text('27 anos', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        Text('${_student!.age} anos', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                         Text('Idade', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted)),
                       ],
                     ),
@@ -238,56 +298,10 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                     ),
                     child: Column(
                       children: [
-                        const Icon(Icons.percent, color: AppColors.primary, size: 20),
-                        const SizedBox(height: 6),
-                        const Text('16%', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                        Text('Gordura', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted)),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: FadeInLeft(
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.surface,
-                      border: Border.all(color: AppColors.border, width: 1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Column(
-                      children: [
                         const Icon(Icons.trending_up, color: AppColors.primary, size: 20),
                         const SizedBox(height: 6),
-                        const Text('25.5', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        Text('${imc.toStringAsFixed(1)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                         Text('IMC', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted)),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: FadeInRight(
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.surface,
-                      border: Border.all(color: AppColors.border, width: 1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Column(
-                      children: [
-                        const Icon(Icons.local_fire_department, color: AppColors.primary, size: 20),
-                        const SizedBox(height: 6),
-                        const Text('1820', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                        Text('TMB', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted)),
                       ],
                     ),
                   ),
@@ -296,9 +310,13 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
             ],
           ),
           const SizedBox(height: 20),
-          Text('Respostas do Questionário', style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
+          Text('Informações do Aluno', style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
           const SizedBox(height: 12),
-          _buildQuestionRow('Objetivo', 'Ganhar massa muscular'),
+          _buildQuestionRow('Objetivo', _student!.goalType ?? 'Não informado'),
+          const SizedBox(height: 8),
+          _buildQuestionRow('Gênero', _student!.gender ?? 'Não informado'),
+          const SizedBox(height: 8),
+          _buildQuestionRow('Email', _student!.email),
         ],
       ),
     );
