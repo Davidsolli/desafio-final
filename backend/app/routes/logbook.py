@@ -25,6 +25,7 @@ from app.dependencies.auth import get_current_user
 from app.dtos.logbook_dto import (
     CalendarResponseDTO,
     CreateSessionDTO,
+    FrequencyResponseDTO,
     PaginatedSessionsDTO,
     ProgressionResponseDTO,
     SessionExerciseDTO,
@@ -347,6 +348,7 @@ async def get_progression(
     exercise_id: UUID,
     user_id: Optional[UUID] = Query(None, description="Filtrar por aluno (admin/personal)"),
     weeks: Optional[int] = Query(4, ge=1, le=52, description="Últimas N semanas (padrão: 4)"),
+    group_by: Optional[str] = Query(None, description="Agrupar por: week ou month"),
     start_date: Optional[datetime] = Query(None, description="Data inicial (ISO 8601)"),
     end_date: Optional[datetime] = Query(None, description="Data final (ISO 8601)"),
     current_user: User = Depends(get_current_user),
@@ -355,12 +357,15 @@ async def get_progression(
     """
     Retorna a evolução histórica de carga de um exercício específico.
 
+    Parâmetros opcionais:
+    - `group_by`: "week" ou "month" para agrupar dados por período
+    - `weeks`: Últimas N semanas (se start_date/end_date não definidas)
+
     Inclui:
     - Pontos de dados com carga, séries, repetições e volume total
     - Estatísticas: média, máximo, mínimo, trend e % de melhora
     """
-    requester_id, role = auth
-    effective_user_id = user_id if (role != "client" and user_id) else requester_id
+    effective_user_id = user_id if (current_user.role != "client" and user_id) else current_user.id
     controller = LogbookController(session)
     try:
         return await controller.get_progression(
@@ -369,11 +374,65 @@ async def get_progression(
             weeks=weeks,
             start_date=start_date,
             end_date=end_date,
+            group_by=group_by,
         )
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Erro ao calcular progressão.",
+        )
+
+
+# ---------------------------------------------------------------------------
+# GET /frequency — Frequência de Treinos
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/frequency",
+    response_model=FrequencyResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Frequência de treinos por período",
+    responses={
+        200: {"description": "Frequência calculada"},
+    },
+)
+async def get_frequency(
+    period: str = Query(..., pattern="^(weekly|monthly)$", description="Período: weekly ou monthly"),
+    user_id: Optional[UUID] = Query(None, description="Filtrar por aluno (admin/personal)"),
+    limit: Optional[int] = Query(None, description="Número de períodos (ex: 12 para últimas 12 semanas)"),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> FrequencyResponseDTO:
+    """
+    Retorna frequência de treinos agrupados por semana ou mês.
+
+    Parâmetros:
+    - `period`: "weekly" (últimas 12 semanas padrão) ou "monthly" (últimos 6 meses padrão)
+    - `limit`: Número de períodos a retornar (opcional)
+    - `user_id`: Filtrar por aluno específico (apenas admin/personal)
+
+    Resposta:
+    - Lista de períodos com contagem de treinos completados
+    - Períodos sem treinos retornam count=0
+    """
+    effective_user_id = user_id if (current_user.role != "client" and user_id) else current_user.id
+    controller = LogbookController(session)
+    try:
+        return await controller.get_frequency(
+            user_id=effective_user_id,
+            period=period,
+            limit=limit,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e),
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro ao calcular frequência.",
         )
 
 

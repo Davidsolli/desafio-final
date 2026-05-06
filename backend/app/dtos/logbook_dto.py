@@ -261,3 +261,24 @@ class ProgressionResponseDTO(BaseModel):
     user_id: UUID
     data_points: List[ProgressionDataPointDTO]
     statistics: ProgressionStatisticsDTO
+
+
+# ---------------------------------------------------------------------------
+# DTOs de Frequência
+# ---------------------------------------------------------------------------
+
+
+class FrequencyDataPointDTO(BaseModel):
+    """Ponto de dados de frequência de treinos."""
+
+    period_start: datetime  # Início de semana ou mês
+    period_end: datetime  # Fim de semana ou mês
+    count: int  # Total de treinos completados no período
+
+
+class FrequencyResponseDTO(BaseModel):
+    """Resposta de frequência de treinos agrupada."""
+
+    user_id: UUID
+    period: str  # "weekly" ou "monthly"
+    data_points: List[FrequencyDataPointDTO]

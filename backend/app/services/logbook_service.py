@@ -6,7 +6,7 @@ exercícios registrados, calendário e progressão de carga.
 """
 
 import calendar
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import List, Optional, Tuple
 from uuid import UUID
 
@@ -17,6 +17,8 @@ from app.dtos.logbook_dto import (
     CalendarResponseDTO,
     CalendarSummaryDTO,
     CreateSessionDTO,
+    FrequencyDataPointDTO,
+    FrequencyResponseDTO,
     PaginatedSessionsDTO,
     ProgressionDataPointDTO,
     ProgressionResponseDTO,
@@ -391,6 +393,7 @@ class LogbookService:
         weeks: Optional[int],
         start_date: Optional[datetime],
         end_date: Optional[datetime],
+        group_by: Optional[str] = None,
     ) -> ProgressionResponseDTO:
         """
         Calcula a evolução de carga de um exercício para um aluno.
@@ -583,3 +586,129 @@ class LogbookService:
         if dto.modification is not None:
             exercise.modification = dto.modification
         exercise.status = dto.status
+
+    # ------------------------------------------------------------------
+    # Frequência
+    # ------------------------------------------------------------------
+
+    async def get_frequency(
+        self,
+        user_id: UUID,
+        period: str,
+        limit: Optional[int],
+    ) -> FrequencyResponseDTO:
+        """
+        Retorna frequência de treinos agrupados por período (semana ou mês).
+
+        Args:
+            user_id: ID do aluno
+            period: "weekly" ou "monthly"
+            limit: Número de períodos a retornar (ex: 12 últimas semanas)
+        """
+        if period not in ("weekly", "monthly"):
+            raise ValueError("period deve ser 'weekly' ou 'monthly'")
+
+        period_key = "week" if period == "weekly" else "month"
+
+        # Calcular datas de início e fim
+        now = datetime.utcnow()
+        if period == "weekly":
+            if limit is None:
+                limit = 12
+            start_date = now - timedelta(weeks=limit)
+        else:
+            if limit is None:
+                limit = 6
+            start_date = now - timedelta(days=30 * limit)
+
+        end_date = now
+
+        # Buscar dados agrupados
+        grouped_data = await self.repository.get_frequency_data(
+            user_id=user_id,
+            period=period_key,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+        # Gerar todos os períodos entre start_date e end_date (preenchendo zeros)
+        all_periods = self._generate_periods(start_date, end_date, period)
+
+        # Criar mapa de dados agrupados
+        data_map = {}
+        for period_start_dt, count in grouped_data:
+            data_map[period_start_dt.date()] = count
+
+        # Criar data points preenchendo períodos sem dados
+        data_points = []
+        for period_start, period_end in all_periods:
+            count = data_map.get(period_start.date(), 0)
+            data_points.append(
+                FrequencyDataPointDTO(
+                    period_start=period_start,
+                    period_end=period_end,
+                    count=count,
+                )
+            )
+
+        return FrequencyResponseDTO(
+            user_id=user_id,
+            period=period,
+            data_points=data_points,
+        )
+
+    @staticmethod
+    def _generate_periods(
+        start_date: datetime, end_date: datetime, period: str
+    ) -> List[Tuple[datetime, datetime]]:
+        """
+        Gera lista de períodos entre start_date e end_date.
+
+        Args:
+            start_date: Data inicial
+            end_date: Data final
+            period: "weekly" ou "monthly"
+
+        Returns:
+            Lista de tuplas (period_start, period_end)
+        """
+        periods = []
+        current = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
+
+        if period == "weekly":
+            # Segunda-feira da semana de start_date
+            days_since_monday = current.weekday()
+            current = current - timedelta(days=days_since_monday)
+
+            while current <= end_date:
+                period_start = current
+                period_end = current + timedelta(days=6, hours=23, minutes=59, seconds=59)
+                periods.append((period_start, period_end))
+                current += timedelta(days=7)
+        else:  # monthly
+            # Primeiro dia do mes
+            current = current.replace(day=1)
+
+            while current <= end_date:
+                period_start = current
+                # Último dia do mês
+                if current.month == 12:
+                    period_end = date(current.year + 1, 1, 1) - timedelta(days=1)
+                    period_end = datetime.combine(
+                        period_end, datetime.max.time()
+                    )
+                else:
+                    period_end = (
+                        date(current.year, current.month + 1, 1) - timedelta(days=1)
+                    )
+                    period_end = datetime.combine(
+                        period_end, datetime.max.time()
+                    )
+
+                periods.append((period_start, period_end))
+                if current.month == 12:
+                    current = datetime(current.year + 1, 1, 1)
+                else:
+                    current = datetime(current.year, current.month + 1, 1)
+
+        return periods

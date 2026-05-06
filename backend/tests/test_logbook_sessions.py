@@ -716,3 +716,131 @@ async def test_series_details(async_client_logbook):
     assert data["series_details"] is not None
     assert len(data["series_details"]) == 3
     assert data["series_details"][2]["load"] == 85
+
+
+# ---------------------------------------------------------------------------
+# Testes de Frequência (Novo)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_frequencia_semanal_vazia(async_client_as, sample_user):
+    """Teste: GET /frequency?period=weekly retorna períodos vazios."""
+    client = await async_client_as(sample_user)
+    try:
+        response = await client.get(
+            "/api/v1/logbook/frequency?period=weekly&limit=2",
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["period"] == "weekly"
+        assert data["user_id"] == str(sample_user.id)
+        assert isinstance(data["data_points"], list)
+        assert len(data["data_points"]) > 0
+        for dp in data["data_points"]:
+            assert dp["count"] == 0
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_frequencia_mensal_com_treinos(async_client_as, sample_user):
+    """Teste: GET /frequency?period=monthly conta treinos completados."""
+    client = await async_client_as(sample_user)
+    try:
+        for i in range(2):
+            session_date = past_date(days=i)
+            r = await client.post(
+                "/api/v1/logbook/sessions",
+                json={"workout_sheet_id": str(SHEET_ID), "session_date": session_date},
+            )
+            assert r.status_code == 201
+            session_id = r.json()["id"]
+
+            # Adicionar exercício
+            await client.post(
+                f"/api/v1/logbook/sessions/{session_id}/exercises",
+                json={
+                    "exercise_id": str(EXERCISE_ID),
+                    "actual_series": 3,
+                    "actual_repetitions": 10,
+                    "actual_load_kg": 50.0,
+                    "status": "completed",
+                },
+            )
+
+            # Finalizar sessão
+            r_update = await client.put(
+                f"/api/v1/logbook/sessions/{session_id}",
+                json={"status": "completed"},
+            )
+            assert r_update.status_code == 200
+
+        response = await client.get(
+            "/api/v1/logbook/frequency?period=monthly&limit=1",
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["period"] == "monthly"
+        counts = [dp["count"] for dp in data["data_points"]]
+        assert any(c > 0 for c in counts)
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_frequencia_period_invalido(async_client_as, sample_user):
+    """Teste: GET /frequency?period=invalid retorna erro 422."""
+    client = await async_client_as(sample_user)
+    try:
+        response = await client.get(
+            "/api/v1/logbook/frequency?period=invalid",
+        )
+        assert response.status_code == 422
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_progressao_com_agrupamento_semanal(async_client_as, sample_user):
+    """Teste: GET /progression/{id}?group_by=week agrupa por semana."""
+    client = await async_client_as(sample_user)
+    try:
+        session_ids = []
+        for i in range(3):
+            session_date = past_date(days=i)
+            r = await client.post(
+                "/api/v1/logbook/sessions",
+                json={"workout_sheet_id": str(SHEET_ID), "session_date": session_date},
+            )
+            assert r.status_code == 201
+            session_ids.append(r.json()["id"])
+
+        for idx, session_id in enumerate(session_ids):
+            await client.post(
+                f"/api/v1/logbook/sessions/{session_id}/exercises",
+                json={
+                    "exercise_id": str(EXERCISE_ID),
+                    "actual_series": 3,
+                    "actual_repetitions": 10,
+                    "actual_load_kg": 50.0 + (idx * 5),
+                    "status": "completed",
+                },
+            )
+
+            await client.put(
+                f"/api/v1/logbook/sessions/{session_id}",
+                json={"status": "completed"},
+            )
+
+        response = await client.get(
+            f"/api/v1/logbook/progression/{EXERCISE_ID}?group_by=week",
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["exercise_id"] == str(EXERCISE_ID)
+        assert len(data["data_points"]) > 0
+        assert data["statistics"]["total_sessions"] > 0
+        assert data["statistics"]["max_load_kg"] >= 50.0
+    finally:
+        await client.aclose()

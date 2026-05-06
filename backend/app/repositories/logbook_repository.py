@@ -228,6 +228,59 @@ class LogbookRepository:
         return session_obj.session_date if session_obj else None
 
     # ------------------------------------------------------------------
+    # Frequência (Novo)
+    # ------------------------------------------------------------------
+
+    async def get_frequency_data(
+        self,
+        user_id: UUID,
+        period: str,
+        start_date: Optional[datetime],
+        end_date: Optional[datetime],
+    ) -> List[Tuple[datetime, int]]:
+        """
+        Retorna frequência de treinos agrupados por período.
+
+        Args:
+            user_id: ID do aluno
+            period: "week" ou "month"
+            start_date: Data inicial (opcional)
+            end_date: Data final (opcional)
+
+        Returns:
+            Lista de tuplas (period_start_datetime, count)
+        """
+        if period == "week":
+            date_trunc_expr = func.date_trunc("week", WorkoutSession.session_date)
+        elif period == "month":
+            date_trunc_expr = func.date_trunc("month", WorkoutSession.session_date)
+        else:
+            raise ValueError("period deve ser 'week' ou 'month'")
+
+        stmt = (
+            select(
+                date_trunc_expr.label("period_start"),
+                func.count(WorkoutSession.id).label("count"),
+            )
+            .where(
+                WorkoutSession.user_id == user_id,
+                WorkoutSession.status == "completed",
+            )
+            .group_by(date_trunc_expr)
+            .order_by(date_trunc_expr.asc())
+        )
+
+        if start_date is not None:
+            stmt = stmt.where(WorkoutSession.session_date >= start_date)
+        if end_date is not None:
+            stmt = stmt.where(WorkoutSession.session_date <= end_date)
+
+        result = await self.session.execute(stmt)
+        rows = result.all()
+
+        return [(row[0], row[1]) for row in rows]
+
+    # ------------------------------------------------------------------
     # Transação
     # ------------------------------------------------------------------
 
