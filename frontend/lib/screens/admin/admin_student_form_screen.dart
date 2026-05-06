@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/theme_colors.dart';
 import '../../providers/admin_provider.dart';
 import '../../models/admin_models.dart';
 
@@ -190,7 +191,7 @@ class _AdminStudentFormScreenState extends State<AdminStudentFormScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.background,
       appBar: AppBar(
         title: Text(widget.isEditing ? 'Editar Aluno' : 'Adicionar Aluno'),
         backgroundColor: AppColors.primary,

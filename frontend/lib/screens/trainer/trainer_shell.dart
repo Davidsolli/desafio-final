@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/theme_colors.dart';
 
 class TrainerShell extends StatefulWidget {
   final Widget child;
@@ -29,7 +30,7 @@ class _TrainerShellState extends State<TrainerShell> {
     final selectedIndex = _getSelectedNavIndex(currentPath);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.background,
       body: widget.child,
       bottomNavigationBar: _buildBottomNav(selectedIndex),
     );
@@ -38,8 +39,8 @@ class _TrainerShellState extends State<TrainerShell> {
   Widget _buildBottomNav(int selectedIndex) {
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border(top: BorderSide(color: AppColors.border, width: 1)),
+        color: context.colors.surface,
+        border: Border(top: BorderSide(color: context.colors.border, width: 1)),
       ),
       child: BottomNavigationBar(
         currentIndex: selectedIndex,
@@ -52,10 +53,10 @@ class _TrainerShellState extends State<TrainerShell> {
           ];
           context.go(routes[index]);
         },
-        backgroundColor: AppColors.surface,
+        backgroundColor: context.colors.surface,
         type: BottomNavigationBarType.fixed,
         selectedItemColor: AppColors.primary,
-        unselectedItemColor: AppColors.textMuted,
+        unselectedItemColor: context.colors.textMuted,
         items: const [
           // BottomNavigationBarItem(icon: Icon(Icons.dashboard_outlined), label: 'Dashboard'), // Removido temporariamente
           BottomNavigationBarItem(icon: Icon(Icons.people_outlined), label: 'Alunos'),

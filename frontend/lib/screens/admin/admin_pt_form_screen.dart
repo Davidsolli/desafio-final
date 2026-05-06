@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/theme_colors.dart';
 import '../../providers/admin_provider.dart';
 import '../../models/admin_models.dart';
 
@@ -229,7 +230,7 @@ class _AdminPTFormScreenState extends State<AdminPTFormScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.background,
       appBar: AppBar(
         title: Text(widget.isEditing ? 'Editar Trainer' : 'Adicionar Trainer'),
         backgroundColor: AppColors.primary,
@@ -320,14 +321,14 @@ class _AdminPTFormScreenState extends State<AdminPTFormScreen> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppColors.surface,
+                  color: context.colors.surface,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.border),
+                  border: Border.all(color: context.colors.border),
                 ),
                 child: Text(
                   'Requisitos: Mínimo 8 caracteres, pelo menos uma letra maiúscula, uma letra minúscula, um número e um caractere especial (@!#\$%^&*)',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.textSecondary,
+                    color: context.colors.textSecondary,
                   ),
                 ),
               ),

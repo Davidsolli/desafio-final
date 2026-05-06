@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../theme/app_colors.dart';
+import '../../../theme/theme_colors.dart';
 import '../../../../services/user_service.dart';
 import '../../../../providers/user_provider.dart';
 
@@ -57,10 +58,10 @@ class _ProfileBodyFormState extends State<ProfileBodyForm> {
       padding: const EdgeInsets.only(bottom: 6),
       child: Text(
         text,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 13,
           fontWeight: FontWeight.w600,
-          color: AppColors.textPrimary,
+          color: context.colors.textPrimary,
         ),
       ),
     );
@@ -69,15 +70,15 @@ class _ProfileBodyFormState extends State<ProfileBodyForm> {
   InputDecoration _buildInputDeco() {
     return InputDecoration(
       filled: true,
-      fillColor: AppColors.background,
+      fillColor: context.colors.background,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: AppColors.border),
+        borderSide: BorderSide(color: context.colors.border),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: AppColors.border),
+        borderSide: BorderSide(color: context.colors.border),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
@@ -94,8 +95,8 @@ class _ProfileBodyFormState extends State<ProfileBodyForm> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border.all(color: AppColors.border, width: 1),
+        color: context.colors.surface,
+        border: Border.all(color: context.colors.border, width: 1),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -231,7 +232,7 @@ class _ProfileBodyFormState extends State<ProfileBodyForm> {
             child: Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: AppColors.background,
+                color: context.colors.background,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Column(
@@ -241,7 +242,7 @@ class _ProfileBodyFormState extends State<ProfileBodyForm> {
                     style: Theme.of(context)
                         .textTheme
                         .bodySmall
-                        ?.copyWith(color: AppColors.textMuted),
+                        ?.copyWith(color: context.colors.textMuted),
                   ),
                   const SizedBox(height: 8),
                   Text(

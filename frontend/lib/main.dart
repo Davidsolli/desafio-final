@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'theme/app_theme.dart';
+import 'theme/theme_provider.dart';
 import 'routes/app_routes.dart';
 import 'services/api_client.dart';
 import 'services/auth_service.dart';
@@ -165,11 +166,18 @@ class OmniConnectApp extends StatelessWidget {
           },
         ),
       ],
-      child: MaterialApp.router(
-        title: 'FitLoop',
-        theme: AppTheme.darkTheme,
-        routerConfig: AppRoutes.router,
-        debugShowCheckedModeBanner: false,
+      child: ChangeNotifierProvider(
+        create: (_) => ThemeProvider(),
+        child: Consumer<ThemeProvider>(
+          builder: (_, themeProvider, __) => MaterialApp.router(
+            title: 'FitLoop',
+            theme: AppTheme.lightTheme,
+            darkTheme: AppTheme.darkTheme,
+            themeMode: themeProvider.themeMode,
+            routerConfig: AppRoutes.router,
+            debugShowCheckedModeBanner: false,
+          ),
+        ),
       ),
     );
   }

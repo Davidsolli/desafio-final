@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:animate_do/animate_do.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/theme_colors.dart';
 import '../../routes/app_routes.dart';
 import '../../services/api_client.dart';
 import '../../services/home_service.dart';
@@ -38,8 +39,8 @@ class _HomeBody extends StatelessWidget {
       builder: (context, provider, _) {
         // ----- Loading -----
         if (provider.isLoading) {
-          return const Scaffold(
-            backgroundColor: AppColors.background,
+          return Scaffold(
+            backgroundColor: context.colors.background,
             body: Center(
               child: CircularProgressIndicator(color: AppColors.primary),
             ),
@@ -49,15 +50,15 @@ class _HomeBody extends StatelessWidget {
         // ----- Error -----
         if (provider.error != null) {
           return Scaffold(
-            backgroundColor: AppColors.background,
+            backgroundColor: context.colors.background,
             body: Center(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 32),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.wifi_off_outlined,
-                        color: AppColors.textMuted, size: 48),
+                    Icon(Icons.wifi_off_outlined,
+                        color: context.colors.textMuted, size: 48),
                     const SizedBox(height: 16),
                     Text(
                       provider.error!,
@@ -65,7 +66,7 @@ class _HomeBody extends StatelessWidget {
                       style: Theme.of(context)
                           .textTheme
                           .bodyMedium
-                          ?.copyWith(color: AppColors.textSecondary),
+                          ?.copyWith(color: context.colors.textSecondary),
                     ),
                     const SizedBox(height: 24),
                     ElevatedButton.icon(
@@ -85,7 +86,7 @@ class _HomeBody extends StatelessWidget {
         if (data == null) return const SizedBox.shrink();
 
         return Scaffold(
-          backgroundColor: AppColors.background,
+          backgroundColor: context.colors.background,
           body: SafeArea(
             child: SingleChildScrollView(
               child: Column(
@@ -134,7 +135,7 @@ class _HomeBody extends StatelessWidget {
               style: Theme.of(context)
                   .textTheme
                   .bodySmall
-                  ?.copyWith(color: AppColors.textSecondary),
+                  ?.copyWith(color: context.colors.textSecondary),
             ),
             Row(
               children: [
@@ -159,12 +160,12 @@ class _HomeBody extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  border: Border.all(color: AppColors.border),
+                  color: context.colors.surface,
+                  border: Border.all(color: context.colors.border),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(Icons.notifications_outlined,
-                    color: AppColors.textMuted, size: 20),
+                child: Icon(Icons.notifications_outlined,
+                    color: context.colors.textMuted, size: 20),
               ),
               Positioned(
                 top: 4,
@@ -221,8 +222,8 @@ class _HomeBody extends StatelessWidget {
               padding:
                   const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
               decoration: BoxDecoration(
-                color: AppColors.surface,
-                border: Border.all(color: AppColors.border, width: 1),
+                color: context.colors.surface,
+                border: Border.all(color: context.colors.border, width: 1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Column(
@@ -267,8 +268,8 @@ class _HomeBody extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: AppColors.surface,
-            border: Border.all(color: AppColors.border, width: 1),
+            color: context.colors.surface,
+            border: Border.all(color: context.colors.border, width: 1),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Row(
@@ -291,7 +292,7 @@ class _HomeBody extends StatelessWidget {
                     style: Theme.of(context)
                         .textTheme
                         .bodySmall
-                        ?.copyWith(color: AppColors.textSecondary),
+                        ?.copyWith(color: context.colors.textSecondary),
                   ),
                 ],
               ),
@@ -312,8 +313,8 @@ class _HomeBody extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: AppColors.surface,
-            border: Border.all(color: AppColors.border, width: 1),
+            color: context.colors.surface,
+            border: Border.all(color: context.colors.border, width: 1),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Column(
@@ -325,10 +326,10 @@ class _HomeBody extends StatelessWidget {
                   Text(
                     'TREINO DE HOJE',
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        letterSpacing: 0.5, color: AppColors.textMuted),
+                        letterSpacing: 0.5, color: context.colors.textMuted),
                   ),
-                  const Icon(Icons.chevron_right,
-                      color: AppColors.textMuted, size: 20),
+                  Icon(Icons.chevron_right,
+                      color: context.colors.textMuted, size: 20),
                 ],
               ),
               const SizedBox(height: 12),
@@ -374,7 +375,7 @@ class _HomeBody extends StatelessWidget {
                               .textTheme
                               .bodySmall
                               ?.copyWith(
-                                  color: AppColors.textSecondary),
+                                  color: context.colors.textSecondary),
                         ),
                       ],
                     ),
@@ -406,7 +407,7 @@ class _HomeBody extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: AppColors.surfaceLight,
+        color: context.colors.surfaceLight,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
@@ -414,7 +415,7 @@ class _HomeBody extends StatelessWidget {
         style: Theme.of(context)
             .textTheme
             .bodySmall
-            ?.copyWith(color: AppColors.textMuted, fontSize: 11),
+            ?.copyWith(color: context.colors.textMuted, fontSize: 11),
       ),
     );
   }
@@ -459,8 +460,8 @@ class _HomeBody extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: AppColors.surface,
-              border: Border.all(color: AppColors.border, width: 1),
+              color: context.colors.surface,
+              border: Border.all(color: context.colors.border, width: 1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Center(
@@ -469,7 +470,7 @@ class _HomeBody extends StatelessWidget {
                 style: Theme.of(context)
                     .textTheme
                     .bodySmall
-                    ?.copyWith(color: AppColors.textMuted),
+                    ?.copyWith(color: context.colors.textMuted),
               ),
             ),
           )
@@ -481,8 +482,8 @@ class _HomeBody extends StatelessWidget {
                 margin: const EdgeInsets.only(bottom: 12),
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  border: Border.all(color: AppColors.border, width: 1),
+                  color: context.colors.surface,
+                  border: Border.all(color: context.colors.border, width: 1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Column(
@@ -519,7 +520,7 @@ class _HomeBody extends StatelessWidget {
                       child: LinearProgressIndicator(
                         value: goal.progress,
                         minHeight: 8,
-                        backgroundColor: AppColors.surfaceLight,
+                        backgroundColor: context.colors.surfaceLight,
                         valueColor: const AlwaysStoppedAnimation(
                             AppColors.primary),
                       ),

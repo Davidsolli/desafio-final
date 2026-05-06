@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../theme/app_colors.dart';
+import '../../../theme/theme_colors.dart';
 import '../../../models/workout_sheet_model.dart';
 import '../../../providers/workout_sheet_provider.dart';
 
@@ -86,8 +87,8 @@ class _ExerciseCatalogPickerSheetState
 
     return Container(
       height: screenHeight * 0.88,
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
+      decoration: BoxDecoration(
+        color: context.colors.surface,
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: Column(
@@ -98,7 +99,7 @@ class _ExerciseCatalogPickerSheetState
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-              color: AppColors.border,
+              color: context.colors.border,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -138,11 +139,11 @@ class _ExerciseCatalogPickerSheetState
               onChanged: _onSearchChanged,
               decoration: InputDecoration(
                 hintText: 'Ex: supino, agachamento, rosca...',
-                prefixIcon: const Icon(Icons.search, color: AppColors.textMuted),
+                prefixIcon: Icon(Icons.search, color: context.colors.textMuted),
                 suffixIcon: _searchController.text.isNotEmpty
                     ? IconButton(
-                        icon: const Icon(Icons.clear,
-                            color: AppColors.textMuted, size: 18),
+                        icon: Icon(Icons.clear,
+                            color: context.colors.textMuted, size: 18),
                         onPressed: () {
                           _searchController.clear();
                           _search();
@@ -150,10 +151,10 @@ class _ExerciseCatalogPickerSheetState
                       )
                     : null,
                 filled: true,
-                fillColor: AppColors.surfaceLight,
+                fillColor: context.colors.surfaceLight,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppColors.border),
+                  borderSide: BorderSide(color: context.colors.border),
                 ),
                 contentPadding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
@@ -200,7 +201,7 @@ class _ExerciseCatalogPickerSheetState
           ),
 
           const SizedBox(height: 8),
-          const Divider(height: 1, color: AppColors.border),
+          Divider(height: 1, color: context.colors.border),
 
           // Lista de resultados
           Expanded(
@@ -217,15 +218,15 @@ class _ExerciseCatalogPickerSheetState
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.fitness_center_outlined,
-                            color: AppColors.textMuted, size: 40),
+                        Icon(Icons.fitness_center_outlined,
+                            color: context.colors.textMuted, size: 40),
                         const SizedBox(height: 12),
                         Text(
                           'Nenhum exercício encontrado',
                           style: Theme.of(context)
                               .textTheme
                               .bodyMedium
-                              ?.copyWith(color: AppColors.textMuted),
+                              ?.copyWith(color: context.colors.textMuted),
                         ),
                         if (_searchController.text.isNotEmpty)
                           Padding(
@@ -235,7 +236,7 @@ class _ExerciseCatalogPickerSheetState
                               style: Theme.of(context)
                                   .textTheme
                                   .labelSmall
-                                  ?.copyWith(color: AppColors.textMuted),
+                                  ?.copyWith(color: context.colors.textMuted),
                             ),
                           ),
                       ],
@@ -276,7 +277,7 @@ class _ExerciseCatalogPickerSheetState
         selectedColor: AppColors.primary.withValues(alpha: 0.2),
         checkmarkColor: AppColors.primary,
         labelStyle: TextStyle(
-          color: isSelected ? AppColors.primary : AppColors.textPrimary,
+          color: isSelected ? AppColors.primary : context.colors.textPrimary,
           fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
         ),
       ),
@@ -299,7 +300,7 @@ class _ExerciseCatalogPickerSheetState
         selectedColor: AppColors.accent.withValues(alpha: 0.2),
         checkmarkColor: AppColors.accent,
         labelStyle: TextStyle(
-          color: isSelected ? AppColors.accent : AppColors.textPrimary,
+          color: isSelected ? AppColors.accent : context.colors.textPrimary,
           fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
         ),
       ),
@@ -315,8 +316,8 @@ class _ExerciseCatalogPickerSheetState
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: AppColors.surfaceLight,
-          border: Border.all(color: AppColors.border),
+          color: context.colors.surfaceLight,
+          border: Border.all(color: context.colors.border),
           borderRadius: BorderRadius.circular(10),
         ),
         child: Row(
@@ -396,7 +397,7 @@ class _ExerciseCatalogPickerSheetState
                             style: Theme.of(context)
                                 .textTheme
                                 .labelSmall
-                                ?.copyWith(color: AppColors.textMuted),
+                                ?.copyWith(color: context.colors.textMuted),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -407,8 +408,8 @@ class _ExerciseCatalogPickerSheetState
               ),
             ),
 
-            const Icon(Icons.arrow_forward_ios,
-                color: AppColors.textMuted, size: 14),
+            Icon(Icons.arrow_forward_ios,
+                color: context.colors.textMuted, size: 14),
           ],
         ),
       ),

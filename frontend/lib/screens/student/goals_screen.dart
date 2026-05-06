@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:animate_do/animate_do.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/theme_colors.dart';
 import '../../providers/goal_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/goal_service.dart';
@@ -37,7 +38,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.background,
       body: SafeArea(
         child: Column(
           children: [
@@ -73,12 +74,12 @@ class _GoalsScreenState extends State<GoalsScreen> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(Icons.flag_outlined, size: 48, color: AppColors.textMuted),
+                          Icon(Icons.flag_outlined, size: 48, color: context.colors.textMuted),
                           const SizedBox(height: 16),
                           Text(
                             'Nenhuma meta ${_selectedFilter == 'active' ? 'ativa' : _selectedFilter == 'completed' ? 'concluída' : 'expirada'}',
                             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  color: AppColors.textSecondary,
+                                  color: context.colors.textSecondary,
                                 ),
                           ),
                           const SizedBox(height: 24),
@@ -154,7 +155,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
             child: Text(
               'Acompanhe seu progresso e alcance seus objetivos',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.textSecondary,
+                    color: context.colors.textSecondary,
                   ),
             ),
           ),
@@ -182,10 +183,10 @@ class _GoalsScreenState extends State<GoalsScreen> {
               child: FilterChip(
                 label: Text(filter.$2),
                 selected: isSelected,
-                backgroundColor: AppColors.surface,
+                backgroundColor: context.colors.surface,
                 selectedColor: AppColors.primary,
                 labelStyle: TextStyle(
-                  color: isSelected ? Colors.white : AppColors.textPrimary,
+                  color: isSelected ? Colors.white : context.colors.textPrimary,
                   fontWeight: FontWeight.w600,
                 ),
                 onSelected: (selected) {
@@ -217,8 +218,8 @@ class _GoalsScreenState extends State<GoalsScreen> {
           margin: const EdgeInsets.only(bottom: 12),
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: AppColors.surface,
-            border: Border.all(color: AppColors.border, width: 1),
+            color: context.colors.surface,
+            border: Border.all(color: context.colors.border, width: 1),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Column(
@@ -244,7 +245,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
                           Text(
                             goal.description!,
                             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: AppColors.textSecondary,
+                                  color: context.colors.textSecondary,
                                 ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -281,7 +282,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
                   Text(
                     '${goal.currentValue.toStringAsFixed(1)} / ${goal.targetValue.toStringAsFixed(1)} ${goal.unit}',
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: AppColors.textMuted,
+                          color: context.colors.textMuted,
                         ),
                   ),
                   Text(
@@ -299,7 +300,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
                 child: LinearProgressIndicator(
                   value: (goal.progressPercentage / 100).clamp(0.0, 1.0),
                   minHeight: 6,
-                  backgroundColor: AppColors.surfaceLight,
+                  backgroundColor: context.colors.surfaceLight,
                   valueColor: AlwaysStoppedAnimation(
                     goal.isCompleted ? Colors.green : AppColors.primary,
                   ),
@@ -314,20 +315,20 @@ class _GoalsScreenState extends State<GoalsScreen> {
                       Icon(
                         Icons.calendar_today_outlined,
                         size: 14,
-                        color: goal.isExpired ? AppColors.accentError : AppColors.textMuted,
+                        color: goal.isExpired ? AppColors.accentError : context.colors.textMuted,
                       ),
                       const SizedBox(width: 4),
                       Text(
                         _formatTargetDate(goal.targetDate),
                         style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                              color: goal.isExpired ? AppColors.accentError : AppColors.textMuted,
+                              color: goal.isExpired ? AppColors.accentError : context.colors.textMuted,
                             ),
                       ),
                       const SizedBox(width: 8),
                       Text(
                         GoalUtils.getCategoryLabel(goal.category),
                         style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                              color: AppColors.textMuted,
+                              color: context.colors.textMuted,
                             ),
                       ),
                     ],

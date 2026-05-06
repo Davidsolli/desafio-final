@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../theme/app_colors.dart';
+import '../../../theme/theme_colors.dart';
 import '../../../../models/mock_data.dart';
 
 class ProfileAchievements extends StatelessWidget {
@@ -13,8 +14,8 @@ class ProfileAchievements extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border.all(color: AppColors.border, width: 1),
+        color: context.colors.surface,
+        border: Border.all(color: context.colors.border, width: 1),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -55,7 +56,7 @@ class ProfileAchievements extends StatelessWidget {
                                     .textTheme
                                     .labelSmall
                                     ?.copyWith(
-                                      color: AppColors.textMuted,
+                                      color: context.colors.textMuted,
                                     ),
                                 overflow: TextOverflow.ellipsis,
                                 maxLines: 2,

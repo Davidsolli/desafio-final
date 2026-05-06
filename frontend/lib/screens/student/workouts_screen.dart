@@ -3,6 +3,7 @@ import 'package:animate_do/animate_do.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
 import '../../theme/app_colors.dart';
+import '../../theme/theme_colors.dart';
 import '../../models/workout_sheet_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/workout_sheet_provider.dart';
@@ -127,7 +128,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
     }
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.background,
       body: SafeArea(
         child: Column(
           children: [
@@ -156,7 +157,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                               style: Theme.of(context)
                                   .textTheme
                                   .bodySmall
-                                  ?.copyWith(color: AppColors.textMuted)),
+                                  ?.copyWith(color: context.colors.textMuted)),
                           const SizedBox(height: 16),
                           ElevatedButton.icon(
                             onPressed: _loadUserSheets,
@@ -173,20 +174,20 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(Icons.fitness_center_outlined, color: AppColors.textMuted, size: 48),
+                          Icon(Icons.fitness_center_outlined, color: context.colors.textMuted, size: 48),
                           const SizedBox(height: 16),
                           Text('Nenhuma ficha atribuída',
                               style: Theme.of(context)
                                   .textTheme
                                   .bodyLarge
-                                  ?.copyWith(color: AppColors.textMuted)),
+                                  ?.copyWith(color: context.colors.textMuted)),
                           const SizedBox(height: 8),
                           Text('Seu personal trainer ainda não atribuiu fichas de treino.',
                               textAlign: TextAlign.center,
                               style: Theme.of(context)
                                   .textTheme
                                   .bodySmall
-                                  ?.copyWith(color: AppColors.textMuted)),
+                                  ?.copyWith(color: context.colors.textMuted)),
                         ],
                       ),
                     );
@@ -207,8 +208,8 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                               margin: const EdgeInsets.only(bottom: 12),
                               padding: const EdgeInsets.all(14),
                               decoration: BoxDecoration(
-                                color: AppColors.surface,
-                                border: Border.all(color: AppColors.border, width: 1),
+                                color: context.colors.surface,
+                                border: Border.all(color: context.colors.border, width: 1),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Row(
@@ -238,17 +239,17 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                                             style: Theme.of(context)
                                                 .textTheme
                                                 .bodySmall
-                                                ?.copyWith(color: AppColors.textSecondary)),
+                                                ?.copyWith(color: context.colors.textSecondary)),
                                         const SizedBox(height: 4),
                                         Text('${sheet.exerciseCount} exercícios',
                                             style: Theme.of(context)
                                                 .textTheme
                                                 .labelSmall
-                                                ?.copyWith(color: AppColors.textMuted)),
+                                                ?.copyWith(color: context.colors.textMuted)),
                                       ],
                                     ),
                                   ),
-                                  const Icon(Icons.chevron_right, color: AppColors.textMuted),
+                                  Icon(Icons.chevron_right, color: context.colors.textMuted),
                                 ],
                               ),
                             ),
@@ -273,7 +274,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
     final progress = exercisesCount > 0 ? (_completedExercises.length / exercisesCount) * 100 : 0;
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.background,
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.chevron_left, size: 28),
@@ -289,7 +290,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
             Text(_selectedSheet!.name,
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
             Text(_selectedSheet!.dayOfWeekLabel,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textSecondary)),
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.colors.textSecondary)),
           ],
         ),
       ),
@@ -307,14 +308,14 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                       child: LinearProgressIndicator(
                         value: progress / 100,
                         minHeight: 6,
-                        backgroundColor: AppColors.surfaceLight,
+                        backgroundColor: context.colors.surfaceLight,
                         valueColor: const AlwaysStoppedAnimation(AppColors.primary),
                       ),
                     ),
                   ),
                   const SizedBox(width: 12),
                   Text('${_completedExercises.length}/$exercisesCount',
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted)),
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.colors.textMuted)),
                 ],
               ),
             ),
@@ -324,7 +325,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                 child: Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: AppColors.surface,
+                    color: context.colors.surface,
                     border: Border.all(color: AppColors.primary, width: 1),
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -342,7 +343,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                                   style: Theme.of(context)
                                       .textTheme
                                       .labelSmall
-                                      ?.copyWith(color: AppColors.textMuted)),
+                                      ?.copyWith(color: context.colors.textMuted)),
                               Text('${_restTimerSeconds! ~/ 60}:${(_restTimerSeconds! % 60).toString().padLeft(2, '0')}',
                                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                                       fontFamily: 'monospace', fontWeight: FontWeight.bold, color: AppColors.primary)),
@@ -359,7 +360,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                                 _restTimer?.isActive ?? false ? _pauseRestTimer : () => _startRestTimer(_restTimerSeconds!),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.close, color: AppColors.textMuted, size: 20),
+                            icon: Icon(Icons.close, color: context.colors.textMuted, size: 20),
                             onPressed: () {
                               _restTimer?.cancel();
                               setState(() => _restTimerSeconds = null);
@@ -389,9 +390,9 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                         margin: const EdgeInsets.only(bottom: 10),
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: AppColors.surface,
+                          color: context.colors.surface,
                           border: Border.all(
-                            color: isCompleted ? AppColors.primary : AppColors.border,
+                            color: isCompleted ? AppColors.primary : context.colors.border,
                             width: isCompleted ? 1.5 : 1,
                           ),
                           borderRadius: BorderRadius.circular(12),
@@ -403,7 +404,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                               children: [
                                 Icon(
                                   isCompleted ? Icons.check_circle : Icons.radio_button_unchecked,
-                                  color: isCompleted ? AppColors.primary : AppColors.textMuted,
+                                  color: isCompleted ? AppColors.primary : context.colors.textMuted,
                                   size: 24,
                                 ),
                                 const SizedBox(width: 10),
@@ -415,12 +416,12 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                                           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                                               fontWeight: FontWeight.w600,
                                               decoration: isCompleted ? TextDecoration.lineThrough : null,
-                                              color: isCompleted ? AppColors.textMuted : AppColors.textPrimary)),
+                                              color: isCompleted ? context.colors.textMuted : context.colors.textPrimary)),
                                       Text(exercise.muscleGroup,
                                           style: Theme.of(context)
                                               .textTheme
                                               .labelSmall
-                                              ?.copyWith(color: AppColors.textMuted)),
+                                              ?.copyWith(color: context.colors.textMuted)),
                                     ],
                                   ),
                                 ),
@@ -429,7 +430,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                     decoration: BoxDecoration(
-                                      color: AppColors.surface,
+                                      color: context.colors.surface,
                                       borderRadius: BorderRadius.circular(6),
                                     ),
                                     child: Row(
@@ -466,9 +467,9 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                                     fit: BoxFit.cover,
                                     errorBuilder: (_, __, ___) => Container(
                                       height: 120,
-                                      color: AppColors.surfaceLight,
-                                      child: const Center(
-                                        child: Icon(Icons.image_not_supported, color: AppColors.textMuted),
+                                      color: context.colors.surfaceLight,
+                                      child: Center(
+                                        child: Icon(Icons.image_not_supported, color: context.colors.textMuted),
                                       ),
                                     ),
                                   ),
@@ -524,12 +525,12 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: AppColors.surfaceLight,
+        color: context.colors.surfaceLight,
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(text,
           style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: AppColors.textMuted, fontSize: 11, fontWeight: FontWeight.w500)),
+              color: context.colors.textMuted, fontSize: 11, fontWeight: FontWeight.w500)),
     );
   }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/theme_colors.dart';
 
 class AdminDashboardPlaceholder extends StatelessWidget {
   const AdminDashboardPlaceholder({Key? key}) : super(key: key);
@@ -7,7 +8,7 @@ class AdminDashboardPlaceholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.background,
       appBar: AppBar(
         title: const Text('Dashboard Admin'),
         backgroundColor: AppColors.primary,
@@ -33,7 +34,7 @@ class AdminDashboardPlaceholder extends StatelessWidget {
               Text(
                 'Em desenvolvimento...',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppColors.textSecondary,
+                  color: context.colors.textSecondary,
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -41,7 +42,7 @@ class AdminDashboardPlaceholder extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: AppColors.background,
+                  color: context.colors.background,
                   border: Border.all(color: AppColors.primary.withAlpha(100)),
                   borderRadius: BorderRadius.circular(8),
                 ),

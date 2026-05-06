@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:animate_do/animate_do.dart';
 import '../../../../theme/app_colors.dart';
+import '../../../theme/theme_colors.dart';
 import '../../../../services/user_service.dart';
 
 class ProfileStatsCards extends StatelessWidget {
@@ -32,9 +33,9 @@ class ProfileStatsCards extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: AppColors.surface,
+                color: context.colors.surface,
                 border: Border.all(
-                  color: AppColors.border,
+                  color: context.colors.border,
                   width: 1,
                 ),
                 borderRadius: BorderRadius.circular(12),
@@ -55,7 +56,7 @@ class ProfileStatsCards extends StatelessWidget {
                     'IMC — $imcLabel',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: AppColors.textMuted,
+                          color: context.colors.textMuted,
                         ),
                   ),
                 ],
@@ -67,9 +68,9 @@ class ProfileStatsCards extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: AppColors.surface,
+                color: context.colors.surface,
                 border: Border.all(
-                  color: AppColors.border,
+                  color: context.colors.border,
                   width: 1,
                 ),
                 borderRadius: BorderRadius.circular(12),
@@ -83,7 +84,7 @@ class ProfileStatsCards extends StatelessWidget {
                     tmb.toString(),
                     style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                           fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                          color: context.colors.textPrimary,
                         ),
                   ),
                   const SizedBox(height: 4),
@@ -91,7 +92,7 @@ class ProfileStatsCards extends StatelessWidget {
                     'TMB (kcal/dia)',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: AppColors.textMuted,
+                          color: context.colors.textMuted,
                         ),
                   ),
                 ],

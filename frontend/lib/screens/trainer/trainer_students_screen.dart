@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:animate_do/animate_do.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/theme_colors.dart';
 import '../../services/user_service.dart';
 
 class TrainerStudentsScreen extends StatefulWidget {
@@ -68,7 +69,7 @@ class _TrainerStudentsScreenState extends State<TrainerStudentsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.background,
       body: SafeArea(
         child: Column(
           children: [
@@ -78,7 +79,7 @@ class _TrainerStudentsScreenState extends State<TrainerStudentsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('Meus',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.textSecondary)),
                   Text('Alunos 👥',
                       style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
                 ],
@@ -95,17 +96,17 @@ class _TrainerStudentsScreenState extends State<TrainerStudentsScreen> {
                 controller: _searchController,
                 decoration: InputDecoration(
                   hintText: 'Buscar aluno...',
-                  hintStyle: const TextStyle(color: AppColors.textMuted),
-                  prefixIcon: const Icon(Icons.search, color: AppColors.textMuted),
+                  hintStyle: TextStyle(color: context.colors.textMuted),
+                  prefixIcon: Icon(Icons.search, color: context.colors.textMuted),
                   filled: true,
-                  fillColor: AppColors.surface,
+                  fillColor: context.colors.surface,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppColors.border),
+                    borderSide: BorderSide(color: context.colors.border),
                   ),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                 ),
-                style: const TextStyle(color: AppColors.textPrimary),
+                style: TextStyle(color: context.colors.textPrimary),
               ),
             ),
             const SizedBox(height: 16),
@@ -122,7 +123,7 @@ class _TrainerStudentsScreenState extends State<TrainerStudentsScreen> {
                               const Icon(Icons.error_outline, color: AppColors.accentError, size: 40),
                               const SizedBox(height: 12),
                               Text(_error!,
-                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textMuted)),
+                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.textMuted)),
                               const SizedBox(height: 16),
                               TextButton.icon(
                                 onPressed: _loadStudents,
@@ -135,7 +136,7 @@ class _TrainerStudentsScreenState extends State<TrainerStudentsScreen> {
                       : _filteredStudents.isEmpty
                           ? Center(
                               child: Text('Nenhum aluno encontrado',
-                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textMuted)),
+                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.textMuted)),
                             )
                           : ListView.builder(
                               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -150,8 +151,8 @@ class _TrainerStudentsScreenState extends State<TrainerStudentsScreen> {
                                       margin: const EdgeInsets.only(bottom: 12),
                                       padding: const EdgeInsets.all(12),
                                       decoration: BoxDecoration(
-                                        color: AppColors.surface,
-                                        border: Border.all(color: AppColors.border, width: 1),
+                                        color: context.colors.surface,
+                                        border: Border.all(color: context.colors.border, width: 1),
                                         borderRadius: BorderRadius.circular(12),
                                       ),
                                       child: Row(
@@ -181,12 +182,12 @@ class _TrainerStudentsScreenState extends State<TrainerStudentsScreen> {
                                                 Text(student.name,
                                                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
                                                 Text(_mapGoalTypeToPt(student.goalType),
-                                                    style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted)),
+                                                    style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.colors.textMuted)),
                                               ],
                                             ),
                                           ),
                                           const SizedBox(width: 8),
-                                          const Icon(Icons.chevron_right, color: AppColors.textMuted, size: 20),
+                                          Icon(Icons.chevron_right, color: context.colors.textMuted, size: 20),
                                         ],
                                       ),
                                     ),
@@ -210,8 +211,8 @@ class _TrainerStudentsScreenState extends State<TrainerStudentsScreen> {
             child: Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: AppColors.surface,
-                border: Border.all(color: AppColors.border, width: 1),
+                color: context.colors.surface,
+                border: Border.all(color: context.colors.border, width: 1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Column(
@@ -220,7 +221,7 @@ class _TrainerStudentsScreenState extends State<TrainerStudentsScreen> {
                   const SizedBox(height: 6),
                   Text('${_allStudents.length}', style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
                   Text('Alunos Ativos',
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted), textAlign: TextAlign.center),
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.colors.textMuted), textAlign: TextAlign.center),
                 ],
               ),
             ),
@@ -233,8 +234,8 @@ class _TrainerStudentsScreenState extends State<TrainerStudentsScreen> {
             child: Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: AppColors.surface,
-                border: Border.all(color: AppColors.border, width: 1),
+                color: context.colors.surface,
+                border: Border.all(color: context.colors.border, width: 1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Column(
@@ -243,7 +244,7 @@ class _TrainerStudentsScreenState extends State<TrainerStudentsScreen> {
                   const SizedBox(height: 6),
                   Text('${_allStudents.length}x', style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
                   Text('Acompanhando',
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted), textAlign: TextAlign.center),
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.colors.textMuted), textAlign: TextAlign.center),
                 ],
               ),
             ),

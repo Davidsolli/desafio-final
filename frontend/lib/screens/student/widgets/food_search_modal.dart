@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../theme/app_colors.dart';
+import '../../../theme/theme_colors.dart';
 import '../../../providers/nutrition_provider.dart';
 import '../../../models/diet_models.dart';
 import '../../../services/nutrition_service.dart';
@@ -131,8 +132,8 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
       maxChildSize: 0.95,
       builder: (_, controller) {
         return Container(
-          decoration: const BoxDecoration(
-            color: AppColors.background,
+          decoration: BoxDecoration(
+            color: context.colors.background,
             borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
           ),
           child: Column(
@@ -143,7 +144,7 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
                   height: 4,
                   width: 40,
                   decoration: BoxDecoration(
-                    color: AppColors.border,
+                    color: context.colors.border,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -186,7 +187,7 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 filled: true,
-                fillColor: AppColors.surface,
+                fillColor: context.colors.surface,
               ),
             ),
           ),
@@ -297,7 +298,7 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
             const SizedBox(height: 8),
             Text(
               '${_selectedFood!.energyKcal.toStringAsFixed(0)} kcal a cada 100g',
-              style: const TextStyle(color: AppColors.textSecondary),
+              style: TextStyle(color: context.colors.textSecondary),
             ),
             const SizedBox(height: 24),
             
@@ -305,13 +306,13 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: AppColors.surface,
+                color: context.colors.surface,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.border),
+                border: Border.all(color: context.colors.border),
               ),
               child: Column(
                 children: [
-                  const Text('Macros para a porção selecionada:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textSecondary)),
+                  Text('Macros para a porção selecionada:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: context.colors.textSecondary)),
                   const SizedBox(height: 12),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -332,7 +333,7 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               decoration: BoxDecoration(
-                border: Border.all(color: AppColors.border),
+                border: Border.all(color: context.colors.border),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: DropdownButtonHideUnderline(
@@ -397,7 +398,7 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
         Text(
           '$unit\n$label',
           textAlign: TextAlign.center,
-          style: const TextStyle(fontSize: 10, color: AppColors.textSecondary),
+          style: TextStyle(fontSize: 10, color: context.colors.textSecondary),
         ),
       ],
     );

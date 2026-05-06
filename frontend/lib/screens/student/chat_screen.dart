@@ -6,6 +6,7 @@ import 'package:animate_do/animate_do.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/theme_colors.dart';
 import '../../routes/app_routes.dart';
 import '../../config/api_config.dart';
 
@@ -201,7 +202,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.background,
       appBar: AppBar(
         title: Row(
           children: [
@@ -223,7 +224,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 Text(
                   _isConnected ? 'Online' : 'Desconectado',
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: _isConnected ? Colors.green : AppColors.textSecondary,
+                    color: _isConnected ? Colors.green : context.colors.textSecondary,
                   ),
                 ),
               ],
@@ -254,8 +255,8 @@ class _ChatScreenState extends State<ChatScreen> {
                           ),
                           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                           decoration: BoxDecoration(
-                            color: isUser ? AppColors.primary : AppColors.surface,
-                            border: isUser ? null : Border.all(color: AppColors.border, width: 1),
+                            color: isUser ? AppColors.primary : context.colors.surface,
+                            border: isUser ? null : Border.all(color: context.colors.border, width: 1),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Column(
@@ -264,7 +265,7 @@ class _ChatScreenState extends State<ChatScreen> {
                               Text(
                                 msg['text']!,
                                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: isUser ? Colors.white : AppColors.textPrimary,
+                                      color: isUser ? Colors.white : context.colors.textPrimary,
                                       height: 1.4,
                                     ),
                               ),
@@ -272,7 +273,7 @@ class _ChatScreenState extends State<ChatScreen> {
                               Text(
                                 msg['time']!,
                                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                      color: isUser ? Colors.white.withValues(alpha: 0.7) : AppColors.textMuted,
+                                      color: isUser ? Colors.white.withValues(alpha: 0.7) : context.colors.textMuted,
                                       fontSize: 10,
                                     ),
                               ),
@@ -288,8 +289,8 @@ class _ChatScreenState extends State<ChatScreen> {
             Container(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
               decoration: BoxDecoration(
-                color: AppColors.surface,
-                border: Border(top: BorderSide(color: AppColors.border, width: 1)),
+                color: context.colors.surface,
+                border: Border(top: BorderSide(color: context.colors.border, width: 1)),
               ),
               child: Row(
                 children: [
@@ -299,16 +300,16 @@ class _ChatScreenState extends State<ChatScreen> {
                       enabled: _isConnected,
                       decoration: InputDecoration(
                         hintText: _isConnected ? 'Pergunte algo...' : 'Conectando...',
-                        hintStyle: const TextStyle(color: AppColors.textMuted),
+                        hintStyle: TextStyle(color: context.colors.textMuted),
                         filled: true,
-                        fillColor: AppColors.surfaceLight,
+                        fillColor: context.colors.surfaceLight,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
                           borderSide: BorderSide.none,
                         ),
                         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                       ),
-                      style: const TextStyle(color: AppColors.textPrimary),
+                      style: TextStyle(color: context.colors.textPrimary),
                       minLines: 1,
                       maxLines: 3,
                       onSubmitted: (_) => _sendMessage(),
