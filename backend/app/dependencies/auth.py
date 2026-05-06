@@ -83,3 +83,26 @@ async def get_current_user_ws(
         return None
 
     return user
+
+
+async def get_user_from_token(token: str, session: AsyncSession) -> User | None:
+    """Decodifica JWT e retorna o usuário correspondente.
+
+    Retorna None se token for inválido ou usuário não existir.
+    """
+    try:
+        payload = jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM],
+        )
+        user_id_str: str | None = payload.get("sub")
+        if user_id_str is None:
+            return None
+        user_id = UUID(user_id_str)
+    except (JWTError, ValueError):
+        return None
+
+    repo = UserRepository(session)
+    user = await repo.get_by_id(user_id)
+    return user

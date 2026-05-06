@@ -14,16 +14,16 @@ Rotas:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status, WebSocket, WebSocketDisconnect
-from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.database import get_db
 from app.config.settings import settings
-from app.dependencies.auth import get_current_user, get_current_user_ws
+from app.dependencies.auth import get_current_user, get_user_from_token
 from app.models.user import User
 from app.dtos.chat_dto import (
     ConversationDetailDTO,
@@ -118,11 +118,10 @@ async def chat_websocket(
     user = None
     service = ChatService(session)
     auth_timeout = 5  # segundos para enviar auth
+    inactivity_timeout = 300  # 5 minutos
 
     try:
-        import asyncio
-
-        # Espera autenticação  (com timeout)
+        # Espera autenticação (com timeout)
         try:
             first_msg = await asyncio.wait_for(
                 websocket.receive_json(),
@@ -153,56 +152,24 @@ async def chat_websocket(
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
 
-        # Autentica usuário via JWT token
-        from app.repositories.user_repository import UserRepository
+        # Autentica usuário via JWT token (reutiliza função de auth.py)
+        user = await get_user_from_token(token, session)
 
-        try:
-            payload = jwt.decode(
-                token,
-                settings.SECRET_KEY,
-                algorithms=[settings.ALGORITHM],
-            )
-            user_id_str: str | None = payload.get("sub")
-            if user_id_str is None:
-                await websocket.send_json({
-                    "error": "Token inválido",
-                    "type": "auth_error",
-                })
-                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                return
-
-            user_id = UUID(user_id_str)
-
-            # Busca usuário no banco
-            user_repo = UserRepository(session)
-            user = await user_repo.get_by_id(user_id)
-
-            if not user:
-                await websocket.send_json({
-                    "error": "Usuário não encontrado",
-                    "type": "auth_error",
-                })
-                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                return
-
-            # Confirma autenticação
+        if not user:
             await websocket.send_json({
-                "type": "auth_success",
-                "message": "Autenticado com sucesso",
-            })
-
-        except Exception as exc:
-            logger.error(f"Erro na autenticação WebSocket: {exc}")
-            await websocket.send_json({
-                "error": "Erro ao autenticar",
+                "error": "Token inválido ou usuário não encontrado",
                 "type": "auth_error",
             })
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
 
-        # Loop de mensagens (com timeout de inatividade)
-        inactivity_timeout = 300  # 5 minutos
+        # Confirma autenticação
+        await websocket.send_json({
+            "type": "auth_success",
+            "message": "Autenticado com sucesso",
+        })
 
+        # Loop de mensagens (com timeout de inatividade)
         while True:
             try:
                 data = await asyncio.wait_for(
@@ -224,11 +191,10 @@ async def chat_websocket(
                 content = data.get("content", "").strip()
                 conversation_id_str = data.get("conversation_id")
 
-                # Valida tamanho da mensagem
-                max_msg_len = 1000
-                if len(content) > max_msg_len:
+                # Valida tamanho da mensagem (usando settings)
+                if len(content) > settings.CHAT_MAX_MESSAGE_LENGTH:
                     await websocket.send_json({
-                        "error": f"Mensagem muito longa (máx {max_msg_len} caracteres)",
+                        "error": f"Mensagem muito longa (máx {settings.CHAT_MAX_MESSAGE_LENGTH} caracteres)",
                         "type": "error",
                     })
                     continue
