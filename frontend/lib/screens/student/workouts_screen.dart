@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:animate_do/animate_do.dart';
+import 'package:provider/provider.dart';
 import 'dart:async';
 import '../../theme/app_colors.dart';
-import '../../routes/app_routes.dart';
-import '../../models/mock_data.dart';
+import '../../models/workout_sheet_model.dart';
+import '../../providers/auth_provider.dart';
+import '../../providers/workout_sheet_provider.dart';
 
 class WorkoutsScreen extends StatefulWidget {
   const WorkoutsScreen({super.key});
@@ -14,10 +15,25 @@ class WorkoutsScreen extends StatefulWidget {
 }
 
 class _WorkoutsScreenState extends State<WorkoutsScreen> {
-  String? _selectedWorkoutId;
+  String? _selectedSheetId;
+  WorkoutSheetResponse? _selectedSheet;
   Set<String> _completedExercises = {};
   int? _restTimerSeconds;
   Timer? _restTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserSheets();
+  }
+
+  Future<void> _loadUserSheets() async {
+    final authProvider = context.read<AuthProvider>();
+    final userId = authProvider.user?.id;
+    if (userId != null) {
+      await context.read<WorkoutSheetProvider>().loadSheets(userId: userId);
+    }
+  }
 
   @override
   void dispose() {
@@ -56,15 +72,33 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
     });
   }
 
+  Future<void> _loadSheetDetail(String sheetId) async {
+    try {
+      await context.read<WorkoutSheetProvider>().loadSheetDetail(sheetId);
+      if (mounted) {
+        final provider = context.read<WorkoutSheetProvider>();
+        setState(() {
+          _selectedSheetId = sheetId;
+          _selectedSheet = provider.selectedSheet;
+          _completedExercises.clear();
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erro ao carregar ficha: $e'),
+            backgroundColor: AppColors.accentError,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final selectedWorkout = workouts.firstWhere(
-      (w) => w.id == _selectedWorkoutId,
-      orElse: () => workouts[0],
-    );
-
-    if (_selectedWorkoutId != null) {
-      return _buildWorkoutDetail(selectedWorkout);
+    if (_selectedSheetId != null && _selectedSheet != null) {
+      return _buildWorkoutDetail();
     }
 
     return Scaffold(
@@ -78,55 +112,124 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
             ),
             Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: workouts.length,
-                itemBuilder: (context, index) {
-                  final workout = workouts[index];
-                  return FadeInUp(
-                    delay: Duration(milliseconds: index * 100),
-                    child: GestureDetector(
-                      onTap: () => setState(() => _selectedWorkoutId = workout.id),
-                      child: Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: AppColors.surface,
-                          border: Border.all(color: AppColors.border, width: 1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 50,
-                              height: 50,
+              child: Consumer<WorkoutSheetProvider>(
+                builder: (ctx, provider, _) {
+                  if (provider.isLoading) {
+                    return const Center(
+                      child: CircularProgressIndicator(color: AppColors.primary),
+                    );
+                  }
+
+                  if (provider.error != null) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.error_outline, color: AppColors.accentError, size: 48),
+                          const SizedBox(height: 16),
+                          Text('Erro: ${provider.error}',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(color: AppColors.textMuted)),
+                          const SizedBox(height: 16),
+                          ElevatedButton.icon(
+                            onPressed: _loadUserSheets,
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('Tentar Novamente'),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+
+                  if (provider.sheets.isEmpty) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.fitness_center_outlined, color: AppColors.textMuted, size: 48),
+                          const SizedBox(height: 16),
+                          Text('Nenhuma ficha atribuída',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyLarge
+                                  ?.copyWith(color: AppColors.textMuted)),
+                          const SizedBox(height: 8),
+                          Text('Seu personal trainer ainda não atribuiu fichas de treino.',
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(color: AppColors.textMuted)),
+                        ],
+                      ),
+                    );
+                  }
+
+                  return RefreshIndicator(
+                    onRefresh: _loadUserSheets,
+                    child: ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: provider.sheets.length,
+                      itemBuilder: (context, index) {
+                        final sheet = provider.sheets[index];
+                        return FadeInUp(
+                          delay: Duration(milliseconds: index * 100),
+                          child: GestureDetector(
+                            onTap: () => _loadSheetDetail(sheet.id),
+                            child: Container(
+                              margin: const EdgeInsets.only(bottom: 12),
+                              padding: const EdgeInsets.all(14),
                               decoration: BoxDecoration(
-                                color: AppColors.primary.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(10),
+                                color: AppColors.surface,
+                                border: Border.all(color: AppColors.border, width: 1),
+                                borderRadius: BorderRadius.circular(12),
                               ),
-                              child: Center(
-                                child: Text(workout.emoji, style: const TextStyle(fontSize: 24)),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                              child: Row(
                                 children: [
-                                  Text(workout.name,
-                                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
-                                  Text(workout.label,
-                                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
-                                  const SizedBox(height: 4),
-                                  Text('${workout.dayOfWeek} • ${workout.exercises.length} exercícios • ${workout.duration} min',
-                                      style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted)),
+                                  Container(
+                                    width: 50,
+                                    height: 50,
+                                    decoration: BoxDecoration(
+                                      color: AppColors.primary.withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Center(
+                                      child: Text(sheet.emoji, style: const TextStyle(fontSize: 24)),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(sheet.name,
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodyLarge
+                                                ?.copyWith(fontWeight: FontWeight.bold)),
+                                        Text(sheet.dayOfWeekLabel,
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodySmall
+                                                ?.copyWith(color: AppColors.textSecondary)),
+                                        const SizedBox(height: 4),
+                                        Text('${sheet.exerciseCount} exercícios',
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .labelSmall
+                                                ?.copyWith(color: AppColors.textMuted)),
+                                      ],
+                                    ),
+                                  ),
+                                  const Icon(Icons.chevron_right, color: AppColors.textMuted),
                                 ],
                               ),
                             ),
-                            const Icon(Icons.chevron_right, color: AppColors.textMuted),
-                          ],
-                        ),
-                      ),
+                          ),
+                        );
+                      },
                     ),
                   );
                 },
@@ -138,8 +241,11 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
     );
   }
 
-  Widget _buildWorkoutDetail(Workout workout) {
-    final progress = (_completedExercises.length / workout.exercises.length) * 100;
+  Widget _buildWorkoutDetail() {
+    if (_selectedSheet == null) return const SizedBox.shrink();
+
+    final exercisesCount = _selectedSheet!.exercises.length;
+    final progress = exercisesCount > 0 ? (_completedExercises.length / exercisesCount) * 100 : 0;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -147,15 +253,17 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
         leading: IconButton(
           icon: const Icon(Icons.chevron_left, size: 28),
           onPressed: () => setState(() {
-            _selectedWorkoutId = null;
+            _selectedSheetId = null;
+            _selectedSheet = null;
             _completedExercises.clear();
           }),
         ),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(workout.name, style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
-            Text(workout.label,
+            Text(_selectedSheet!.name,
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
+            Text(_selectedSheet!.dayOfWeekLabel,
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textSecondary)),
           ],
         ),
@@ -180,7 +288,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  Text('${_completedExercises.length}/${workout.exercises.length}',
+                  Text('${_completedExercises.length}/$exercisesCount',
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted)),
                 ],
               ),
@@ -206,7 +314,10 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text('Descanso',
-                                  style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted)),
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .labelSmall
+                                      ?.copyWith(color: AppColors.textMuted)),
                               Text('${_restTimerSeconds! ~/ 60}:${(_restTimerSeconds! % 60).toString().padLeft(2, '0')}',
                                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                                       fontFamily: 'monospace', fontWeight: FontWeight.bold, color: AppColors.primary)),
@@ -219,7 +330,8 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                           IconButton(
                             icon: Icon(_restTimer?.isActive ?? false ? Icons.pause : Icons.play_arrow,
                                 color: AppColors.primary, size: 20),
-                            onPressed: _restTimer?.isActive ?? false ? _pauseRestTimer : () => _startRestTimer(_restTimerSeconds!),
+                            onPressed:
+                                _restTimer?.isActive ?? false ? _pauseRestTimer : () => _startRestTimer(_restTimerSeconds!),
                           ),
                           IconButton(
                             icon: const Icon(Icons.close, color: AppColors.textMuted, size: 20),
@@ -238,9 +350,9 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
             Expanded(
               child: ListView.builder(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: workout.exercises.length,
+                itemCount: _selectedSheet!.exercises.length,
                 itemBuilder: (context, index) {
-                  final exercise = workout.exercises[index];
+                  final exercise = _selectedSheet!.exercises[index];
                   final isCompleted = _completedExercises.contains(exercise.id);
 
                   return FadeInUp(
@@ -278,13 +390,16 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                                               fontWeight: FontWeight.w600,
                                               decoration: isCompleted ? TextDecoration.lineThrough : null,
                                               color: isCompleted ? AppColors.textMuted : AppColors.textPrimary)),
-                                      Text(exercise.muscle,
-                                          style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted)),
+                                      Text(exercise.muscleGroup,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .labelSmall
+                                              ?.copyWith(color: AppColors.textMuted)),
                                     ],
                                   ),
                                 ),
                                 GestureDetector(
-                                  onTap: () => _startRestTimer(exercise.rest),
+                                  onTap: () => _startRestTimer(exercise.restSeconds),
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                     decoration: BoxDecoration(
@@ -295,7 +410,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                                       children: [
                                         const Icon(Icons.schedule, color: AppColors.primary, size: 14),
                                         const SizedBox(width: 4),
-                                        Text('${exercise.rest}s',
+                                        Text('${exercise.restSeconds}s',
                                             style: Theme.of(context).textTheme.labelSmall?.copyWith(
                                                 color: AppColors.primary, fontWeight: FontWeight.bold)),
                                       ],
@@ -308,11 +423,31 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                             Wrap(
                               spacing: 8,
                               children: [
-                                _buildExerciseChip('${exercise.sets} séries'),
-                                _buildExerciseChip('${exercise.reps} reps'),
-                                _buildExerciseChip('${exercise.load}kg'),
+                                _buildExerciseChip('${exercise.series}x${exercise.repetitions}'),
+                                _buildExerciseChip('${exercise.loadKg.toStringAsFixed(1)}kg'),
+                                if (exercise.observations != null)
+                                  _buildExerciseChip(exercise.observations!),
                               ],
                             ),
+                            if (exercise.gifUrl != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Image.network(
+                                    exercise.gifUrl!,
+                                    height: 120,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => Container(
+                                      height: 120,
+                                      color: AppColors.surfaceLight,
+                                      child: const Center(
+                                        child: Icon(Icons.image_not_supported, color: AppColors.textMuted),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
                           ],
                         ),
                       ),
@@ -321,7 +456,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                 },
               ),
             ),
-            if (_completedExercises.length == workout.exercises.length)
+            if (_completedExercises.length == _selectedSheet!.exercises.length)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                 child: SizedBox(
@@ -333,14 +468,23 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
                     onPressed: () {
-                      setState(() => _selectedWorkoutId = null);
+                      setState(() {
+                        _selectedSheetId = null;
+                        _selectedSheet = null;
+                        _completedExercises.clear();
+                      });
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('✅ Treino ${workout.name} finalizado!')),
+                        SnackBar(
+                          content: Text('✅ Treino ${_selectedSheet?.name} finalizado!'),
+                          backgroundColor: AppColors.accentSuccess,
+                        ),
                       );
                     },
                     child: Text('✅ Finalizar Treino',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Colors.white, fontWeight: FontWeight.w600)),
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodyMedium
+                            ?.copyWith(color: Colors.white, fontWeight: FontWeight.w600)),
                   ),
                 ),
               ),
@@ -359,7 +503,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
       ),
       child: Text(text,
           style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: AppColors.textMuted, fontSize: 11, fontWeight: FontWeight.w500)),
+              color: AppColors.textMuted, fontSize: 11, fontWeight: FontWeight.w500));
     );
   }
 }
