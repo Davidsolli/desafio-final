@@ -24,11 +24,23 @@ class _ProfileBodyFormState extends State<ProfileBodyForm> {
   @override
   void initState() {
     super.initState();
-    nameController = TextEditingController(text: widget.user.name);
-    weightController = TextEditingController(text: widget.user.weight.toStringAsFixed(1));
-    heightController = TextEditingController(text: widget.user.height.toStringAsFixed(0));
-    ageController = TextEditingController(text: widget.user.age.toString());
-    selectedGender = widget.user.gender ?? 'male';
+    _initControllers(widget.user);
+  }
+
+  void _initControllers(UserResponse user) {
+    nameController = TextEditingController(text: user.name);
+    weightController = TextEditingController(text: (user.weight ?? 0.0).toStringAsFixed(1));
+    heightController = TextEditingController(text: (user.height ?? 0.0).toStringAsFixed(0));
+    ageController = TextEditingController(text: (user.age ?? 0).toString());
+    selectedGender = user.gender ?? 'male';
+  }
+
+  @override
+  void didUpdateWidget(ProfileBodyForm oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.user != widget.user) {
+      _initControllers(widget.user);
+    }
   }
 
   @override
@@ -76,7 +88,7 @@ class _ProfileBodyFormState extends State<ProfileBodyForm> {
 
   @override
   Widget build(BuildContext context) {
-    final userProvider = context.read<UserProvider>();
+    final userProvider = context.watch<UserProvider>();
     final tdee = widget.user.tdee;
 
     return Container(

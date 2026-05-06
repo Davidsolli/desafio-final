@@ -59,7 +59,6 @@ async def init_db() -> None:
     """
     import logging
     from app.models.user import Base  # noqa: F401 — registra User
-    from app.models.user_profile import UserProfile  # noqa: F401 — registra UserProfile
     from app.models.goal import Goal, GoalProgressEntry  # noqa: F401 — registra Goals
     import app.models.logbook  # noqa: F401 — registra WorkoutSession e SessionExercise no Base
     import app.models.food_catalog  # noqa: F401 — registra FoodCatalog no Base
@@ -82,7 +81,23 @@ async def init_db() -> None:
         await conn.run_sync(Base.metadata.create_all)
         logger.info("✓ Todas as tabelas criadas/verificadas com sucesso")
 
-    # 3. Migração manual: Adicionar food_name ao logbook entries se não existir
+        # 3. Migração manual: Adicionar colunas de dados corporais à tabela users
+        alters = [
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS weight DOUBLE PRECISION",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS height DOUBLE PRECISION",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS age INTEGER",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS gender VARCHAR(10)",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_whatsapp VARCHAR(20)",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS goal_type VARCHAR(50)",
+        ]
+        for alter in alters:
+            try:
+                await conn.execute(text(alter))
+            except Exception as exc:
+                logger.warning("Erro ao executar ALTER TABLE: %s", exc)
+        logger.info("✓ Colunas de dados corporais verificadas/adicionadas em users")
+
+    # 4. Migração manual: Adicionar food_name ao logbook entries se não existir
     # (feita APÓS criar as tabelas, em transação separada)
     # COMENTADO TEMPORARIAMENTE - será aplicado depois
     # engine = _get_engine()

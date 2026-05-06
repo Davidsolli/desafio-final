@@ -224,6 +224,11 @@ class ChatService:
             user_profile = {
                 "name": user.name,
                 "role": user.role,
+                "weight": user.weight or 0.0,
+                "height": user.height or 0.0,
+                "age": user.age or 0,
+                "gender": user.gender or "não informado",
+                "goal_type": user.goal_type or "não informado",
                 "level": "não informado",     # Campo futuro do perfil
                 "objective": "não informado", # Campo futuro do perfil
             }
