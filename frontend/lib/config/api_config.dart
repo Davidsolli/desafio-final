@@ -1,9 +1,13 @@
+import 'package:flutter/foundation.dart';
+
 /// Configuração centralizada de URLs da API
 class ApiConfig {
   /// URL base do backend (HTTP/HTTPS)
+  /// Em modo release (servidor), usa a URL relativa /server02
+  /// Em modo debug (local), usa o localhost:8000
   static const String baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://localhost:8000',
+    defaultValue: kReleaseMode ? '/server02' : 'http://localhost:8000',
   );
 
   /// URL base do WebSocket
@@ -15,7 +19,8 @@ class ApiConfig {
     } else if (base.startsWith('http://')) {
       return base.replaceFirst('http://', 'ws://');
     }
-    return null;
+    // Para URLs relativas na Web, o navegador lida com isso se usarmos o schema correto
+    return null; 
   }
 
   /// Endpoints da API
@@ -31,3 +36,4 @@ class ApiConfig {
   static const String authLogout = '$apiV1/auth/logout';
   static const String authRefresh = '$apiV1/auth/refresh';
 }
+

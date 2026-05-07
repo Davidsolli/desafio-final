@@ -32826,7 +32826,7 @@ q=s[1]
 s=s[2]
 p=b[2]
 return A.b([o*m+l*k+j*n,o*r+l*q+j*s,o*p[0]+l*p[1]+j*p[2]],t.n)},
-b4Z(){var s="https://lab.alphaedtech.org.br/server02",r="https://"
+b4Z(){var s="/server02",r="https://"
 if(B.d.bM(s,r))return B.d.r0(s,r,"wss://")
 else if(B.d.bM(s,"http://"))return B.d.r0(s,"http://","ws://")
 return null},
