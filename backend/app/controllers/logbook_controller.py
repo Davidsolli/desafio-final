@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.dtos.logbook_dto import (
     CalendarResponseDTO,
     CreateSessionDTO,
+    FrequencyResponseDTO,
     PaginatedSessionsDTO,
     ProgressionResponseDTO,
     SessionExerciseDTO,
@@ -120,6 +121,7 @@ class LogbookController:
         weeks: Optional[int],
         start_date: Optional[datetime],
         end_date: Optional[datetime],
+        group_by: Optional[str] = None,
     ) -> ProgressionResponseDTO:
         """Retorna evolução de carga de um exercício."""
         return await self.service.get_progression(
@@ -128,4 +130,18 @@ class LogbookController:
             weeks=weeks,
             start_date=start_date,
             end_date=end_date,
+            group_by=group_by,
+        )
+
+    async def get_frequency(
+        self,
+        user_id: UUID,
+        period: str,
+        limit: Optional[int],
+    ) -> FrequencyResponseDTO:
+        """Retorna frequência de treinos agrupados por período."""
+        return await self.service.get_frequency(
+            user_id=user_id,
+            period=period,
+            limit=limit,
         )

@@ -6,6 +6,9 @@ import '../../theme/theme_colors.dart';
 import '../../providers/user_provider.dart';
 import '../../providers/goal_provider.dart';
 import '../../providers/logbook_provider.dart';
+import '../../services/dashboard_service.dart';
+import '../../widgets/frequency_bar_chart.dart';
+import '../../widgets/progression_line_chart.dart';
 
 class MetricsScreen extends StatefulWidget {
   const MetricsScreen({super.key});
@@ -16,10 +19,20 @@ class MetricsScreen extends StatefulWidget {
 
 class _MetricsScreenState extends State<MetricsScreen> {
   String _selectedPeriod = 'week';
+  late DashboardService _dashboardService;
+
+  List<Map<String, dynamic>> _frequencyData = [];
+  bool _frequencyLoading = false;
+  bool _frequencyError = false;
 
   @override
   void initState() {
     super.initState();
+    _dashboardService = DashboardService(
+      // Será injetado do Provider do ApiClient
+      context.read(),
+    );
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         context.read<UserProvider>().loadUser().catchError((e) {
@@ -43,8 +56,45 @@ class _MetricsScreenState extends State<MetricsScreen> {
             );
           }
         });
+        _loadFrequencyData();
       }
     });
+  }
+
+  Future<void> _loadFrequencyData() async {
+    setState(() {
+      _frequencyLoading = true;
+      _frequencyError = false;
+    });
+
+    try {
+      final apiPeriod = _selectedPeriod == 'week' ? 'weekly' : 'monthly';
+      final apiLimit = _selectedPeriod == 'week' ? 12 : (_selectedPeriod == 'all' ? 12 : 6);
+      final result = await _dashboardService.getFrequency(
+        period: apiPeriod,
+        limit: apiLimit,
+      );
+
+      if (result != null && mounted) {
+        final dataPoints = (result['data_points'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+        setState(() {
+          _frequencyData = dataPoints;
+          _frequencyLoading = false;
+        });
+      } else if (mounted) {
+        setState(() {
+          _frequencyError = true;
+          _frequencyLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _frequencyError = true;
+          _frequencyLoading = false;
+        });
+      }
+    }
   }
 
   @override
@@ -78,6 +128,8 @@ class _MetricsScreenState extends State<MetricsScreen> {
                         _buildBodyMetrics(user),
                         const SizedBox(height: 16),
                         _buildWorkoutMetrics(),
+                        const SizedBox(height: 16),
+                        _buildFrequencyChart(),
                         const SizedBox(height: 16),
                         _buildGoalsMetrics(),
                         const SizedBox(height: 32),
@@ -152,6 +204,7 @@ class _MetricsScreenState extends State<MetricsScreen> {
                 onSelected: (selected) {
                   if (selected) {
                     setState(() => _selectedPeriod = period.$1);
+                    _loadFrequencyData();
                   }
                 },
               ),
@@ -244,8 +297,8 @@ class _MetricsScreenState extends State<MetricsScreen> {
       child: Consumer<LogbookProvider>(
         builder: (context, logbookProvider, _) {
           final sessions = _filterSessionsByPeriod(logbookProvider.sessions);
-          final totalDuration = sessions.fold<int>(0, (sum, s) => sum + (s.durationMinutes as int));
-          final totalCalories = sessions.fold<double>(0.0, (sum, s) => sum + (s.caloriesBurned as double));
+          final totalDuration = sessions.fold<int>(0, (sum, s) => sum + ((s.durationMinutes as int?) ?? 0));
+          final totalCalories = sessions.fold<double>(0.0, (sum, s) => sum + ((s.caloriesBurned as double?) ?? 0.0));
           final avgIntensity = sessions.isEmpty ? 'N/A' : _getAverageIntensity(sessions);
 
           return Column(
@@ -383,5 +436,30 @@ class _MetricsScreenState extends State<MetricsScreen> {
     if (intensa > moderada && intensa > leve) return 'Intensa';
     if (moderada >= leve) return 'Moderada';
     return 'Leve';
+  }
+
+  Widget _buildFrequencyChart() {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: FrequencyBarChart(
+          dataPoints: _frequencyData,
+          period: _selectedPeriod == 'week' ? 'weekly' : 'monthly',
+          isLoading: _frequencyLoading,
+          hasError: _frequencyError,
+        ),
+      ),
+    );
   }
 }

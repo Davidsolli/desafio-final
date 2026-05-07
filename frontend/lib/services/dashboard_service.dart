@@ -68,25 +68,14 @@ class DashboardService {
     int limit = 100,
   }) async {
     try {
-      print('getMyStudents: chamando /workout-sheets...');
       final response = await _apiClient.get<Map<String, dynamic>>(
         '/workout-sheets',
         queryParameters: {'limit': limit.toString()},
-        fromJson: (data) {
-          print('getMyStudents fromJson recebeu: $data (type: ${data.runtimeType})');
-          return data as Map<String, dynamic>;
-        },
+        fromJson: (data) => data as Map<String, dynamic>,
       );
 
-      print('getMyStudents: response recebida: $response');
-
-      // Extrai user_ids únicos das fichas
       final dataRaw = response['data'];
-      print('getMyStudents: dataRaw = $dataRaw (type: ${dataRaw.runtimeType})');
-
       final List<dynamic> workoutSheets = dataRaw is List<dynamic> ? dataRaw : [];
-      print('getMyStudents: workoutSheets = ${workoutSheets.length} itens');
-
       final uniqueUserIds = <String>{};
 
       for (final sheet in workoutSheets) {
@@ -94,16 +83,12 @@ class DashboardService {
           final userId = sheet['user_id'];
           if (userId != null) {
             uniqueUserIds.add(userId.toString());
-            print('  - aluno encontrado: $userId');
           }
         }
       }
 
-      final result = uniqueUserIds.map((id) => {'user_id': id}).toList();
-      print('getMyStudents: retornando ${result.length} alunos');
-      return result;
+      return uniqueUserIds.map((id) => {'user_id': id}).toList();
     } catch (e) {
-      print('Erro em getMyStudents: $e\n$e');
       return [];
     }
   }
@@ -189,20 +174,65 @@ class DashboardService {
     }
   }
 
+  /// Retorna frequência de treinos agrupados por período (weekly/monthly)
+  Future<Map<String, dynamic>?> getFrequency({
+    required String period,
+    int? limit,
+  }) async {
+    try {
+      final queryParams = {'period': period};
+      if (limit != null) {
+        queryParams['limit'] = limit.toString();
+      }
+
+      final response = await _apiClient.get<Map<String, dynamic>>(
+        '/logbook/frequency',
+        queryParameters: queryParams,
+        fromJson: (data) => data as Map<String, dynamic>,
+      );
+
+      return response;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Retorna progressão de exercício com agrupamento opcional
+  Future<Map<String, dynamic>?> getExerciseProgression({
+    required String exerciseId,
+    String? groupBy,
+    int? weeks,
+  }) async {
+    try {
+      final queryParams = <String, String>{};
+      if (groupBy != null) {
+        queryParams['group_by'] = groupBy;
+      }
+      if (weeks != null) {
+        queryParams['weeks'] = weeks.toString();
+      }
+
+      final response = await _apiClient.get<Map<String, dynamic>>(
+        '/logbook/progression/$exerciseId',
+        queryParameters: queryParams,
+        fromJson: (data) => data as Map<String, dynamic>,
+      );
+
+      return response;
+    } catch (e) {
+      return null;
+    }
+  }
+
   /// Retorna lista completa de `StudentDashboardData` para todos os alunos
   Future<List<StudentDashboardData>> loadDashboard() async {
     try {
       // 1. Pegar alunos do personal
-      print('1. Iniciando getMyStudents...');
       final studentRefs = await getMyStudents();
-      print('2. getMyStudents retornou ${studentRefs.length} alunos');
 
       if (studentRefs.isEmpty) {
-        print('3. Nenhum aluno encontrado');
         return [];
       }
-
-      print('4. Alunos encontrados: $studentRefs');
 
       // 2. Para cada aluno, agregar seus dados em paralelo
       final futuresList = <Future<StudentDashboardData>>[];
