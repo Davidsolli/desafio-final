@@ -67,9 +67,11 @@ class _MetricsScreenState extends State<MetricsScreen> {
     });
 
     try {
+      final apiPeriod = _selectedPeriod == 'week' ? 'weekly' : 'monthly';
+      final apiLimit = _selectedPeriod == 'week' ? 12 : (_selectedPeriod == 'all' ? 12 : 6);
       final result = await _dashboardService.getFrequency(
-        period: _selectedPeriod == 'week' ? 'weekly' : 'monthly',
-        limit: _selectedPeriod == 'week' ? 12 : 6,
+        period: apiPeriod,
+        limit: apiLimit,
       );
 
       if (result != null && mounted) {
@@ -85,7 +87,6 @@ class _MetricsScreenState extends State<MetricsScreen> {
         });
       }
     } catch (e) {
-      print('Erro ao carregar frequência: $e');
       if (mounted) {
         setState(() {
           _frequencyError = true;
@@ -202,6 +203,7 @@ class _MetricsScreenState extends State<MetricsScreen> {
                 onSelected: (selected) {
                   if (selected) {
                     setState(() => _selectedPeriod = period.$1);
+                    _loadFrequencyData();
                   }
                 },
               ),
@@ -294,8 +296,8 @@ class _MetricsScreenState extends State<MetricsScreen> {
       child: Consumer<LogbookProvider>(
         builder: (context, logbookProvider, _) {
           final sessions = _filterSessionsByPeriod(logbookProvider.sessions);
-          final totalDuration = sessions.fold<int>(0, (sum, s) => sum + (s.durationMinutes as int));
-          final totalCalories = sessions.fold<double>(0.0, (sum, s) => sum + (s.caloriesBurned as double));
+          final totalDuration = sessions.fold<int>(0, (sum, s) => sum + ((s.durationMinutes as int?) ?? 0));
+          final totalCalories = sessions.fold<double>(0.0, (sum, s) => sum + ((s.caloriesBurned as double?) ?? 0.0));
           final avgIntensity = sessions.isEmpty ? 'N/A' : _getAverageIntensity(sessions);
 
           return Column(

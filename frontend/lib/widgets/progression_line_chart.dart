@@ -41,10 +41,11 @@ class ProgressionLineChart extends StatelessWidget {
       );
     }
 
-    // Preparar dados para o gráfico
-    final chartData = _prepareChartData();
+    // Computar uma vez para evitar múltiplas iterações
     final maxLoad = _getMaxLoad();
     final minLoad = _getMinLoad();
+    final chartData = _prepareChartData();
+    final interval = (maxLoad - minLoad) < 1.0 ? 1.0 : (maxLoad - minLoad) / 5;
 
     return Padding(
       padding: EdgeInsets.all(16),
@@ -73,10 +74,12 @@ class ProgressionLineChart extends StatelessWidget {
                   bottomTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
+                      reservedSize: 28,
                       getTitlesWidget: (value, meta) {
-                        return Text(
-                          '${value.toInt()}',
-                          style: TextStyle(fontSize: 10),
+                        final label = _formatDateLabel(value.toInt());
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(label, style: const TextStyle(fontSize: 9)),
                         );
                       },
                     ),
@@ -95,17 +98,26 @@ class ProgressionLineChart extends StatelessWidget {
                 ),
                 gridData: FlGridData(
                   show: true,
-                  horizontalInterval: (maxLoad - minLoad) / 5,
+                  horizontalInterval: interval,
                 ),
                 borderData: FlBorderData(show: true),
               ),
             ),
           ),
           SizedBox(height: 16),
-          _buildStatistics(),
+          _buildStatisticsWithValues(maxLoad, minLoad),
         ],
       ),
     );
+  }
+
+  String _formatDateLabel(int index) {
+    if (index < 0 || index >= dataPoints.length) return '';
+    final raw = dataPoints[index]['session_date'] as String?;
+    if (raw == null) return '';
+    final dt = DateTime.tryParse(raw);
+    if (dt == null) return '';
+    return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}';
   }
 
   List<FlSpot> _prepareChartData() {
@@ -133,9 +145,7 @@ class ProgressionLineChart extends StatelessWidget {
         .reduce((a, b) => a < b ? a : b);
   }
 
-  Widget _buildStatistics() {
-    final maxLoad = _getMaxLoad();
-    final minLoad = _getMinLoad();
+  Widget _buildStatisticsWithValues(double maxLoad, double minLoad) {
     final avgLoad = dataPoints.isNotEmpty
         ? dataPoints
                 .map((p) => (p['actual_load_kg'] as num?)?.toDouble() ?? 0.0)

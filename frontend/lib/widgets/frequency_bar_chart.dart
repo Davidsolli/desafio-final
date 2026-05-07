@@ -65,10 +65,12 @@ class FrequencyBarChart extends StatelessWidget {
                   bottomTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
+                      reservedSize: 28,
                       getTitlesWidget: (value, meta) {
-                        return Text(
-                          '${value.toInt()}',
-                          style: TextStyle(fontSize: 10),
+                        final label = _formatPeriodLabel(value.toInt());
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(label, style: const TextStyle(fontSize: 9)),
                         );
                       },
                     ),
@@ -96,6 +98,23 @@ class FrequencyBarChart extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  static const _monthNames = [
+    'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun',
+    'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez',
+  ];
+
+  String _formatPeriodLabel(int index) {
+    if (index < 0 || index >= dataPoints.length) return '';
+    final raw = dataPoints[index]['period_start'] as String?;
+    if (raw == null) return '';
+    final dt = DateTime.tryParse(raw);
+    if (dt == null) return '';
+    if (period == 'weekly') {
+      return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}';
+    }
+    return _monthNames[dt.month - 1];
   }
 
   List<BarChartGroupData> _prepareChartData() {

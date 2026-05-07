@@ -68,25 +68,14 @@ class DashboardService {
     int limit = 100,
   }) async {
     try {
-      print('getMyStudents: chamando /workout-sheets...');
       final response = await _apiClient.get<Map<String, dynamic>>(
         '/workout-sheets',
         queryParameters: {'limit': limit.toString()},
-        fromJson: (data) {
-          print('getMyStudents fromJson recebeu: $data (type: ${data.runtimeType})');
-          return data as Map<String, dynamic>;
-        },
+        fromJson: (data) => data as Map<String, dynamic>,
       );
 
-      print('getMyStudents: response recebida: $response');
-
-      // Extrai user_ids únicos das fichas
       final dataRaw = response['data'];
-      print('getMyStudents: dataRaw = $dataRaw (type: ${dataRaw.runtimeType})');
-
       final List<dynamic> workoutSheets = dataRaw is List<dynamic> ? dataRaw : [];
-      print('getMyStudents: workoutSheets = ${workoutSheets.length} itens');
-
       final uniqueUserIds = <String>{};
 
       for (final sheet in workoutSheets) {
@@ -94,16 +83,12 @@ class DashboardService {
           final userId = sheet['user_id'];
           if (userId != null) {
             uniqueUserIds.add(userId.toString());
-            print('  - aluno encontrado: $userId');
           }
         }
       }
 
-      final result = uniqueUserIds.map((id) => {'user_id': id}).toList();
-      print('getMyStudents: retornando ${result.length} alunos');
-      return result;
+      return uniqueUserIds.map((id) => {'user_id': id}).toList();
     } catch (e) {
-      print('Erro em getMyStudents: $e\n$e');
       return [];
     }
   }
@@ -208,7 +193,6 @@ class DashboardService {
 
       return response;
     } catch (e) {
-      print('Erro ao buscar frequência: $e');
       return null;
     }
   }
@@ -236,7 +220,6 @@ class DashboardService {
 
       return response;
     } catch (e) {
-      print('Erro ao buscar progressão: $e');
       return null;
     }
   }
@@ -245,16 +228,11 @@ class DashboardService {
   Future<List<StudentDashboardData>> loadDashboard() async {
     try {
       // 1. Pegar alunos do personal
-      print('1. Iniciando getMyStudents...');
       final studentRefs = await getMyStudents();
-      print('2. getMyStudents retornou ${studentRefs.length} alunos');
 
       if (studentRefs.isEmpty) {
-        print('3. Nenhum aluno encontrado');
         return [];
       }
-
-      print('4. Alunos encontrados: $studentRefs');
 
       // 2. Para cada aluno, agregar seus dados em paralelo
       final futuresList = <Future<StudentDashboardData>>[];

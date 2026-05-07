@@ -6,8 +6,9 @@ exercícios registrados, calendário e progressão de carga.
 """
 
 import calendar
+from collections import defaultdict
 from datetime import date, datetime, timedelta
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -427,7 +428,6 @@ class LogbookService:
 
         data_points: List[ProgressionDataPointDTO] = []
         for ex in exercises:
-            # Obter data da sessão via join já carregado
             session_date = await self.repository.get_session_date_for_exercise(ex)
             if session_date is None:
                 continue
@@ -446,6 +446,10 @@ class LogbookService:
                     volume_kg=volume,
                 )
             )
+
+        # Agrupar por período se solicitado
+        if group_by in ("week", "month") and data_points:
+            data_points = self._group_data_points(data_points, group_by)
 
         # Calcular estatísticas
         loads = [dp.actual_load_kg for dp in data_points]
@@ -619,7 +623,7 @@ class LogbookService:
         else:
             if limit is None:
                 limit = 6
-            start_date = now - timedelta(days=30 * limit)
+            start_date = self._subtract_months(now, limit)
 
         end_date = now
 
@@ -682,7 +686,9 @@ class LogbookService:
 
             while current <= end_date:
                 period_start = current
-                period_end = current + timedelta(days=6, hours=23, minutes=59, seconds=59)
+                period_end = datetime.combine(
+                    (current + timedelta(days=6)).date(), datetime.max.time()
+                )
                 periods.append((period_start, period_end))
                 current += timedelta(days=7)
         else:  # monthly
@@ -712,3 +718,37 @@ class LogbookService:
                     current = datetime(current.year, current.month + 1, 1)
 
         return periods
+
+    @staticmethod
+    def _subtract_months(dt: datetime, months: int) -> datetime:
+        """Subtrai `months` meses de `dt`, respeitando o último dia do mês alvo."""
+        month = dt.month - months
+        year = dt.year
+        while month <= 0:
+            month += 12
+            year -= 1
+        last_day = calendar.monthrange(year, month)[1]
+        return dt.replace(year=year, month=month, day=min(dt.day, last_day))
+
+    @staticmethod
+    def _group_data_points(
+        data_points: List[ProgressionDataPointDTO],
+        group_by: str,
+    ) -> List[ProgressionDataPointDTO]:
+        """Agrupa data_points por semana ou mês, mantendo o registro de maior carga por período."""
+        def period_key(dt: datetime) -> datetime:
+            if group_by == "week":
+                return (dt - timedelta(days=dt.weekday())).replace(
+                    hour=0, minute=0, second=0, microsecond=0
+                )
+            return dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+        groups: Dict[datetime, List[ProgressionDataPointDTO]] = defaultdict(list)
+        for dp in data_points:
+            groups[period_key(dp.session_date)].append(dp)
+
+        result = []
+        for key in sorted(groups.keys()):
+            best = max(groups[key], key=lambda dp: dp.actual_load_kg)
+            result.append(best)
+        return result
