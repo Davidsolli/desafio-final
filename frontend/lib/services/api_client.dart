@@ -1,6 +1,8 @@
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../config/api_config.dart';
+
 
 /// Exceções customizadas para erros da API
 class ApiException implements Exception {
@@ -50,7 +52,9 @@ class NetworkException extends ApiException {
         );
 }
 
+
 /// Cliente HTTP para comunicação com a API OmniConnect
+
 ///
 /// Funcionalidades:
 /// - Autenticação com JWT
@@ -58,7 +62,7 @@ class NetworkException extends ApiException {
 /// - Logging de requisições/respostas
 /// - Timeout automático
 class ApiClient {
-  static const String _baseUrl = 'http://localhost:8000';
+  static const String _baseUrl = ApiConfig.baseUrl;
   static const String _apiPrefix = '/api/v1';
   static const String _tokenKey = 'jwt_token';
   static const Duration _timeout = Duration(seconds: 30);

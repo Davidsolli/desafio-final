@@ -48,7 +48,9 @@ class _ChatScreenState extends State<ChatScreen> {
     }
 
     // Usa ApiConfig para URL base (não hardcoded)
-    final wsBaseUrl = ApiConfig.wsBaseUrl ?? 'ws://localhost:8000';
+    final wsBaseUrl = ApiConfig.wsBaseUrl;
+    if (wsBaseUrl == null) return;
+    
     final wsUrl = Uri.parse('$wsBaseUrl/api/v1/chat/ws');
 
     try {

@@ -12,15 +12,23 @@ class ApiConfig {
 
   /// URL base do WebSocket
   static String? get wsBaseUrl {
-    final base = baseUrl;
-    // Converte http:// para ws:// e https:// para wss://
-    if (base.startsWith('https://')) {
-      return base.replaceFirst('https://', 'wss://');
-    } else if (base.startsWith('http://')) {
-      return base.replaceFirst('http://', 'ws://');
+    if (baseUrl.startsWith('http')) {
+      return baseUrl.replaceFirst('http', 'ws');
     }
-    // Para URLs relativas na Web, o navegador lida com isso se usarmos o schema correto
-    return null; 
+    
+    // Em produção (Web), se a URL for relativa, usamos o domínio atual do navegador
+    if (kReleaseMode) {
+      final Uri currentUri = Uri.base;
+      final String protocol = currentUri.scheme == 'https' ? 'wss' : 'ws';
+      final String host = currentUri.host;
+      final int port = currentUri.port;
+      
+      // Constrói algo como: ws://lab.alphaedtech.org.br/server02
+      final String portSuffix = (port == 80 || port == 443 || port == 0) ? '' : ':$port';
+      return '$protocol://$host$portSuffix$baseUrl';
+    }
+    
+    return null;
   }
 
   /// Endpoints da API
