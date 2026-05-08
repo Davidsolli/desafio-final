@@ -49,6 +49,11 @@ async def get_current_user(
     if user is None:
         raise credentials_error
 
+    # Validar token_version para detectar mudanças de senha
+    token_version = payload.get("token_version", 0)
+    if token_version != user.token_version:
+        raise credentials_error
+
     return user
 
 async def get_current_user_ws(

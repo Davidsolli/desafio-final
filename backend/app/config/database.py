@@ -65,6 +65,7 @@ async def init_db() -> None:
     import app.models.diet  # noqa: F401 — registra CustomFood, Diet, DietMeal, DietItem
     import app.models.diet_logbook  # noqa: F401 — registra DietLogbook, DietLogbookEntry
     from app.models.invitation import Invitation  # noqa: F401 — registra Invitation
+    from app.models.password_reset_token import PasswordResetToken  # noqa: F401 — registra PasswordResetToken
 
     logger = logging.getLogger(__name__)
 
@@ -89,6 +90,7 @@ async def init_db() -> None:
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS gender VARCHAR(10)",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_whatsapp VARCHAR(20)",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS goal_type VARCHAR(50)",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER DEFAULT 0",
         ]
         for alter in alters:
             try:

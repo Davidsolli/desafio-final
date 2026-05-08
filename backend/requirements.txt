@@ -26,6 +26,10 @@ pytest-asyncio>=0.21.0
 pytest-cov>=4.1.0
 httpx>=0.24.0
 
+# Recuperação de Senha
+resend>=0.8.0
+slowapi>=0.1.9
+
 # ── IA / RAG ─────────────────────────────────────────────────────────────────
 langchain>=0.2.0
 langchain-core>=0.2.0

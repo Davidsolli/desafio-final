@@ -21,8 +21,14 @@ from app.dtos.user_dto import (
     UserResponseDTO,
     PaginatedUsersResponseDTO,
 )
+from app.dtos.password_dto import (
+    ChangePasswordDTO,
+    PasswordResponseDTO,
+)
 from app.controllers.user_controller import UserController
+from app.controllers.password_controller import PasswordController
 from app.services.user_service import UserAlreadyExistsError, UserNotFoundError, InvalidInvitationError
+from app.services.password_service import PasswordValidationError, PasswordMismatchError, InvalidTokenError
 from app.config.database import get_db
 from app.dependencies.auth import get_current_user
 from app.models.user import User
@@ -442,4 +448,69 @@ async def delete_user(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Erro ao deletar usuário",
+        )
+
+
+@router.put(
+    "/me/password",
+    response_model=PasswordResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Trocar senha do usuário autenticado",
+    responses={
+        200: {"description": "Senha alterada com sucesso"},
+        400: {"description": "Validação falhou ou senha atual incorreta"},
+        401: {"description": "Não autenticado"},
+        422: {"description": "Validação falhou"},
+    },
+)
+async def change_password(
+    dto: ChangePasswordDTO,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> PasswordResponseDTO:
+    """
+    Trocar senha para usuário autenticado.
+
+    **Requer autenticação:** Usuário deve estar logado.
+
+    **Request body:**
+    - current_password: Senha atual para validação
+    - new_password: Nova senha (8+ chars, maiúscula, minúscula, número, caractere especial)
+    - confirm_password: Confirmação da nova senha
+
+    **Response:**
+    - message: Confirmação de sucesso
+
+    **Segurança:**
+    - Senha atual deve estar correta
+    - Nova senha deve ser diferente da atual
+    - Nova senha deve atender requisitos de força
+    - JWTs antigos serão invalidados após mudança (token_version incrementado)
+
+    **Errors:**
+    - 400: Senha atual incorreta, senhas não conferem, senha fraca, nova igual à atual
+    """
+    controller = PasswordController(session)
+
+    try:
+        return await controller.change_password(current_user, dto)
+    except PasswordMismatchError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except PasswordValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except InvalidTokenError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro ao alterar senha",
         )
