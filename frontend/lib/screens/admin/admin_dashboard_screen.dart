@@ -106,7 +106,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 12),
                 const SizedBox(height: 16),
                 Expanded(
                   child: filteredTrainers.isEmpty

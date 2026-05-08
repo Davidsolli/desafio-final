@@ -139,6 +139,14 @@ class _InviteCodeScreenState extends State<InviteCodeScreen> {
                         labelText: 'Código de Convite',
                         hintText: 'Ex: AB3X7KP2QR',
                         prefixIcon: Icons.vpn_key_outlined,
+                        textCapitalization: TextCapitalization.characters,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 2,
+                        ),
+                        onChanged: (_) => setState(() {}),
                       ),
                       const SizedBox(height: 32),
                       // Botão validar

@@ -338,7 +338,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
       child: OmniButton(
         text: isLast ? 'Criar Conta' : 'Próximo',
-        onPressed: (canProceed && !_isLoading) ? () => _next() : () {},
+        onPressed: (canProceed && !_isLoading) ? _next : null,
         isLoading: _isLoading,
         width: double.infinity,
         height: 52,

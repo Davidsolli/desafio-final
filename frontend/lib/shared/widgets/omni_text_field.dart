@@ -13,6 +13,9 @@ class OmniTextField extends StatefulWidget {
   final int? minLines;
   final TextInputType keyboardType;
   final void Function(String)? onChanged;
+  final TextCapitalization textCapitalization;
+  final TextAlign textAlign;
+  final TextStyle? style;
 
   const OmniTextField({
     Key? key,
@@ -27,6 +30,9 @@ class OmniTextField extends StatefulWidget {
     this.minLines,
     this.keyboardType = TextInputType.text,
     this.onChanged,
+    this.textCapitalization = TextCapitalization.none,
+    this.textAlign = TextAlign.start,
+    this.style,
   }) : super(key: key);
 
   @override
@@ -54,6 +60,9 @@ class _OmniTextFieldState extends State<OmniTextField> {
       keyboardType: widget.keyboardType,
       validator: widget.validator,
       onChanged: widget.onChanged,
+      textCapitalization: widget.textCapitalization,
+      textAlign: widget.textAlign,
+      style: widget.style,
       decoration: InputDecoration(
         labelText: widget.labelText,
         hintText: widget.hintText,
