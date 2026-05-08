@@ -26,6 +26,7 @@ from app.models import exercise_catalog  # noqa: F401 — registra exercise_cata
 from app.models import diet  # noqa: F401 — registra diet/diet_meals/diet_items/custom_foods
 from app.models import diet_logbook  # noqa: F401 — registra diet_logbooks/diet_logbook_entries
 from app.models import food_catalog  # noqa: F401 — registra food_catalog
+from app.models.password_reset_token import PasswordResetToken  # noqa: F401 — registra password_reset_tokens
 from app.services.user_service import UserService
 from app.dependencies.auth import get_current_user
 
@@ -57,6 +58,20 @@ async def test_engine():
 @pytest_asyncio.fixture
 async def test_db_session(test_engine):
     """Criar sessão de teste."""
+    async_session_local = async_sessionmaker(
+        test_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+        future=True,
+    )
+
+    async with async_session_local() as session:
+        yield session
+
+
+@pytest_asyncio.fixture
+async def async_session(test_engine):
+    """Alias para test_db_session (compatibilidade com testes de password)."""
     async_session_local = async_sessionmaker(
         test_engine,
         class_=AsyncSession,
