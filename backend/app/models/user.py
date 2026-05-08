@@ -87,5 +87,12 @@ class User(Base):
 
     goal_type = Column(String(50), nullable=True)
 
+    theme_preference = Column(
+        String(20),
+        nullable=True,
+        default=None,
+        comment="Preferência de tema: 'light', 'dark', 'system', ou NULL para padrão do dispositivo"
+    )
+
     def __repr__(self) -> str:
         return f"<User(id={self.id}, name={self.name}, email={self.email}, role={self.role})>"
