@@ -1,4 +1,4 @@
-from datetime import datetime, time
+from datetime import datetime, time, timezone
 from typing import Any, Dict
 from uuid import uuid4
 from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Time, JSON, Date
@@ -6,6 +6,9 @@ from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import relationship
 
 from app.models.user import Base
+
+def utc_now():
+    return datetime.now(timezone.utc)
 
 
 class NotificationPreference(Base):
@@ -34,11 +37,11 @@ class NotificationPreference(Base):
     quiet_hours_start = Column(Time, nullable=True) # Ex: 22:00
     quiet_hours_end = Column(Time, nullable=True) # Ex: 07:00
     
-    # Silent days (ex: domingo)
-    silent_days = Column(JSON, nullable=True) # [0, 6] = seg, dom
-    
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
-    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    # Silent days (0=Monday, 1=Tuesday, ..., 6=Sunday)
+    silent_days = Column(JSON, nullable=True)
+
+    created_at = Column(DateTime, nullable=False, default=utc_now)
+    updated_at = Column(DateTime, nullable=False, default=utc_now, onupdate=utc_now)
 
 
 class NotificationLog(Base):
@@ -58,10 +61,10 @@ class NotificationLog(Base):
     read_at = Column(DateTime, nullable=True)
     clicked_at = Column(DateTime, nullable=True)
     
-    status = Column(String(50), nullable=False, default="pending") # "pending", "sent", "failed", "delivered"
-    error = Column(String(1000), nullable=True) # Se falhou
-    
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    status = Column(String(50), nullable=False, default="pending")
+    error = Column(String(1000), nullable=True)
+
+    created_at = Column(DateTime, nullable=False, default=utc_now)
 
 
 class WorkoutReminderSchedule(Base):
@@ -80,6 +83,6 @@ class WorkoutReminderSchedule(Base):
     # Status
     sent = Column(Boolean, default=False, nullable=False)
     sent_at = Column(DateTime, nullable=True)
-    delivery_status = Column(String(50), nullable=False, default="pending") # "pending", "sent", "failed"
-    
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    delivery_status = Column(String(50), nullable=False, default="pending")
+
+    created_at = Column(DateTime, nullable=False, default=utc_now)

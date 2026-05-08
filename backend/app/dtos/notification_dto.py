@@ -54,3 +54,7 @@ class NotificationLogResponseDTO(BaseModel):
 
 class MarkNotificationReadDTO(BaseModel):
     notification_id: UUID
+
+
+class UpdateFCMTokenDTO(BaseModel):
+    fcm_token: str

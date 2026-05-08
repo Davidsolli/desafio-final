@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 from app.controllers.notification_controller import NotificationController
-from app.dtos.notification_dto import NotificationPreferenceResponseDTO
+from app.dtos.notification_dto import NotificationPreferenceResponseDTO, NotificationLogResponseDTO
 
 router = APIRouter(
     prefix="/api/v1/notifications",
@@ -27,6 +27,7 @@ router.add_api_route(
     "/history",
     NotificationController.get_history,
     methods=["GET"],
+    response_model=dict,
     summary="Obter histórico de notificações do usuário"
 )
 
@@ -34,6 +35,7 @@ router.add_api_route(
     "/mark-read",
     NotificationController.mark_read,
     methods=["POST"],
+    response_model=dict,
     summary="Marcar uma notificação específica como lida"
 )
 

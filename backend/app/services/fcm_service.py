@@ -1,8 +1,11 @@
 import os
+import logging
 import firebase_admin
 from firebase_admin import credentials, messaging
 from typing import Optional, Dict, Any
 from app.config.settings import settings
+
+logger = logging.getLogger(__name__)
 
 class FCMService:
     _initialized = False
@@ -19,11 +22,11 @@ class FCMService:
                         cred = credentials.Certificate(cred_path)
                         firebase_admin.initialize_app(cred)
                         FCMService._initialized = True
-                        print(f"[Sucesso] Firebase Admin inicializado com: {cred_path}")
+                        logger.info(f"Firebase Admin inicializado com: {cred_path}")
                     else:
-                        print(f"[Aviso] Arquivo {cred_path} não encontrado.")
+                        logger.warning(f"Arquivo {cred_path} não encontrado.")
             except Exception as e:
-                print(f"[Erro] Falha ao inicializar o Firebase: {str(e)}")
+                logger.error(f"Falha ao inicializar o Firebase: {str(e)}")
 
     def send_notification(self, token: str, title: str, body: str, data: Optional[Dict[str, Any]] = None) -> bool:
         if not FCMService._initialized:
@@ -44,9 +47,9 @@ class FCMService:
             )
             
             response = messaging.send(message)
-            print(f"Notificação enviada com sucesso: {response}")
+            logger.info(f"Notificação enviada com sucesso: {response}")
             return True
-            
+
         except Exception as e:
-            print(f"[Erro] Erro ao enviar notificação pro FCM: {str(e)}")
+            logger.error(f"Erro ao enviar notificação pro FCM: {str(e)}")
             return False

@@ -10,7 +10,8 @@ from app.dtos.notification_dto import (
     UpdateNotificationPreferenceDTO,
     NotificationPreferenceResponseDTO,
     NotificationLogResponseDTO,
-    MarkNotificationReadDTO
+    MarkNotificationReadDTO,
+    UpdateFCMTokenDTO
 )
 from app.services.notification_service import NotificationService
 
@@ -64,11 +65,11 @@ class NotificationController:
 
     @staticmethod
     async def update_token(
-        fcm_token: str,
+        dto: UpdateFCMTokenDTO,
         db: AsyncSession = Depends(get_db),
         current_user: User = Depends(get_current_user)
     ) -> dict:
         service = NotificationService(db)
-        await service.update_fcm_token(current_user.id, fcm_token)
+        await service.update_fcm_token(current_user.id, dto.fcm_token)
         await db.commit()
         return {"status": "success", "message": "FCM Token updated"}

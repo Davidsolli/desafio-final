@@ -1,5 +1,6 @@
 from uuid import UUID
 from typing import List, Optional, Any, Dict
+from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException, status
 
@@ -8,7 +9,6 @@ from app.services.fcm_service import FCMService
 from app.models.notification import NotificationPreference, NotificationLog
 from app.dtos.notification_dto import UpdateNotificationPreferenceDTO, NotificationPreferenceResponseDTO
 
-# Para pegar o fcm_token do usuário:
 from app.models.user import User
 from sqlalchemy import select
 
@@ -77,10 +77,9 @@ class NotificationService:
         )
         
         # 4. Atualizar registro
-        from datetime import datetime
         if success:
-            log.status = "delivered"
-            log.sent_at = datetime.utcnow()
+            log.status = "sent"
+            log.sent_at = datetime.now(timezone.utc)
         else:
             log.status = "failed"
             log.error = "Firebase error"

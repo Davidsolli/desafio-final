@@ -3,7 +3,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
-from datetime import datetime, date
+from datetime import datetime, date, timezone, time
 
 from app.config.database import SessionLocal
 from app.models.notification import WorkoutReminderSchedule, NotificationPreference
@@ -41,10 +41,12 @@ class NotificationScheduler:
         """
         Job rodando em background para enviar os WorkoutReminderSchedules
         que ainda não foram enviados e estão na data/hora (ou já passou).
+        Respeita quiet hours e silent days.
         """
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         current_date = now.date()
         current_time = now.time()
+        current_weekday = now.weekday()
 
         async with SessionLocal() as session:
             try:
@@ -76,10 +78,27 @@ class NotificationScheduler:
                         schedule.sent = True
                         schedule.delivery_status = "cancelled_by_preference"
                         continue
-                    
+
                     if pref and not pref.workout_reminder_enabled:
                         schedule.sent = True
                         schedule.delivery_status = "cancelled_by_preference"
+                        continue
+
+                    # Respeitar quiet hours (horário de silêncio)
+                    if pref and pref.quiet_hours_start and pref.quiet_hours_end:
+                        is_in_quiet_hours = (
+                            current_time >= pref.quiet_hours_start
+                            or current_time <= pref.quiet_hours_end
+                        )
+                        if is_in_quiet_hours:
+                            schedule.sent = True
+                            schedule.delivery_status = "cancelled_by_quiet_hours"
+                            continue
+
+                    # Respeitar silent days (dias silenciosos)
+                    if pref and pref.silent_days and current_weekday in pref.silent_days:
+                        schedule.sent = True
+                        schedule.delivery_status = "cancelled_by_silent_day"
                         continue
 
                     # Buscar Ficha (opcional para compor o titulo, o PRD diz que pode usar FCM_service)
@@ -103,7 +122,7 @@ class NotificationScheduler:
 
                     # Atualizar agendamento
                     schedule.sent = True
-                    schedule.sent_at = datetime.utcnow()
+                    schedule.sent_at = datetime.now(timezone.utc)
                     schedule.delivery_status = log.status
 
                 await session.commit()

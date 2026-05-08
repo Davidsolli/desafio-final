@@ -1,5 +1,6 @@
 from uuid import UUID
 from typing import List, Optional
+from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 
@@ -43,10 +44,9 @@ class NotificationRepository:
         )
         result = await self.session.execute(query)
         log = result.scalars().first()
-        
+
         if log:
-            from datetime import datetime
-            log.read_at = datetime.utcnow()
+            log.read_at = datetime.now(timezone.utc)
             await self.session.flush()
-            
+
         return log
