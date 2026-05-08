@@ -8,9 +8,13 @@ Endpoints:
 import hmac
 import hashlib
 import logging
+import os
+from dotenv import load_dotenv
 from fastapi import APIRouter, HTTPException, status, Request, Query
 from pydantic import BaseModel
 from typing import Optional
+
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +48,6 @@ async def verify_whatsapp_webhook(
     O Meta envia uma requisição GET para verificar que você é o dono do webhook.
     Você precisa retornar o hub.challenge para confirmar.
     """
-    import os
-
     verify_token = os.getenv("WHATSAPP_VERIFY_TOKEN")
 
     if hub_mode != "subscribe":
@@ -56,7 +58,7 @@ async def verify_whatsapp_webhook(
         raise HTTPException(status_code=403, detail="Token inválido")
 
     logger.info("✅ Webhook validado com sucesso!")
-    return int(hub_challenge)
+    return {"hub.challenge": hub_challenge}
 
 
 @router.post(
