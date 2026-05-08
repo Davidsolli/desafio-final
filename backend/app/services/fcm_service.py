@@ -2,37 +2,44 @@ import os
 import firebase_admin
 from firebase_admin import credentials, messaging
 from typing import Optional, Dict, Any
+from app.config.settings import settings
 
 class FCMService:
     _initialized = False
 
     def __init__(self):
-        # Inicializar o app do firebase caso não tenha sido inicializado
         if not FCMService._initialized:
             try:
-                # O ideal é pegar do .env, por default usa o path da raiz do backend
-                cred_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "serviceAccountKey.json")
-                if os.path.exists(cred_path):
-                    cred = credentials.Certificate(cred_path)
-                    firebase_admin.initialize_app(cred)
+                try:
+                    firebase_admin.get_app()
                     FCMService._initialized = True
-                else:
-                    print(f"[Aviso] Arquivo {cred_path} não encontrado. Firebase admin não inicializado.")
+                except ValueError:
+                    cred_path = settings.FIREBASE_CREDENTIALS_PATH
+                    if os.path.exists(cred_path):
+                        cred = credentials.Certificate(cred_path)
+                        firebase_admin.initialize_app(cred)
+                        FCMService._initialized = True
+                        print(f"[Sucesso] Firebase Admin inicializado com: {cred_path}")
+                    else:
+                        print(f"[Aviso] Arquivo {cred_path} não encontrado.")
             except Exception as e:
                 print(f"[Erro] Falha ao inicializar o Firebase: {str(e)}")
 
-    def send_notification(self, token: str, title: str, body: str, data: Optional[Dict[str, str]] = None) -> bool:
+    def send_notification(self, token: str, title: str, body: str, data: Optional[Dict[str, Any]] = None) -> bool:
         if not FCMService._initialized:
-            print("[Aviso] Tentativa de enviar notificação sem FCM inicializado.")
             return False
 
         try:
+            processed_data = None
+            if data:
+                processed_data = {k: str(v) for k, v in data.items()}
+
             message = messaging.Message(
                 notification=messaging.Notification(
                     title=title,
                     body=body,
                 ),
-                data=data if data else {},
+                data=processed_data,
                 token=token,
             )
             
