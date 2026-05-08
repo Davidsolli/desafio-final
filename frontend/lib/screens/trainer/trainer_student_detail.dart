@@ -10,6 +10,7 @@ import '../../providers/workout_sheet_provider.dart';
 import '../../services/nutrition_service.dart';
 import '../../services/user_service.dart';
 import '../../services/workout_sheet_service.dart';
+import '../../shared/widgets/index.dart';
 import 'widgets/create_workout_sheet_dialog.dart';
 import 'widgets/edit_workout_sheet_dialog.dart';
 
@@ -195,29 +196,20 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
 
   Widget _buildInfoTab() {
     if (_studentLoading) {
-      return const Center(
-        child: CircularProgressIndicator(color: AppColors.primary),
-      );
+      return const OmniLoader();
     }
 
     if (_studentError != null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, color: AppColors.accentError, size: 40),
-            const SizedBox(height: 12),
-            Text(_studentError!,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.textMuted)),
-          ],
-        ),
+      return OmniErrorState(
+        message: _studentError!,
+        onRetry: _loadStudentData,
       );
     }
 
     if (_student == null) {
-      return Center(
-        child: Text('Aluno não encontrado',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.textMuted)),
+      return const OmniEmptyState(
+        icon: Icons.person_off,
+        title: 'Aluno não encontrado',
       );
     }
 
@@ -230,22 +222,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
         children: [
           Row(
             children: [
-              Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [AppColors.primary, AppColors.primaryLight],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Center(
-                  child: Text(_student!.name[0],
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 24)),
-                ),
-              ),
+              OmniAvatar(name: _student!.name, size: 60, useGradient: true),
               const SizedBox(width: 12),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -261,44 +238,20 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
           Row(
             children: [
               Expanded(
-                child: FadeInLeft(
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: context.colors.surface,
-                      border: Border.all(color: context.colors.border, width: 1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Column(
-                      children: [
-                        const Icon(Icons.scale, color: AppColors.primary, size: 20),
-                        const SizedBox(height: 6),
-                        Text('${_student!.weight.toStringAsFixed(1)} kg', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                        Text('Peso', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.colors.textMuted)),
-                      ],
-                    ),
-                  ),
+                child: OmniStatCard(
+                  icon: Icons.scale,
+                  value: _student!.weight.toStringAsFixed(1),
+                  label: 'Peso',
+                  unit: 'kg',
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: FadeInRight(
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: context.colors.surface,
-                      border: Border.all(color: context.colors.border, width: 1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Column(
-                      children: [
-                        const Icon(Icons.height, color: AppColors.primary, size: 20),
-                        const SizedBox(height: 6),
-                        Text('${_student!.height.toStringAsFixed(1)} cm', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                        Text('Altura', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.colors.textMuted)),
-                      ],
-                    ),
-                  ),
+                child: OmniStatCard(
+                  icon: Icons.height,
+                  value: _student!.height.toStringAsFixed(1),
+                  label: 'Altura',
+                  unit: 'cm',
                 ),
               ),
             ],
@@ -307,50 +260,25 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
           Row(
             children: [
               Expanded(
-                child: FadeInLeft(
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: context.colors.surface,
-                      border: Border.all(color: context.colors.border, width: 1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Column(
-                      children: [
-                        const Icon(Icons.cake, color: AppColors.primary, size: 20),
-                        const SizedBox(height: 6),
-                        Text('${_student!.age} anos', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                        Text('Idade', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.colors.textMuted)),
-                      ],
-                    ),
-                  ),
+                child: OmniStatCard(
+                  icon: Icons.cake,
+                  value: '${_student!.age}',
+                  label: 'Idade',
+                  unit: 'anos',
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: FadeInRight(
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: context.colors.surface,
-                      border: Border.all(color: context.colors.border, width: 1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Column(
-                      children: [
-                        const Icon(Icons.trending_up, color: AppColors.primary, size: 20),
-                        const SizedBox(height: 6),
-                        Text('${imc.toStringAsFixed(1)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                        Text('IMC', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.colors.textMuted)),
-                      ],
-                    ),
-                  ),
+                child: OmniStatCard(
+                  icon: Icons.trending_up,
+                  value: imc.toStringAsFixed(1),
+                  label: 'IMC',
                 ),
               ),
             ],
           ),
           const SizedBox(height: 20),
-          Text('Informações do Aluno', style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
+          OmniSectionHeader(title: 'Informações do Aluno'),
           const SizedBox(height: 12),
           _buildQuestionRow('Objetivo', _mapGoalTypeToPt(_student!.goalType)),
           const SizedBox(height: 8),
@@ -394,46 +322,17 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
           ),
           const SizedBox(height: 12),
 
-          // Estado de carregamento
           if (_sheetsLoading)
-            const Center(
-              child: Padding(
-                padding: EdgeInsets.all(32),
-                child: CircularProgressIndicator(color: AppColors.primary),
-              ),
-            )
-          // Estado de erro
+            const OmniLoader()
           else if (_sheetsError != null)
-            Center(
-              child: Column(
-                children: [
-                  const Icon(Icons.error_outline, color: AppColors.accentError, size: 40),
-                  const SizedBox(height: 8),
-                  Text(_sheetsError!,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.textMuted)),
-                  const SizedBox(height: 12),
-                  TextButton.icon(
-                    onPressed: _loadStudentSheets,
-                    icon: const Icon(Icons.refresh, size: 16),
-                    label: const Text('Tentar novamente'),
-                  ),
-                ],
-              ),
+            OmniErrorState(
+              message: _sheetsError!,
+              onRetry: _loadStudentSheets,
             )
-          // Estado vazio
           else if (_studentSheets.isEmpty)
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Column(
-                  children: [
-                    Icon(Icons.fitness_center_outlined, color: context.colors.textMuted, size: 40),
-                    const SizedBox(height: 8),
-                    Text('Nenhuma ficha atribuída',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.textMuted)),
-                  ],
-                ),
-              ),
+            const OmniEmptyState(
+              icon: Icons.fitness_center_outlined,
+              title: 'Nenhuma ficha atribuída',
             )
           // Lista de fichas reais da API
           else
@@ -586,39 +485,21 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
 
   Widget _buildNutritionTab() {
     if (_nutritionLoading) {
-      return const Center(
-        child: CircularProgressIndicator(color: AppColors.primary),
-      );
+      return const OmniLoader();
     }
 
     if (_nutritionError != null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, color: AppColors.accentError, size: 40),
-            const SizedBox(height: 8),
-            Text(
-              _nutritionError!,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.textMuted),
-            ),
-            const SizedBox(height: 12),
-            TextButton.icon(
-              onPressed: _loadStudentNutrition,
-              icon: const Icon(Icons.refresh, size: 16),
-              label: const Text('Tentar novamente'),
-            ),
-          ],
-        ),
+      return OmniErrorState(
+        message: _nutritionError!,
+        onRetry: _loadStudentNutrition,
       );
     }
 
     if (_studentDiets.isEmpty) {
-      return Center(
-        child: Text(
-          'Nenhum plano nutricional cadastrado para este aluno.',
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.textMuted),
-        ),
+      return const OmniEmptyState(
+        icon: Icons.restaurant_outlined,
+        title: 'Nenhum plano nutricional',
+        subtitle: 'Nenhum plano nutricional cadastrado para este aluno.',
       );
     }
 

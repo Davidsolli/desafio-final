@@ -8,6 +8,7 @@ import '../../routes/app_routes.dart';
 import '../../services/api_client.dart';
 import '../../services/home_service.dart';
 import '../../providers/home_provider.dart';
+import '../../shared/widgets/index.dart';
 
 // HomeScreen creates and injects HomeProvider locally so main.dart stays
 // untouched. The provider is scoped to this route and disposed with it.
@@ -41,9 +42,7 @@ class _HomeBody extends StatelessWidget {
         if (provider.isLoading) {
           return Scaffold(
             backgroundColor: context.colors.background,
-            body: Center(
-              child: CircularProgressIndicator(color: AppColors.primary),
-            ),
+            body: const OmniLoader(),
           );
         }
 
@@ -51,32 +50,10 @@ class _HomeBody extends StatelessWidget {
         if (provider.error != null) {
           return Scaffold(
             backgroundColor: context.colors.background,
-            body: Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.wifi_off_outlined,
-                        color: context.colors.textMuted, size: 48),
-                    const SizedBox(height: 16),
-                    Text(
-                      provider.error!,
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodyMedium
-                          ?.copyWith(color: context.colors.textSecondary),
-                    ),
-                    const SizedBox(height: 24),
-                    ElevatedButton.icon(
-                      onPressed: provider.fetchHomeData,
-                      icon: const Icon(Icons.refresh, size: 18),
-                      label: const Text('Tentar novamente'),
-                    ),
-                  ],
-                ),
-              ),
+            body: OmniErrorState(
+              message: provider.error!,
+              icon: Icons.wifi_off_outlined,
+              onRetry: provider.fetchHomeData,
             ),
           );
         }
@@ -192,66 +169,34 @@ class _HomeBody extends StatelessWidget {
 
   Widget _buildStatsRow(BuildContext context, HomeData data) {
     final user = data.user;
-
     final imcValue = user.imc?.toStringAsFixed(1) ?? '—';
-    final imcLabelText =
-        user.imc != null ? 'IMC — ${user.imcLabel}' : 'IMC';
+    final imcLabel = user.imc != null ? 'IMC — ${user.imcLabel}' : 'IMC';
     final tmbValue = user.tmb?.toString() ?? '—';
 
-    final stats = [
-      {
-        'icon': Icons.trending_up,
-        'value': imcValue,
-        'label': imcLabelText,
-        'delay': 0,
-      },
-      {
-        'icon': Icons.local_fire_department,
-        'value': tmbValue,
-        'label': 'kcal/dia',
-        'delay': 100,
-      },
-    ];
-
     return Row(
-      children: stats.map((s) {
-        return Expanded(
+      children: [
+        Expanded(
           child: FadeInUp(
-            delay: Duration(milliseconds: s['delay'] as int),
-            child: Container(
-              padding:
-                  const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-              decoration: BoxDecoration(
-                color: context.colors.surface,
-                border: Border.all(color: context.colors.border, width: 1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                children: [
-                  Icon(s['icon'] as IconData,
-                      color: AppColors.primary, size: 18),
-                  const SizedBox(height: 6),
-                  Text(
-                    '${s['value']}',
-                    style: Theme.of(context)
-                        .textTheme
-                        .displayMedium
-                        ?.copyWith(fontSize: 20),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '${s['label']}',
-                    style: Theme.of(context).textTheme.bodySmall,
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
+            delay: Duration.zero,
+            child: OmniStatCard(
+              icon: Icons.trending_up,
+              value: imcValue,
+              label: imcLabel,
             ),
           ),
-        );
-      }).toList(),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: FadeInUp(
+            delay: const Duration(milliseconds: 100),
+            child: OmniStatCard(
+              icon: Icons.local_fire_department,
+              value: tmbValue,
+              label: 'kcal/dia',
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -404,20 +349,7 @@ class _HomeBody extends StatelessWidget {
   }
 
   Widget _buildChip(BuildContext context, String text) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: context.colors.surfaceLight,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        text,
-        style: Theme.of(context)
-            .textTheme
-            .bodySmall
-            ?.copyWith(color: context.colors.textMuted, fontSize: 11),
-      ),
-    );
+    return OmniInfoChip(label: text);
   }
 
   // ---------------------------------------------------------------------------
@@ -429,50 +361,22 @@ class _HomeBody extends StatelessWidget {
 
     return Column(
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.adjust, color: AppColors.primary, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  'Metas',
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodyLarge
-                      ?.copyWith(fontWeight: FontWeight.w600),
-                ),
-              ],
+        OmniSectionHeader(
+          title: 'Metas',
+          action: GestureDetector(
+            onTap: () => context.go(AppRoutes.goals),
+            child: Text(
+              'Ver todas',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: AppColors.primary, fontWeight: FontWeight.w600),
             ),
-            GestureDetector(
-              onTap: () => context.go(AppRoutes.goals),
-              child: Text(
-                'Ver todas',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.primary, fontWeight: FontWeight.w600),
-              ),
-            ),
-          ],
+          ),
         ),
         const SizedBox(height: 12),
         if (activeGoals.isEmpty)
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: context.colors.surface,
-              border: Border.all(color: context.colors.border, width: 1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Center(
-              child: Text(
-                'Nenhuma meta ativa',
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(color: context.colors.textMuted),
-              ),
-            ),
+          OmniEmptyState(
+            icon: Icons.adjust,
+            title: 'Nenhuma meta ativa',
           )
         else
           ...activeGoals.map(
@@ -515,16 +419,7 @@ class _HomeBody extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 8),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: goal.progress,
-                        minHeight: 8,
-                        backgroundColor: context.colors.surfaceLight,
-                        valueColor: const AlwaysStoppedAnimation(
-                            AppColors.primary),
-                      ),
-                    ),
+                    OmniProgressBar(value: goal.progress),
                   ],
                 ),
               ),

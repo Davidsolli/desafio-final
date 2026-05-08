@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/theme_colors.dart';
 import '../../providers/admin_provider.dart';
+import '../../shared/widgets/index.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({Key? key}) : super(key: key);
@@ -46,22 +47,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             final inactiveCount = provider.trainers.where((t) => !t.isActive).length;
 
             if (provider.isLoading) {
-              return const Center(child: CircularProgressIndicator());
+              return const Center(child: OmniLoader());
             }
 
             if (provider.error != null) {
-              return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text('Erro: ${provider.error}'),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: () => provider.loadTrainers(),
-                      child: const Text('Tentar novamente'),
-                    ),
-                  ],
-                ),
+              return OmniErrorState(
+                message: 'Erro: ${provider.error}',
+                onRetry: provider.loadTrainers,
               );
             }
 
@@ -89,41 +81,28 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   child: Row(
                     children: [
                       Expanded(
-                        child: TextField(
+                        child: OmniTextField(
                           controller: _searchController,
-                          decoration: InputDecoration(
-                            hintText: 'Buscar trainer...',
-                            hintStyle: TextStyle(color: context.colors.textMuted),
-                            prefixIcon: Icon(Icons.search, color: context.colors.textMuted),
-                            filled: true,
-                            fillColor: context.colors.surface,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide(color: context.colors.border),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                          ),
+                          labelText: 'Buscar trainer...',
+                          hintText: 'Digite nome ou email',
+                          prefixIcon: Icons.search,
                         ),
                       ),
                       const SizedBox(width: 8),
-                      ElevatedButton(
+                      OmniButton(
+                        text: '➕',
                         onPressed: () => context.push('/admin/add-trainer'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                        ),
-                        child: const Icon(Icons.add, color: Colors.white),
+                        width: 48,
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 12),
                 const SizedBox(height: 16),
                 Expanded(
                   child: filteredTrainers.isEmpty
-                      ? Center(
-                          child: Text('Nenhum trainer encontrado',
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.textMuted)),
+                      ? const OmniEmptyState(
+                          icon: Icons.person_search,
+                          title: 'Nenhum trainer encontrado',
                         )
                       : ListView.builder(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -178,83 +157,31 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     return Row(
       children: [
         Expanded(
-          child: GestureDetector(
+          child: OmniStatCard(
+            value: '$total',
+            label: 'Total',
             onTap: () => setState(() => _filterStatus = 'all'),
-            child: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: _filterStatus == 'all' ? AppColors.primary.withAlpha(20) : context.colors.surface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: _filterStatus == 'all' ? AppColors.primary : context.colors.border,
-                  width: _filterStatus == 'all' ? 2 : 1,
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Total',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.textSecondary)),
-                  const SizedBox(height: 4),
-                  Text('$total',
-                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
-                ],
-              ),
-            ),
+            isSelected: _filterStatus == 'all',
           ),
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: GestureDetector(
+          child: OmniStatCard(
+            value: '$active',
+            label: 'Ativos',
+            valueColor: Colors.green,
             onTap: () => setState(() => _filterStatus = 'active'),
-            child: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: _filterStatus == 'active' ? Colors.green.withAlpha(20) : context.colors.surface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: _filterStatus == 'active' ? Colors.green : context.colors.border,
-                  width: _filterStatus == 'active' ? 2 : 1,
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Ativos',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.green)),
-                  const SizedBox(height: 4),
-                  Text('$active',
-                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold, color: Colors.green)),
-                ],
-              ),
-            ),
+            isSelected: _filterStatus == 'active',
           ),
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: GestureDetector(
+          child: OmniStatCard(
+            value: '$inactive',
+            label: 'Inativos',
+            valueColor: Colors.red,
             onTap: () => setState(() => _filterStatus = 'inactive'),
-            child: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: _filterStatus == 'inactive' ? Colors.red.withAlpha(20) : context.colors.surface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: _filterStatus == 'inactive' ? Colors.red : context.colors.border,
-                  width: _filterStatus == 'inactive' ? 2 : 1,
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Inativos',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.red)),
-                  const SizedBox(height: 4),
-                  Text('$inactive',
-                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold, color: Colors.red)),
-                ],
-              ),
-            ),
+            isSelected: _filterStatus == 'inactive',
           ),
         ),
       ],
@@ -293,13 +220,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                CircleAvatar(
-                  backgroundColor: AppColors.primary.withAlpha(30),
-                  child: Text(
-                    name[0],
-                    style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
-                  ),
-                ),
+                OmniAvatar(name: name),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -313,20 +234,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                               style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
                             ),
                           ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: isActive ? Colors.green.withAlpha(20) : Colors.red.withAlpha(20),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              isActive ? 'Ativo' : 'Inativo',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: isActive ? Colors.green : Colors.red,
-                              ),
-                            ),
+                          OmniStatusBadge(
+                            label: isActive ? 'Ativo' : 'Inativo',
+                            color: isActive ? Colors.green : Colors.red,
                           ),
                         ],
                       ),

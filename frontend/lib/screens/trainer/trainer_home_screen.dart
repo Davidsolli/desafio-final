@@ -8,6 +8,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/dashboard_provider.dart';
 import '../../services/dashboard_service.dart';
 import '../../services/api_client.dart';
+import '../../shared/widgets/index.dart';
 
 class TrainerHomeScreen extends StatefulWidget {
   const TrainerHomeScreen({super.key});
@@ -46,27 +47,13 @@ class _TrainerHomeScreenState extends State<TrainerHomeScreen> {
           child: Consumer<DashboardProvider>(
             builder: (context, provider, _) {
               if (provider.isLoading) {
-                return const Center(
-                  child: CircularProgressIndicator(color: AppColors.primary),
-                );
+                return const OmniLoader();
               }
 
               if (provider.error != null) {
-                return Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.error_outline, size: 48, color: context.colors.textSecondary),
-                      const SizedBox(height: 16),
-                      Text(provider.error ?? 'Erro ao carregar',
-                          style: Theme.of(context).textTheme.bodyLarge),
-                      const SizedBox(height: 24),
-                      ElevatedButton(
-                        onPressed: () => _initDashboard(),
-                        child: const Text('Tentar Novamente'),
-                      ),
-                    ],
-                  ),
+                return OmniErrorState(
+                  message: provider.error ?? 'Erro ao carregar',
+                  onRetry: _initDashboard,
                 );
               }
 
@@ -135,22 +122,11 @@ class _TrainerHomeScreenState extends State<TrainerHomeScreen> {
                   ),
                   // Lista de Alunos
                   if (provider.students.isEmpty)
-                    SliverFillRemaining(
-                      child: Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.people_outline,
-                                size: 48, color: context.colors.textMuted),
-                            const SizedBox(height: 16),
-                            Text('Nenhum aluno vinculado ainda',
-                                style: Theme.of(context).textTheme.bodyLarge),
-                            const SizedBox(height: 8),
-                            Text('Crie uma ficha de treino para começar',
-                                style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(color: context.colors.textSecondary)),
-                          ],
-                        ),
+                    const SliverFillRemaining(
+                      child: OmniEmptyState(
+                        icon: Icons.people_outline,
+                        title: 'Nenhum aluno vinculado ainda',
+                        subtitle: 'Crie uma ficha de treino para começar',
                       ),
                     )
                   else
@@ -176,7 +152,7 @@ class _TrainerHomeScreenState extends State<TrainerHomeScreen> {
   }
 }
 
-/// Card com estatísticas
+/// Alias local para manter compatibilidade com o código de chamada
 class _StatsCard extends StatelessWidget {
   final IconData icon;
   final String title;
@@ -190,31 +166,10 @@ class _StatsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: context.colors.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: context.colors.border, width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: AppColors.primary, size: 24),
-          const SizedBox(height: 8),
-          Text(title,
-              style: Theme.of(context)
-                  .textTheme
-                  .headlineSmall
-                  ?.copyWith(fontWeight: FontWeight.bold, color: AppColors.primary)),
-          const SizedBox(height: 4),
-          Text(subtitle,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: context.colors.textSecondary)),
-        ],
-      ),
+    return OmniStatCard(
+      icon: icon,
+      value: title,
+      label: subtitle,
     );
   }
 }
@@ -241,15 +196,7 @@ class _StudentCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             // Avatar
-            CircleAvatar(
-              radius: 24,
-              backgroundColor: AppColors.primary,
-              child: Text(
-                student.name.isNotEmpty ? student.name[0].toUpperCase() : 'S',
-                style: const TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-            ),
+            OmniAvatar(name: student.name.isNotEmpty ? student.name : 'S', size: 48),
             const SizedBox(width: 12),
             // Info
             Expanded(
@@ -287,27 +234,12 @@ class _StudentCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis),
                 const SizedBox(height: 8),
-                // Barra de progresso + %
-                Row(
-                  children: [
-                    SizedBox(
-                      width: 60,
-                      height: 6,
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(3),
-                        child: LinearProgressIndicator(
-                          value: student.adherencePercent / 100,
-                          backgroundColor: context.colors.textMuted.withOpacity(0.2),
-                          valueColor:
-                              const AlwaysStoppedAnimation<Color>(AppColors.primary),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text('${student.adherencePercent.toStringAsFixed(0)}%',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: AppColors.primary, fontWeight: FontWeight.bold)),
-                  ],
+                SizedBox(
+                  width: 100,
+                  child: OmniProgressBar(
+                    value: student.adherencePercent / 100,
+                    trailingLabel: '${student.adherencePercent.toStringAsFixed(0)}%',
+                  ),
                 ),
               ],
             ),

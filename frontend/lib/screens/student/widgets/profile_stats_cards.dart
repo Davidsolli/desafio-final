@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:animate_do/animate_do.dart';
-import '../../../../theme/app_colors.dart';
-import '../../../theme/theme_colors.dart';
 import '../../../../services/user_service.dart';
+import '../../../../shared/widgets/index.dart';
 
 class ProfileStatsCards extends StatelessWidget {
   final UserResponse user;
@@ -30,73 +29,19 @@ class ProfileStatsCards extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: context.colors.surface,
-                border: Border.all(
-                  color: context.colors.border,
-                  width: 1,
-                ),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                children: [
-                  const Icon(Icons.scale, color: AppColors.primary, size: 20),
-                  const SizedBox(height: 8),
-                  Text(
-                    imc.toStringAsFixed(1),
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: imcColor,
-                        ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'IMC — $imcLabel',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: context.colors.textMuted,
-                        ),
-                  ),
-                ],
-              ),
+            child: OmniStatCard(
+              icon: Icons.scale,
+              value: imc.toStringAsFixed(1),
+              label: 'IMC — $imcLabel',
+              valueColor: imcColor,
             ),
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: context.colors.surface,
-                border: Border.all(
-                  color: context.colors.border,
-                  width: 1,
-                ),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                children: [
-                  const Icon(Icons.local_fire_department,
-                      color: AppColors.primary, size: 20),
-                  const SizedBox(height: 8),
-                  Text(
-                    tmb.toString(),
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: context.colors.textPrimary,
-                        ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'TMB (kcal/dia)',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: context.colors.textMuted,
-                        ),
-                  ),
-                ],
-              ),
+            child: OmniStatCard(
+              icon: Icons.local_fire_department,
+              value: tmb.toString(),
+              label: 'TMB (kcal/dia)',
             ),
           ),
         ],

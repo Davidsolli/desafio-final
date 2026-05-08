@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/theme_colors.dart';
 import '../../providers/user_provider.dart';
+import '../../shared/widgets/index.dart';
 
 import 'widgets/profile_header.dart';
 import 'widgets/profile_stats_cards.dart';
@@ -42,7 +43,7 @@ class _ProfileScreenV2State extends State<ProfileScreenV2> {
       body: Consumer<UserProvider>(
         builder: (context, userProvider, _) {
           if (userProvider.isLoading) {
-            return const Center(child: CircularProgressIndicator());
+            return const OmniLoader();
           }
 
           if (userProvider.error != null) {
@@ -54,9 +55,9 @@ class _ProfileScreenV2State extends State<ProfileScreenV2> {
                   const SizedBox(height: 16),
                   Text(userProvider.error ?? 'Erro ao carregar'),
                   const SizedBox(height: 16),
-                  ElevatedButton(
+                  OmniButton(
+                    text: 'Tentar novamente',
                     onPressed: () => userProvider.loadUser(),
-                    child: const Text('Tentar novamente'),
                   ),
                 ],
               ),

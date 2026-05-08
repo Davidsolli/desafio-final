@@ -5,6 +5,7 @@ import '../../theme/app_colors.dart';
 import '../../theme/theme_colors.dart';
 import '../../routes/app_routes.dart';
 import '../../providers/auth_provider.dart';
+import '../../shared/widgets/index.dart';
 
 class RegisterScreen extends StatefulWidget {
   final String? invitationCode;
@@ -27,7 +28,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  bool _obscurePassword = true;
 
   @override
   void initState() {
@@ -205,16 +205,30 @@ class _RegisterScreenState extends State<RegisterScreen> {
         const SizedBox(height: 2),
         const Text('Vamos começar com o básico',
             style: TextStyle(color: AppColors.primary, fontSize: 14)),
+        const SizedBox(height: 16),
+        OmniTextField(
+          controller: _nameController,
+          labelText: 'Nome completo',
+          hintText: 'Seu nome',
+          prefixIcon: Icons.person_outline,
+        ),
+        const SizedBox(height: 12),
+        OmniTextField(
+          controller: _emailController,
+          labelText: 'Email',
+          hintText: 'seu@email.com',
+          keyboardType: TextInputType.emailAddress,
+          prefixIcon: Icons.email_outlined,
+        ),
+        const SizedBox(height: 12),
+        OmniTextField(
+          controller: _passwordController,
+          labelText: 'Senha',
+          hintText: '••••••••',
+          obscureText: true,
+          prefixIcon: Icons.lock_outlined,
+        ),
         const SizedBox(height: 8),
-        _label('Nome completo'),
-        _input(_nameController, 'Seu nome'),
-        const SizedBox(height: 8),
-        _label('Email'),
-        _input(_emailController, 'seu@email.com', keyboardType: TextInputType.emailAddress),
-        const SizedBox(height: 8),
-        _label('Senha'),
-        _inputPassword(),
-        const SizedBox(height: 4),
         Text(
           'Mín. 8 caracteres: maiúscula, minúscula, número e caractere especial',
           style: TextStyle(color: context.colors.textSecondary, fontSize: 11),
@@ -234,15 +248,30 @@ class _RegisterScreenState extends State<RegisterScreen> {
         const SizedBox(height: 2),
         const Text('Para cálculos personalizados',
             style: TextStyle(color: AppColors.primary, fontSize: 14)),
-        const SizedBox(height: 8),
-        _label('Peso (kg)'),
-        _input(_weightController, '78', keyboardType: TextInputType.number),
-        const SizedBox(height: 8),
-        _label('Altura (cm)'),
-        _input(_heightController, '175', keyboardType: TextInputType.number),
-        const SizedBox(height: 8),
-        _label('Idade'),
-        _input(_ageController, '27', keyboardType: TextInputType.number),
+        const SizedBox(height: 16),
+        OmniTextField(
+          controller: _weightController,
+          labelText: 'Peso (kg)',
+          hintText: '78',
+          keyboardType: TextInputType.number,
+          prefixIcon: Icons.fitness_center_outlined,
+        ),
+        const SizedBox(height: 12),
+        OmniTextField(
+          controller: _heightController,
+          labelText: 'Altura (cm)',
+          hintText: '175',
+          keyboardType: TextInputType.number,
+          prefixIcon: Icons.straighten_outlined,
+        ),
+        const SizedBox(height: 12),
+        OmniTextField(
+          controller: _ageController,
+          labelText: 'Idade',
+          hintText: '27',
+          keyboardType: TextInputType.number,
+          prefixIcon: Icons.cake_outlined,
+        ),
         const SizedBox(height: 8),
       ],
     );
@@ -307,88 +336,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-      child: SizedBox(
+      child: OmniButton(
+        text: isLast ? 'Criar Conta' : 'Próximo',
+        onPressed: (canProceed && !_isLoading) ? _next : null,
+        isLoading: _isLoading,
         width: double.infinity,
         height: 52,
-        child: ElevatedButton(
-          onPressed: (canProceed && !_isLoading) ? _next : null,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.primary,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          ),
-          child: _isLoading
-              ? const SizedBox(
-                  height: 20,
-                  width: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                )
-              : Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(isLast ? 'Criar Conta' : 'Próximo',
-                        style: const TextStyle(
-                            color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
-                    if (!isLast) ...[
-                      const SizedBox(width: 6),
-                      const Icon(Icons.chevron_right, color: Colors.white, size: 20),
-                    ],
-                  ],
-                ),
-        ),
       ),
     );
   }
 
-  Widget _label(String text) => Padding(
-        padding: const EdgeInsets.only(bottom: 6),
-        child: Text(text,
-            style: TextStyle(
-                color: context.colors.textPrimary, fontSize: 13, fontWeight: FontWeight.w500)),
-      );
-
-  Widget _input(
-    TextEditingController controller,
-    String hint, {
-    TextInputType? keyboardType,
-  }) =>
-      TextField(
-        controller: controller,
-        keyboardType: keyboardType,
-        style: TextStyle(color: context.colors.textPrimary),
-        decoration: InputDecoration(
-          hintText: hint,
-          hintStyle: TextStyle(color: context.colors.textMuted),
-          filled: true,
-          fillColor: context.colors.surfaceLight,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
-          ),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        ),
-      );
-
-  Widget _inputPassword() => TextField(
-        controller: _passwordController,
-        obscureText: _obscurePassword,
-        style: TextStyle(color: context.colors.textPrimary),
-        decoration: InputDecoration(
-          hintText: '••••••••',
-          hintStyle: TextStyle(color: context.colors.textMuted),
-          filled: true,
-          fillColor: context.colors.surfaceLight,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
-          ),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          suffixIcon: IconButton(
-            icon: Icon(
-              _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-              color: context.colors.textMuted,
-            ),
-            onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-          ),
-        ),
-      );
 }

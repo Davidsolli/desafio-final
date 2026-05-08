@@ -4,6 +4,7 @@ import '../../theme/app_colors.dart';
 import '../../theme/theme_colors.dart';
 import '../../services/goal_service.dart';
 import '../../utils/goal_utils.dart';
+import '../../shared/widgets/index.dart';
 
 class GoalDetailScreen extends StatefulWidget {
   final String goalId;
@@ -71,20 +72,9 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
       ),
       // Mostra conteúdo imediatamente com initialGoal; LinearProgressIndicator indica carregamento em background
       body: _error != null && _detail == null
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.error_outline, size: 48, color: AppColors.accentError),
-                  const SizedBox(height: 16),
-                  Text(_error!),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: _loadDetail,
-                    child: const Text('Tentar novamente'),
-                  ),
-                ],
-              ),
+          ? OmniErrorState(
+              message: _error!,
+              onRetry: _loadDetail,
             )
           : Stack(
               children: [
@@ -198,16 +188,10 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
             ],
           ),
           const SizedBox(height: 8),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: LinearProgressIndicator(
-              value: (goal.progressPercentage / 100).clamp(0.0, 1.0),
-              minHeight: 10,
-              backgroundColor: context.colors.surfaceLight,
-              valueColor: AlwaysStoppedAnimation(
-                goal.isCompleted ? Colors.green : AppColors.primary,
-              ),
-            ),
+          OmniProgressBar(
+            value: (goal.progressPercentage / 100).clamp(0.0, 1.0),
+            height: 10,
+            progressColor: goal.isCompleted ? Colors.green : null,
           ),
           const SizedBox(height: 8),
           Row(
@@ -379,39 +363,15 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
   }
 
   Widget _buildStatusBadge(BuildContext context, String status) {
-    final color = GoalUtils.getStatusColor(status);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
-      child: Text(
-        GoalUtils.getStatusLabel(status),
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: color,
-              fontWeight: FontWeight.w700,
-            ),
-      ),
+    return OmniStatusBadge(
+      label: GoalUtils.getStatusLabel(status),
+      color: GoalUtils.getStatusColor(status),
+      isPill: true,
     );
   }
 
   Widget _buildCategoryChip(BuildContext context, String category) {
-    final label = GoalUtils.getCategoryLabel(category);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: context.colors.surfaceLight,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        label,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: context.colors.textSecondary,
-            ),
-      ),
-    );
+    return OmniInfoChip(label: GoalUtils.getCategoryLabel(category));
   }
 
   String _formatDate(DateTime date) {

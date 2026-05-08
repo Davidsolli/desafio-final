@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:animate_do/animate_do.dart';
 import 'package:provider/provider.dart';
-import '../../theme/app_colors.dart';
 import '../../theme/theme_colors.dart';
 import '../../services/user_service.dart';
+import '../../shared/widgets/index.dart';
 
 class TrainerStudentsScreen extends StatefulWidget {
   const TrainerStudentsScreen({super.key});
@@ -92,51 +92,26 @@ class _TrainerStudentsScreenState extends State<TrainerStudentsScreen> {
             const SizedBox(height: 16),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: TextField(
+              child: OmniTextField(
                 controller: _searchController,
-                decoration: InputDecoration(
-                  hintText: 'Buscar aluno...',
-                  hintStyle: TextStyle(color: context.colors.textMuted),
-                  prefixIcon: Icon(Icons.search, color: context.colors.textMuted),
-                  filled: true,
-                  fillColor: context.colors.surface,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: context.colors.border),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                ),
-                style: TextStyle(color: context.colors.textPrimary),
+                labelText: 'Buscar aluno...',
+                hintText: 'Digite o nome do aluno',
+                prefixIcon: Icons.search,
               ),
             ),
             const SizedBox(height: 16),
             Expanded(
               child: _isLoading
-                  ? const Center(
-                      child: CircularProgressIndicator(color: AppColors.primary),
-                    )
+                  ? const OmniLoader()
                   : _error != null
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Icon(Icons.error_outline, color: AppColors.accentError, size: 40),
-                              const SizedBox(height: 12),
-                              Text(_error!,
-                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.textMuted)),
-                              const SizedBox(height: 16),
-                              TextButton.icon(
-                                onPressed: _loadStudents,
-                                icon: const Icon(Icons.refresh, size: 16),
-                                label: const Text('Tentar novamente'),
-                              ),
-                            ],
-                          ),
+                      ? OmniErrorState(
+                          message: _error!,
+                          onRetry: _loadStudents,
                         )
                       : _filteredStudents.isEmpty
-                          ? Center(
-                              child: Text('Nenhum aluno encontrado',
-                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.textMuted)),
+                          ? const OmniEmptyState(
+                              icon: Icons.person_search,
+                              title: 'Nenhum aluno encontrado',
                             )
                           : ListView.builder(
                               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -157,23 +132,7 @@ class _TrainerStudentsScreenState extends State<TrainerStudentsScreen> {
                                       ),
                                       child: Row(
                                         children: [
-                                          Container(
-                                            width: 44,
-                                            height: 44,
-                                            decoration: BoxDecoration(
-                                              gradient: LinearGradient(
-                                                colors: [AppColors.primary, AppColors.primaryLight],
-                                                begin: Alignment.topLeft,
-                                                end: Alignment.bottomRight,
-                                              ),
-                                              borderRadius: BorderRadius.circular(10),
-                                            ),
-                                            child: Center(
-                                              child: Text(student.name[0],
-                                                  style: const TextStyle(
-                                                      color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
-                                            ),
-                                          ),
+                                          OmniAvatar(name: student.name, useGradient: true),
                                           const SizedBox(width: 12),
                                           Expanded(
                                             child: Column(
@@ -206,48 +165,18 @@ class _TrainerStudentsScreenState extends State<TrainerStudentsScreen> {
     return Row(
       children: [
         Expanded(
-          child: FadeInLeft(
-            delay: const Duration(milliseconds: 0),
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: context.colors.surface,
-                border: Border.all(color: context.colors.border, width: 1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                children: [
-                  const Icon(Icons.people, color: AppColors.primary, size: 20),
-                  const SizedBox(height: 6),
-                  Text('${_allStudents.length}', style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
-                  Text('Alunos Ativos',
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.colors.textMuted), textAlign: TextAlign.center),
-                ],
-              ),
-            ),
+          child: OmniStatCard(
+            icon: Icons.people,
+            value: '${_allStudents.length}',
+            label: 'Alunos Ativos',
           ),
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: FadeInRight(
-            delay: const Duration(milliseconds: 100),
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: context.colors.surface,
-                border: Border.all(color: context.colors.border, width: 1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                children: [
-                  const Icon(Icons.calendar_today, color: AppColors.accentInfo, size: 20),
-                  const SizedBox(height: 6),
-                  Text('${_allStudents.length}x', style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
-                  Text('Acompanhando',
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.colors.textMuted), textAlign: TextAlign.center),
-                ],
-              ),
-            ),
+          child: OmniStatCard(
+            icon: Icons.calendar_today,
+            value: '${_allStudents.length}x',
+            label: 'Acompanhando',
           ),
         ),
       ],
