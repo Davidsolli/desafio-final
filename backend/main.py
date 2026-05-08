@@ -11,6 +11,8 @@ from app.routes.diet import custom_food_router, diet_router
 from app.routes.diet_logbook import router as diet_logbook_router
 from app.routes.notification import router as notification_router
 
+from app.tasks.notification_scheduler import NotificationScheduler
+
 # Rota básica de Health Check
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -20,8 +22,15 @@ async def lifespan(app: FastAPI):
     """
     # Startup
     await init_db()
+    
+    # Iniciar Cronjob de Notificações
+    NotificationScheduler.start()
+    
     yield
-    # Shutdown (aqui iria lógica de cleanup se necessário)
+    
+    # Shutdown
+    NotificationScheduler.stop()
+
 
 
 # Inicialização da aplicação

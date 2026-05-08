@@ -13,6 +13,7 @@ import '../screens/student/goals_screen.dart';
 import '../screens/student/chat_screen.dart';
 import '../screens/student/profile_screen_new.dart';
 import '../screens/notifications_screen.dart';
+import '../screens/notifications_settings_screen.dart';
 import '../screens/trainer/trainer_shell.dart';
 import '../screens/trainer/trainer_home_screen.dart';
 import '../screens/trainer/trainer_students_screen.dart';
@@ -63,6 +64,7 @@ class AppRoutes {
 
   // Shared
   static const String notifications = '/notifications';
+  static const String notificationsSettings = '/notifications-settings';
 
   static final GoRouter router = GoRouter(
     initialLocation: splash,
@@ -131,6 +133,10 @@ class AppRoutes {
       GoRoute(
         path: notifications,
         builder: (context, state) => const NotificationsScreen(),
+      ),
+      GoRoute(
+        path: notificationsSettings,
+        builder: (context, state) => const NotificationsSettingsScreen(),
       ),
       ShellRoute(
         builder: (context, state, child) => TrainerShell(child: child),

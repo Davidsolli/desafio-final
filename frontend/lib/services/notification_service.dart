@@ -69,4 +69,27 @@ class NotificationService {
       platformDetails,
     );
   }
+
+  Future<Map<String, dynamic>> getPreferences() async {
+    try {
+      final response = await apiClient.get('/api/v1/notifications/preferences');
+      return response.data;
+    } catch (e) {
+      print('Erro ao carregar preferências: $e');
+      return {};
+    }
+  }
+
+  Future<bool> updatePreferences(Map<String, dynamic> data) async {
+    try {
+      await apiClient.put(
+        '/api/v1/notifications/preferences',
+        body: data,
+      );
+      return true;
+    } catch (e) {
+      print('Erro ao atualizar preferências: $e');
+      return false;
+    }
+  }
 }

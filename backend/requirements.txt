@@ -35,3 +35,5 @@ sentence-transformers>=2.7.0
 
 # ── Integrações ──────────────────────────────────────────────────────────────
 firebase-admin>=6.5.0
+apscheduler>=3.10.4
+
