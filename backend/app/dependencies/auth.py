@@ -87,6 +87,12 @@ async def get_current_user_ws(
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return None
 
+    # Validar token_version para detectar mudanças de senha
+    token_version = payload.get("token_version", 0)
+    if token_version != user.token_version:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return None
+
     return user
 
 
@@ -110,4 +116,12 @@ async def get_user_from_token(token: str, session: AsyncSession) -> User | None:
 
     repo = UserRepository(session)
     user = await repo.get_by_id(user_id)
+    if user is None:
+        return None
+
+    # Validar token_version para detectar mudanças de senha
+    token_version = payload.get("token_version", 0)
+    if token_version != user.token_version:
+        return None
+
     return user

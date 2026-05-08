@@ -39,45 +39,27 @@ class PasswordController:
         Returns:
             PasswordResponseDTO com mensagem genérica
         """
-        # Chamar service (não lança exceções)
-        await self.password_service.forgot_password(dto.email)
+        # Chamar service (gera token e salva no banco UMA VEZ)
+        result = await self.password_service.forgot_password(dto.email)
 
-        # Tentar enviar email (melhor esforço, não falha se Resend indisponível)
-        try:
-            user = await self.user_repo.get_by_email(dto.email)
-            if user:
-                # Gerar novo token apenas para envio
-                token_raw, token_hash = PasswordService.generate_token()
-                # Salvar no banco
-                from app.models.password_reset_token import PasswordResetToken
-                from datetime import datetime, timedelta
-                from app.config.settings import settings
-
-                expires_at = datetime.utcnow() + timedelta(
-                    minutes=settings.PASSWORD_RESET_TOKEN_EXPIRE_MINUTES
-                )
-                reset_token = PasswordResetToken(
-                    user_id=user.id,
-                    token_hash=token_hash,
-                    expires_at=expires_at,
-                )
-                from app.repositories.password_reset_repository import (
-                    PasswordResetRepository,
-                )
-
-                token_repo = PasswordResetRepository(self.session)
-                await token_repo.create(reset_token)
-                await token_repo.commit()
-
-                # Enviar email
-                email_service = EmailService()
-                await email_service.send_password_reset_email(
-                    user_name=user.name,
-                    to_email=user.email,
-                    token=token_raw,
-                )
-        except (EmailSendError, Exception):
-            pass
+        # Tentar enviar email (melhor esforço)
+        if result:
+            token_raw, token_hash = result
+            try:
+                user = await self.user_repo.get_by_email(dto.email)
+                if user:
+                    email_service = EmailService()
+                    await email_service.send_password_reset_email(
+                        user_name=user.name,
+                        to_email=user.email,
+                        token=token_raw,
+                    )
+            except EmailSendError as e:
+                import logging
+                logging.error(f"Falha ao enviar email de recuperação: {e}")
+            except Exception as e:
+                import logging
+                logging.error(f"Erro inesperado ao enviar email: {e}")
 
         return PasswordResponseDTO(
             message="Se existir uma conta com este email, enviaremos instruções de recuperação."

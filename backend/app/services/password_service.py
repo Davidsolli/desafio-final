@@ -12,7 +12,7 @@ import secrets
 import hashlib
 import re
 import bcrypt
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
 from uuid import UUID
 
@@ -105,7 +105,7 @@ class PasswordService:
         """
         return not bcrypt.checkpw(new_password.encode(), current_hash.encode())
 
-    async def forgot_password(self, email: str) -> None:
+    async def forgot_password(self, email: str) -> Tuple[str, str] | None:
         """
         Iniciar recuperação de senha por email.
 
@@ -115,17 +115,20 @@ class PasswordService:
         Args:
             email: Email do usuário
 
+        Returns:
+            Tupla (token_raw, token_hash) se email existe, None caso contrário
+
         Raises:
             Nunca lança exceções (proteção contra enumeração)
         """
         try:
             user = await self.user_repo.get_by_email(email)
             if not user:
-                return
+                return None
 
-            # Gerar token
+            # Gerar token UMA VEZ
             token_raw, token_hash = self.generate_token()
-            expires_at = datetime.utcnow() + timedelta(
+            expires_at = datetime.now(timezone.utc) + timedelta(
                 minutes=settings.PASSWORD_RESET_TOKEN_EXPIRE_MINUTES
             )
 
@@ -138,10 +141,10 @@ class PasswordService:
             await self.token_repo.create(reset_token)
             await self.token_repo.commit()
 
-            # Delegar envio de email para EmailService (feito externamente)
-            # Este método apenas cria o token
+            # Retornar token para o controller enviar
+            return token_raw, token_hash
         except Exception:
-            pass
+            return None
 
     async def reset_password(
         self,
@@ -182,7 +185,7 @@ class PasswordService:
             raise InvalidTokenError("Token inválido")
 
         # Validar expiração
-        if reset_token.expires_at <= datetime.utcnow():
+        if reset_token.expires_at <= datetime.now(timezone.utc):
             raise InvalidTokenError("Token expirado")
 
         # Validar uso único

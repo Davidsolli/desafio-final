@@ -90,7 +90,8 @@ async def init_db() -> None:
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS gender VARCHAR(10)",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_whatsapp VARCHAR(20)",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS goal_type VARCHAR(50)",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER DEFAULT 0",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0",
+            "CREATE INDEX IF NOT EXISTS ix_users_token_version ON users(token_version)",
         ]
         for alter in alters:
             try:

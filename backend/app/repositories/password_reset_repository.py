@@ -4,7 +4,7 @@ Repositório para gerenciar tokens de recuperação de senha.
 Camada de acesso a dados para tokens temporários.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
@@ -78,7 +78,7 @@ class PasswordResetRepository:
             Token atualizado
         """
         token.used = True
-        token.used_at = datetime.utcnow()
+        token.used_at = datetime.now(timezone.utc)
         merged = await self.session.merge(token)
         await self.session.flush()
         await self.session.refresh(merged)
@@ -92,7 +92,7 @@ class PasswordResetRepository:
             Número de tokens deletados
         """
         query = delete(PasswordResetToken).where(
-            PasswordResetToken.expires_at <= datetime.utcnow()
+            PasswordResetToken.expires_at <= datetime.now(timezone.utc)
         )
         result = await self.session.execute(query)
         return result.rowcount

@@ -1,7 +1,8 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -37,9 +38,13 @@ app = FastAPI(
 # Configurar Rate Limiting (slowapi)
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, lambda request, exc: {
-    "detail": "Muitas requisições. Tente novamente mais tarde."
-})
+app.add_exception_handler(
+    RateLimitExceeded,
+    lambda request, exc: JSONResponse(
+        status_code=429,
+        content={"detail": "Muitas requisições. Tente novamente mais tarde."}
+    )
+)
 
 # Configurar CORS para permitir requisições do Flutter web (desenvolvimento)
 app.add_middleware(

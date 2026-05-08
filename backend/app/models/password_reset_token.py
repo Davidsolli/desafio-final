@@ -5,7 +5,7 @@ Define a tabela 'password_reset_tokens' com campos: id, user_id, token_hash,
 expires_at, used, used_at, created_at.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import uuid4
 from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Index
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
@@ -52,7 +52,7 @@ class PasswordResetToken(Base):
     )
 
     expires_at = Column(
-        DateTime,
+        DateTime(timezone=True),
         nullable=False,
         index=True,
     )
@@ -65,14 +65,14 @@ class PasswordResetToken(Base):
     )
 
     used_at = Column(
-        DateTime,
+        DateTime(timezone=True),
         nullable=True,
     )
 
     created_at = Column(
-        DateTime,
+        DateTime(timezone=True),
         nullable=False,
-        default=datetime.utcnow,
+        default=lambda: datetime.now(timezone.utc),
     )
 
     __table_args__ = (

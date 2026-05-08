@@ -6,10 +6,10 @@ Endpoints:
 - POST /api/v1/auth/reset-password → Redefinir com token
 """
 
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, HTTPException, Depends, status, Request
+from sqlalchemy.ext.asyncio import AsyncSession
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dtos.password_dto import (
     ForgotPasswordDTO,
@@ -50,8 +50,8 @@ limiter = Limiter(key_func=get_remote_address)
 @limiter.limit("5/hour")
 async def forgot_password(
     dto: ForgotPasswordDTO,
+    request: Request,
     session: AsyncSession = Depends(get_db),
-    request=None,
 ) -> PasswordResponseDTO:
     """
     Iniciar processo de recuperação de senha.
@@ -92,8 +92,8 @@ async def forgot_password(
 @limiter.limit("10/hour")
 async def reset_password(
     dto: ResetPasswordDTO,
+    request: Request,
     session: AsyncSession = Depends(get_db),
-    request=None,
 ) -> PasswordResponseDTO:
     """
     Redefinir senha usando token temporário.
