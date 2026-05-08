@@ -20,6 +20,7 @@ from app.dtos.user_dto import (
     UpdateUserDTO,
     UserResponseDTO,
     PaginatedUsersResponseDTO,
+    UpdateThemePreferenceDTO,
 )
 from app.controllers.user_controller import UserController
 from app.services.user_service import UserAlreadyExistsError, UserNotFoundError, InvalidInvitationError
@@ -388,6 +389,52 @@ async def update_user(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Erro ao atualizar usuário",
+        )
+
+
+@router.put(
+    "/me/theme-preference",
+    response_model=UserResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Atualizar preferência de tema do usuário autenticado",
+    responses={
+        200: {"description": "Preferência de tema atualizada"},
+        400: {"description": "Validação falhou (tema inválido)"},
+        401: {"description": "Não autenticado"},
+    },
+)
+async def update_theme_preference(
+    dto: UpdateThemePreferenceDTO,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> UserResponseDTO:
+    """
+    Atualizar preferência de tema do usuário autenticado.
+
+    **Requer autenticação:** Usuário deve estar logado.
+
+    **Request body:**
+    - theme_preference: 'light', 'dark' ou 'system'
+
+    **Response:**
+    - Dados completos do usuário com tema atualizado
+    """
+    controller = UserController(session)
+
+    try:
+        update_dto = UpdateUserDTO(theme_preference=dto.theme_preference)
+        return await controller.update_user(current_user.id, update_dto)
+    except UserNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuário não encontrado",
+        )
+    except Exception as e:
+        import logging
+        logging.error(f"Erro inesperado ao atualizar preferência de tema: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro ao atualizar preferência de tema",
         )
 
 

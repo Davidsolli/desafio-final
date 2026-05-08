@@ -89,6 +89,7 @@ async def init_db() -> None:
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS gender VARCHAR(10)",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_whatsapp VARCHAR(20)",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS goal_type VARCHAR(50)",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS theme_preference VARCHAR(20) DEFAULT NULL",
         ]
         for alter in alters:
             try:
