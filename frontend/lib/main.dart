@@ -28,15 +28,21 @@ void main() async {
   final apiClient = ApiClient();
   await apiClient.initialize();
 
-  runApp(OmniConnectApp(apiClient: apiClient));
+  // Inicializa ThemeProvider (carrega preferência salva)
+  final themeProvider = ThemeProvider();
+  await themeProvider.init();
+
+  runApp(OmniConnectApp(apiClient: apiClient, themeProvider: themeProvider));
 }
 
 class OmniConnectApp extends StatelessWidget {
   final ApiClient apiClient;
+  final ThemeProvider themeProvider;
 
   const OmniConnectApp({
     Key? key,
     required this.apiClient,
+    required this.themeProvider,
   }) : super(key: key);
 
   @override
@@ -166,14 +172,14 @@ class OmniConnectApp extends StatelessWidget {
           },
         ),
       ],
-      child: ChangeNotifierProvider(
-        create: (_) => ThemeProvider(),
+      child: ChangeNotifierProvider.value(
+        value: themeProvider,
         child: Consumer<ThemeProvider>(
-          builder: (_, themeProvider, __) => MaterialApp.router(
+          builder: (_, provider, __) => MaterialApp.router(
             title: 'FitLoop',
             theme: AppTheme.lightTheme,
             darkTheme: AppTheme.darkTheme,
-            themeMode: themeProvider.themeMode,
+            themeMode: provider.themeMode,
             routerConfig: AppRoutes.router,
             debugShowCheckedModeBanner: false,
           ),
