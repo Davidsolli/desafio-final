@@ -87,5 +87,7 @@ class User(Base):
 
     goal_type = Column(String(50), nullable=True)
 
+    fcm_token = Column(String(500), nullable=True)
+
     def __repr__(self) -> str:
         return f"<User(id={self.id}, name={self.name}, email={self.email}, role={self.role})>"

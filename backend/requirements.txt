@@ -32,3 +32,6 @@ langchain-core>=0.2.0
 langchain-groq>=0.1.4
 langchain-huggingface>=0.0.3
 sentence-transformers>=2.7.0
+
+# ── Integrações ──────────────────────────────────────────────────────────────
+firebase-admin>=6.5.0
