@@ -44,7 +44,8 @@ class NotificationService {
     try {
       await apiClient.put(
         '/api/v1/notifications/token',
-        queryParameters: {'fcm_token': token},
+        body: {'fcm_token': token},
+        fromJson: (json) => json as Map<String, dynamic>,
       );
       print('Token enviado ao backend com sucesso');
     } catch (e) {
@@ -72,8 +73,11 @@ class NotificationService {
 
   Future<Map<String, dynamic>> getPreferences() async {
     try {
-      final response = await apiClient.get('/api/v1/notifications/preferences');
-      return response.data;
+      final response = await apiClient.get<Map<String, dynamic>>(
+        '/api/v1/notifications/preferences',
+        fromJson: (json) => json is Map<String, dynamic> ? json : {},
+      );
+      return response;
     } catch (e) {
       print('Erro ao carregar preferências: $e');
       return {};
@@ -85,6 +89,7 @@ class NotificationService {
       await apiClient.put(
         '/api/v1/notifications/preferences',
         body: data,
+        fromJson: (json) => json as Map<String, dynamic>,
       );
       return true;
     } catch (e) {

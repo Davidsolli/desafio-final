@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/notification_service.dart';
-import '../theme/app_theme.dart';
+import '../theme/app_colors.dart';
 
 class NotificationsSettingsScreen extends StatefulWidget {
   const NotificationsSettingsScreen({Key? key}) : super(key: key);
@@ -82,9 +82,9 @@ class _NotificationsSettingsScreenState extends State<NotificationsSettingsScree
           _buildMasterSwitch(),
           const SizedBox(height: 20),
           if (notificationsEnabled) ...[
-            const Text(
+            Text(
               'Lembretes',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.primaryColor),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary),
             ),
             const SizedBox(height: 10),
             _buildSwitchItem(
@@ -130,10 +130,10 @@ class _NotificationsSettingsScreenState extends State<NotificationsSettingsScree
   Widget _buildMasterSwitch() {
     return Container(
       decoration: BoxDecoration(
-        color: notificationsEnabled ? AppTheme.primaryColor.withOpacity(0.1) : Colors.grey.withOpacity(0.1),
+        color: notificationsEnabled ? AppColors.primary.withValues(alpha: 0.1) : Colors.grey.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: notificationsEnabled ? AppTheme.primaryColor.withOpacity(0.5) : Colors.transparent,
+          color: notificationsEnabled ? AppColors.primary.withValues(alpha: 0.5) : Colors.transparent,
         ),
       ),
       child: SwitchListTile(
@@ -143,7 +143,7 @@ class _NotificationsSettingsScreenState extends State<NotificationsSettingsScree
         ),
         subtitle: const Text('Controla todas as notificações do app'),
         value: notificationsEnabled,
-        activeColor: AppTheme.primaryColor,
+        activeThumbColor: AppColors.primary,
         onChanged: (val) => _updatePreference('notifications_enabled', val),
       ),
     );
@@ -165,15 +165,15 @@ class _NotificationsSettingsScreenState extends State<NotificationsSettingsScree
         secondary: Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: AppTheme.primaryColor.withOpacity(0.1),
+            color: AppColors.primary.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Icon(icon, color: AppTheme.primaryColor),
+          child: Icon(icon, color: AppColors.primary),
         ),
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
         subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
         value: value,
-        activeColor: AppTheme.primaryColor,
+        activeThumbColor: AppColors.primary,
         onChanged: onChanged,
       ),
     );
