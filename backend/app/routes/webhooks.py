@@ -9,12 +9,7 @@ import hmac
 import hashlib
 import logging
 import os
-from dotenv import load_dotenv
 from fastapi import APIRouter, HTTPException, status, Request, Query
-from pydantic import BaseModel
-from typing import Optional
-
-load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -24,12 +19,15 @@ router = APIRouter(
 )
 
 
-class WhatsAppMessage(BaseModel):
-    """Modelo para message do WhatsApp."""
-    from_number: str
-    message_text: str
-    message_id: str
-    timestamp: int
+def _verify_signature(payload: bytes, signature_header: str) -> bool:
+    """Valida a assinatura X-Hub-Signature-256 enviada pelo Meta."""
+    app_secret = os.getenv("WHATSAPP_APP_SECRET", "")
+    if not app_secret or not signature_header:
+        return False
+    expected = "sha256=" + hmac.new(
+        app_secret.encode(), payload, hashlib.sha256
+    ).hexdigest()
+    return hmac.compare_digest(expected, signature_header)
 
 
 @router.get(
@@ -73,12 +71,17 @@ async def receive_whatsapp_message(request: Request):
     O WhatsApp envia um JSON com a mensagem do usuário.
     Aqui você pode processar e responder.
     """
+    payload = await request.body()
+    signature = request.headers.get("X-Hub-Signature-256", "")
+
+    if os.getenv("WHATSAPP_APP_SECRET") and not _verify_signature(payload, signature):
+        logger.warning("❌ Assinatura inválida no webhook POST")
+        raise HTTPException(status_code=403, detail="Assinatura inválida")
+
     data = await request.json()
 
-    # Log para debug
     logger.info(f"📩 WEBHOOK RECEBIDO:\n{data}")
 
-    # Parse da estrutura do Meta
     try:
         entry = data.get("entry", [])
         if not entry:
@@ -90,7 +93,6 @@ async def receive_whatsapp_message(request: Request):
 
         value = changes[0].get("value", {})
 
-        # Verificar se é uma mensagem (não status)
         messages = value.get("messages", [])
         if not messages:
             return {"status": "ok"}
@@ -100,7 +102,6 @@ async def receive_whatsapp_message(request: Request):
         message_id = message.get("id")
         timestamp = message.get("timestamp")
 
-        # Extrair texto da mensagem
         message_type = message.get("type", "text")
         message_text = ""
 
@@ -115,11 +116,9 @@ async def receive_whatsapp_message(request: Request):
             f"  ID: {message_id}"
         )
 
-        # TODO: Aqui você implementa a lógica de pré-cadastro
-        # Por enquanto, apenas log
+        # TODO: Implementar lógica de pré-cadastro
 
     except Exception as e:
         logger.error(f"❌ Erro ao processar webhook: {str(e)}")
 
-    # Sempre retornar 200 OK para o Meta não reenviar
     return {"status": "ok"}

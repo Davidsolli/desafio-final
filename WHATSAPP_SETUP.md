@@ -3,10 +3,10 @@
 ## ✅ Dados Configurados
 
 ```
-Token Permanente: [Configurado no .env]
-Phone Number ID: 1158927947299601
-Verify Token: omniconnect_whatsapp_webhook_verify_token_2026_secure
-Webhook URL: https://lab.alphaedtech.org.br/server02/api/v1/webhooks/whatsapp
+Token Permanente: [Configurado no .env como WHATSAPP_TOKEN]
+Phone Number ID: [Configurado no .env como WHATSAPP_PHONE_NUMBER_ID]
+Verify Token: [Configurado no .env como WHATSAPP_VERIFY_TOKEN]
+Webhook URL: https://<SEU_DOMINIO>/api/v1/webhooks/whatsapp
 ```
 
 ---
@@ -27,8 +27,8 @@ Webhook URL: https://lab.alphaedtech.org.br/server02/api/v1/webhooks/whatsapp
 2. Procure por **Webhook URL**
 3. Clique em **Editar Callback URL**
 4. Preencha:
-   - **Callback URL:** `https://lab.alphaedtech.org.br/server02/api/v1/webhooks/whatsapp`
-   - **Verify Token:** `omniconnect_whatsapp_webhook_verify_token_2026_secure`
+   - **Callback URL:** `https://<SEU_DOMINIO>/api/v1/webhooks/whatsapp`
+   - **Verify Token:** `<valor do WHATSAPP_VERIFY_TOKEN no .env>`
 
 5. Clique em **Verificar e Salvar**
 
@@ -135,7 +135,7 @@ Se quiser testar manualmente:
 ssh desafio02@lab.alphaedtech.org.br
 
 # Testar webhook manualmente
-curl -X GET "https://lab.alphaedtech.org.br/server02/api/v1/webhooks/whatsapp?hub.mode=subscribe&hub.challenge=123456789&hub.verify_token=omniconnect_whatsapp_webhook_verify_token_2026_secure"
+curl -X GET "https://<SEU_DOMINIO>/api/v1/webhooks/whatsapp?hub.mode=subscribe&hub.challenge=123456789&hub.verify_token=<WHATSAPP_VERIFY_TOKEN>"
 
 # Deve retornar: 123456789 (o hub.challenge)
 ```

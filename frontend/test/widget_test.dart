@@ -9,11 +9,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Este é um teste básico de smoke que não requer injeção de dependências
-    // Apenas verifica que a aplicação pode ser construída sem erros
+  testWidgets('Widget básico renderiza sem erros', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: Center(child: Text('OmniConnect')),
+        ),
+      ),
+    );
 
-    // Skip se estiver em um ambiente de teste que não suporta inicialização
-    // de SharedPreferences ou Firebase
+    expect(find.text('OmniConnect'), findsOneWidget);
   });
 }
