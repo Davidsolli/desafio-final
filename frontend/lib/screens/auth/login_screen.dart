@@ -98,81 +98,84 @@ class _LoginScreenState extends State<LoginScreen> {
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: Image.asset('assets/images/logo-2.png'),
             ),
-            // Resto do conteúdo
+            // Resto do conteúdo com scroll responsivo
             Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // Título
-                    Text(
-                      'Entrar',
-                      style: Theme.of(context).textTheme.displayMedium,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Acesse sua conta',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: context.colors.textSecondary,
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // Título
+                      Text(
+                        'Entrar',
+                        style: Theme.of(context).textTheme.displayMedium,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Acesse sua conta',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: context.colors.textSecondary,
+                            ),
+                      ),
+                      const SizedBox(height: 16),
+                      OmniTextField(
+                        controller: _emailController,
+                        labelText: 'Email',
+                        hintText: 'seu@email.com',
+                        prefixIcon: Icons.email_outlined,
+                      ),
+                      const SizedBox(height: 12),
+                      OmniTextField(
+                        controller: _passwordController,
+                        labelText: 'Senha',
+                        hintText: '••••••••',
+                        obscureText: true,
+                        prefixIcon: Icons.lock_outlined,
+                      ),
+                      const SizedBox(height: 20),
+                      OmniButton(
+                        text: 'Entrar',
+                        onPressed: _handleLogin,
+                        isLoading: _isLoading,
+                        width: double.infinity,
+                      ),
+                      const SizedBox(height: 16),
+                      // Divider
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Divider(
+                              color: context.colors.textSecondary.withValues(alpha: 0.3),
+                            ),
                           ),
-                    ),
-                    const SizedBox(height: 16),
-                    OmniTextField(
-                      controller: _emailController,
-                      labelText: 'Email',
-                      hintText: 'seu@email.com',
-                      prefixIcon: Icons.email_outlined,
-                    ),
-                    const SizedBox(height: 12),
-                    OmniTextField(
-                      controller: _passwordController,
-                      labelText: 'Senha',
-                      hintText: '••••••••',
-                      obscureText: true,
-                      prefixIcon: Icons.lock_outlined,
-                    ),
-                    const SizedBox(height: 20),
-                    OmniButton(
-                      text: 'Entrar',
-                      onPressed: _handleLogin,
-                      isLoading: _isLoading,
-                      width: double.infinity,
-                    ),
-                    const SizedBox(height: 16),
-                    // Divider
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Divider(
-                            color: context.colors.textSecondary.withValues(alpha: 0.3),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            child: Text(
+                              'OU',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: context.colors.textSecondary,
+                                  ),
+                            ),
                           ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          child: Text(
-                            'OU',
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: context.colors.textSecondary,
-                                ),
+                          Expanded(
+                            child: Divider(
+                              color: context.colors.textSecondary.withValues(alpha: 0.3),
+                            ),
                           ),
-                        ),
-                        Expanded(
-                          child: Divider(
-                            color: context.colors.textSecondary.withValues(alpha: 0.3),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    OmniButton(
-                      text: 'Tenho um Código de Acesso',
-                      onPressed: () => context.go(AppRoutes.inviteCode),
-                      isOutlined: true,
-                      width: double.infinity,
-                    ),
-                  ],
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      OmniButton(
+                        text: 'Tenho um Código de Acesso',
+                        onPressed: () => context.go(AppRoutes.inviteCode),
+                        isOutlined: true,
+                        width: double.infinity,
+                      ),
+                      const SizedBox(height: 24),
+                    ],
+                  ),
                 ),
               ),
             ),

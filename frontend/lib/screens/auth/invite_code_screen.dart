@@ -5,6 +5,7 @@ import '../../theme/app_colors.dart';
 import '../../theme/theme_colors.dart';
 import '../../routes/app_routes.dart';
 import '../../providers/invitation_provider.dart';
+import '../../shared/widgets/index.dart';
 
 class InviteCodeScreen extends StatefulWidget {
   const InviteCodeScreen({Key? key}) : super(key: key);
@@ -92,94 +93,64 @@ class _InviteCodeScreenState extends State<InviteCodeScreen> {
                 ),
               ),
             ),
-            // Conteúdo principal
+            // Conteúdo principal com scroll responsivo
             Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // Ícone
-                    Container(
-                      width: 80,
-                      height: 80,
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withOpacity(0.1),
-                        shape: BoxShape.circle,
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // Ícone
+                      Container(
+                        width: 80,
+                        height: 80,
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.card_giftcard_outlined,
+                          size: 40,
+                          color: AppColors.primary,
+                        ),
                       ),
-                      child: Icon(
-                        Icons.card_giftcard_outlined,
-                        size: 40,
-                        color: AppColors.primary,
+                      const SizedBox(height: 24),
+                      // Título
+                      Text(
+                        'Tem um código de acesso?',
+                        style: Theme.of(context).textTheme.displaySmall,
+                        textAlign: TextAlign.center,
                       ),
-                    ),
-                    const SizedBox(height: 24),
-                    // Título
-                    Text(
-                      'Tem um código de acesso?',
-                      style: Theme.of(context).textTheme.displaySmall,
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 8),
-                    // Subtítulo
-                    Text(
-                      'Digite o código enviado pelo seu personal trainer para se cadastrar',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: context.colors.textSecondary,
-                          ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 24),
-                    // Campo de entrada
-                    TextField(
-                      controller: _codeController,
-                      enabled: !_isValidating,
-                      decoration: InputDecoration(
+                      const SizedBox(height: 8),
+                      // Subtítulo
+                      Text(
+                        'Digite o código enviado pelo seu personal trainer para se cadastrar',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: context.colors.textSecondary,
+                            ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 24),
+                      // Campo de entrada
+                      OmniTextField(
+                        controller: _codeController,
                         labelText: 'Código de Convite',
                         hintText: 'Ex: AB3X7KP2QR',
-                        prefixIcon: const Icon(Icons.vpn_key_outlined),
-                        errorText: _codeController.text.isEmpty ? null : '',
+                        prefixIcon: Icons.vpn_key_outlined,
                       ),
-                      textCapitalization: TextCapitalization.characters,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 2,
+                      const SizedBox(height: 32),
+                      // Botão validar
+                      OmniButton(
+                        text: 'Validar Código',
+                        onPressed: _handleValidate,
+                        isLoading: _isValidating,
+                        width: double.infinity,
                       ),
-                      onChanged: (_) => setState(() {}),
-                    ),
-                    const SizedBox(height: 32),
-                    // Botão validar
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: _isValidating ? null : _handleValidate,
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          backgroundColor: AppColors.primary,
-                        ),
-                        child: _isValidating
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor:
-                                      AlwaysStoppedAnimation(Colors.white),
-                                ),
-                              )
-                            : Text(
-                                'Validar Código',
-                                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                              ),
-                      ),
-                    ),
-                  ],
+                      const SizedBox(height: 24),
+                    ],
+                  ),
                 ),
               ),
             ),
