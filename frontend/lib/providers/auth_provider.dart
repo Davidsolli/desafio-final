@@ -222,4 +222,106 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  /// Inicia recuperação de senha
+  Future<void> forgotPassword({required String email}) async {
+    try {
+      _setLoading(true);
+      _error = null;
+
+      await _authService.forgotPassword(email: email);
+      notifyListeners();
+    } on NetworkException catch (e) {
+      _error = 'Erro de conexão: ${e.message}';
+      notifyListeners();
+      rethrow;
+    } on ApiException catch (e) {
+      _error = e.message;
+      notifyListeners();
+      rethrow;
+    } catch (e) {
+      _error = 'Erro ao solicitar recuperação: ${e.toString()}';
+      notifyListeners();
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  /// Redefine senha com token
+  Future<void> resetPassword({
+    required String token,
+    required String password,
+    required String confirmPassword,
+  }) async {
+    try {
+      _setLoading(true);
+      _error = null;
+
+      await _authService.resetPassword(
+        token: token,
+        newPassword: password,
+        confirmPassword: confirmPassword,
+      );
+
+      // Limpar dados após sucesso (usuário deve fazer login novamente)
+      _user = null;
+      _token = null;
+
+      notifyListeners();
+    } on NetworkException catch (e) {
+      _error = 'Erro de conexão: ${e.message}';
+      notifyListeners();
+      rethrow;
+    } on ApiException catch (e) {
+      _error = e.message;
+      notifyListeners();
+      rethrow;
+    } catch (e) {
+      _error = 'Erro ao redefinir senha: ${e.toString()}';
+      notifyListeners();
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  /// Troca senha para usuário autenticado
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+    required String confirmPassword,
+  }) async {
+    try {
+      _setLoading(true);
+      _error = null;
+
+      await _authService.changePassword(
+        currentPassword: currentPassword,
+        newPassword: newPassword,
+        confirmPassword: confirmPassword,
+      );
+
+      // Limpar dados após sucesso (usuário será desconectado)
+      _user = null;
+      _token = null;
+      await _authService.logout();
+
+      notifyListeners();
+    } on NetworkException catch (e) {
+      _error = 'Erro de conexão: ${e.message}';
+      notifyListeners();
+      rethrow;
+    } on ApiException catch (e) {
+      _error = e.message;
+      notifyListeners();
+      rethrow;
+    } catch (e) {
+      _error = 'Erro ao alterar senha: ${e.toString()}';
+      notifyListeners();
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
 }

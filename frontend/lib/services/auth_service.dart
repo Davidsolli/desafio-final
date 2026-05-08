@@ -175,4 +175,93 @@ class AuthService {
 
   /// Retorna o token armazenado
   String? get token => _apiClient.token;
+
+  /// Inicia recuperação de senha via email
+  ///
+  /// Args:
+  ///   email: Email do usuário
+  ///
+  /// Returns:
+  ///   Mensagem de sucesso (sempre retorna mesmo que email não exista)
+  ///
+  /// Throws:
+  ///   Exception se erro de rede
+  Future<Map<String, dynamic>> forgotPassword({required String email}) async {
+    try {
+      final response = await _apiClient.post<Map<String, dynamic>>(
+        '/auth/forgot-password',
+        body: {'email': email},
+        fromJson: (data) => data as Map<String, dynamic>,
+      );
+      return response;
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  /// Redefine senha usando token de recuperação
+  ///
+  /// Args:
+  ///   token: Token enviado por email
+  ///   newPassword: Nova senha
+  ///   confirmPassword: Confirmação da nova senha
+  ///
+  /// Returns:
+  ///   Mensagem de sucesso
+  ///
+  /// Throws:
+  ///   Exception se token inválido, expirado ou senhas não conferem
+  Future<Map<String, dynamic>> resetPassword({
+    required String token,
+    required String newPassword,
+    required String confirmPassword,
+  }) async {
+    try {
+      final response = await _apiClient.post<Map<String, dynamic>>(
+        '/auth/reset-password',
+        body: {
+          'token': token,
+          'new_password': newPassword,
+          'confirm_password': confirmPassword,
+        },
+        fromJson: (data) => data as Map<String, dynamic>,
+      );
+      return response;
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  /// Troca senha para usuário autenticado
+  ///
+  /// Args:
+  ///   currentPassword: Senha atual
+  ///   newPassword: Nova senha
+  ///   confirmPassword: Confirmação da nova senha
+  ///
+  /// Returns:
+  ///   Mensagem de sucesso (requer logout posterior)
+  ///
+  /// Throws:
+  ///   Exception se senha atual incorreta ou senhas não conferem
+  Future<Map<String, dynamic>> changePassword({
+    required String currentPassword,
+    required String newPassword,
+    required String confirmPassword,
+  }) async {
+    try {
+      final response = await _apiClient.put<Map<String, dynamic>>(
+        '/users/me/password',
+        body: {
+          'current_password': currentPassword,
+          'new_password': newPassword,
+          'confirm_password': confirmPassword,
+        },
+        fromJson: (data) => data as Map<String, dynamic>,
+      );
+      return response;
+    } catch (e) {
+      rethrow;
+    }
+  }
 }

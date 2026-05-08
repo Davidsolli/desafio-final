@@ -3,6 +3,8 @@ import '../screens/auth/splash_screen.dart';
 import '../screens/auth/login_screen.dart';
 import '../screens/auth/register_screen.dart';
 import '../screens/auth/invite_code_screen.dart';
+import '../screens/auth/forgot_password_screen.dart';
+import '../screens/auth/reset_password_screen.dart';
 import '../screens/student/student_shell.dart';
 import '../screens/student/home_screen.dart';
 import '../screens/student/workouts_screen.dart';
@@ -12,6 +14,7 @@ import '../screens/student/metrics_screen.dart';
 import '../screens/student/goals_screen.dart';
 import '../screens/student/chat_screen.dart';
 import '../screens/student/profile_screen_new.dart';
+import '../screens/student/change_password_screen.dart';
 import '../screens/notifications_screen.dart';
 import '../screens/trainer/trainer_shell.dart';
 import '../screens/trainer/trainer_home_screen.dart';
@@ -34,6 +37,9 @@ class AppRoutes {
   static const String register = '/register';
   static const String inviteCode = '/invite-code';
   static const String generateInvite = '/trainer/generate-invite';
+  static const String forgotPassword = '/forgot-password';
+  static const String resetPassword = '/reset-password';
+  static const String changePassword = '/change-password';
 
   // Student
   static const String home = '/home';
@@ -91,6 +97,17 @@ class AppRoutes {
         path: generateInvite,
         builder: (context, state) => const GenerateInviteScreen(),
       ),
+      GoRoute(
+        path: forgotPassword,
+        builder: (context, state) => const ForgotPasswordScreen(),
+      ),
+      GoRoute(
+        path: resetPassword,
+        builder: (context, state) {
+          final token = state.uri.queryParameters['token'];
+          return ResetPasswordScreen(token: token);
+        },
+      ),
       ShellRoute(
         builder: (context, state, child) => StudentShell(child: child),
         routes: [
@@ -127,6 +144,10 @@ class AppRoutes {
             builder: (context, state) => const ProfileScreenV2(),
           ),
         ],
+      ),
+      GoRoute(
+        path: changePassword,
+        builder: (context, state) => const ChangePasswordScreen(),
       ),
       GoRoute(
         path: notifications,
