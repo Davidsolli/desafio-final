@@ -39,8 +39,8 @@ class OmniSectionHeader extends StatelessWidget {
     if (action != null) {
       return Row(
         children: [
-          titleColumn,
-          const Spacer(),
+          Expanded(child: titleColumn),
+          const SizedBox(width: 16),
           action!,
         ],
       );

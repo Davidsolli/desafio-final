@@ -80,7 +80,7 @@ void main() {
       );
 
       await tester.tap(find.byType(ElevatedButton));
-      await tester.pumpAndSettle();
+      await tester.pump();
 
       expect(pressed, false);
     });
