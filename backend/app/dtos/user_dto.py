@@ -20,6 +20,17 @@ VALID_THEMES = {"light", "dark", "system"}
 PASSWORD_REGEX = r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@!#$%^&*])[a-zA-Z0-9@!#$%^&*]{8,}$"
 
 
+def validate_theme_value(v: Optional[str]) -> Optional[str]:
+    """Validar valor de preferência de tema."""
+    if v is None:
+        return v
+    if v not in VALID_THEMES:
+        raise ValueError(
+            f"Tema deve ser um de: {', '.join(VALID_THEMES)}"
+        )
+    return v
+
+
 class CreateUserDTO(BaseModel):
     """DTO para criação de novo usuário."""
 
@@ -191,14 +202,7 @@ class UpdateUserDTO(BaseModel):
     @field_validator("theme_preference")
     @classmethod
     def validate_theme_preference(cls, v: Optional[str]) -> Optional[str]:
-        """Validar tema: deve ser um dos valores válidos ou None."""
-        if v is None:
-            return v
-        if v not in VALID_THEMES:
-            raise ValueError(
-                f"Tema deve ser um de: {', '.join(VALID_THEMES)}"
-            )
-        return v
+        return validate_theme_value(v)
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -263,12 +267,10 @@ class UpdateThemePreferenceDTO(BaseModel):
     @field_validator("theme_preference")
     @classmethod
     def validate_theme_preference(cls, v: str) -> str:
-        """Validar tema: deve ser um dos valores válidos."""
-        if v not in VALID_THEMES:
-            raise ValueError(
-                f"Tema deve ser um de: {', '.join(VALID_THEMES)}"
-            )
-        return v
+        result = validate_theme_value(v)
+        if result is None:
+            raise ValueError("theme_preference não pode ser None")
+        return result
 
     model_config = ConfigDict(
         json_schema_extra={
