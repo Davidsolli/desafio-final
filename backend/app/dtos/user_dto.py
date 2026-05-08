@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field, EmailStr, field_validator, ConfigDict
 
 
 VALID_ROLES = {"admin", "personal_trainer", "client"}
+VALID_THEMES = {"light", "dark", "system"}
 PASSWORD_REGEX = r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@!#$%^&*])[a-zA-Z0-9@!#$%^&*]{8,}$"
 
 
@@ -160,6 +161,10 @@ class UpdateUserDTO(BaseModel):
         None,
         description="Objetivo de treino: gain_mass, lose_weight, maintain, endurance",
     )
+    theme_preference: Optional[str] = Field(
+        None,
+        description="Preferência de tema: light, dark ou system",
+    )
 
     @field_validator("name")
     @classmethod
@@ -180,6 +185,18 @@ class UpdateUserDTO(BaseModel):
         if v not in VALID_ROLES:
             raise ValueError(
                 f"Role deve ser um de: {', '.join(VALID_ROLES)}"
+            )
+        return v
+
+    @field_validator("theme_preference")
+    @classmethod
+    def validate_theme_preference(cls, v: Optional[str]) -> Optional[str]:
+        """Validar tema: deve ser um dos valores válidos ou None."""
+        if v is None:
+            return v
+        if v not in VALID_THEMES:
+            raise ValueError(
+                f"Tema deve ser um de: {', '.join(VALID_THEMES)}"
             )
         return v
 
@@ -211,6 +228,7 @@ class UserResponseDTO(BaseModel):
     phone_whatsapp: Optional[str] = None
     goal_type: Optional[str] = None
     trainer_id: Optional[UUID] = None
+    theme_preference: Optional[str] = None
 
     model_config = ConfigDict(
         from_attributes=True,
@@ -229,6 +247,33 @@ class UserResponseDTO(BaseModel):
                 "gender": "male",
                 "phone_whatsapp": "+55 11 99999-9999",
                 "goal_type": "gain_mass",
+            }
+        }
+    )
+
+
+class UpdateThemePreferenceDTO(BaseModel):
+    """DTO para atualizar preferência de tema do usuário."""
+
+    theme_preference: str = Field(
+        ...,
+        description="Preferência de tema: light, dark ou system",
+    )
+
+    @field_validator("theme_preference")
+    @classmethod
+    def validate_theme_preference(cls, v: str) -> str:
+        """Validar tema: deve ser um dos valores válidos."""
+        if v not in VALID_THEMES:
+            raise ValueError(
+                f"Tema deve ser um de: {', '.join(VALID_THEMES)}"
+            )
+        return v
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "theme_preference": "dark",
             }
         }
     )
