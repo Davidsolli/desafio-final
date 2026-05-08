@@ -146,48 +146,17 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                   }
 
                   if (provider.error != null) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.error_outline, color: AppColors.accentError, size: 48),
-                          const SizedBox(height: 16),
-                          Text('Erro: ${provider.error}',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(color: context.colors.textMuted)),
-                          const SizedBox(height: 16),
-                          OmniButton(
-                            text: '🔄 Tentar Novamente',
-                            onPressed: _loadUserSheets,
-                          ),
-                        ],
-                      ),
+                    return OmniErrorState(
+                      message: 'Erro: ${provider.error}',
+                      onRetry: _loadUserSheets,
                     );
                   }
 
                   if (provider.sheets.isEmpty) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.fitness_center_outlined, color: context.colors.textMuted, size: 48),
-                          const SizedBox(height: 16),
-                          Text('Nenhuma ficha atribuída',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodyLarge
-                                  ?.copyWith(color: context.colors.textMuted)),
-                          const SizedBox(height: 8),
-                          Text('Seu personal trainer ainda não atribuiu fichas de treino.',
-                              textAlign: TextAlign.center,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(color: context.colors.textMuted)),
-                        ],
-                      ),
+                    return OmniEmptyState(
+                      icon: Icons.fitness_center_outlined,
+                      title: 'Nenhuma ficha atribuída',
+                      subtitle: 'Seu personal trainer ainda não atribuiu fichas de treino.',
                     );
                   }
 
@@ -297,24 +266,9 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
           children: [
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(6),
-                      child: LinearProgressIndicator(
-                        value: progress / 100,
-                        minHeight: 6,
-                        backgroundColor: context.colors.surfaceLight,
-                        valueColor: const AlwaysStoppedAnimation(AppColors.primary),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Text('${_completedExercises.length}/$exercisesCount',
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.colors.textMuted)),
-                ],
+              child: OmniProgressBar(
+                value: progress / 100,
+                trailingLabel: '${_completedExercises.length}/$exercisesCount',
               ),
             ),
             if (_restTimerSeconds != null && _restTimerSeconds! > 0)
@@ -511,15 +465,6 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
   }
 
   Widget _buildExerciseChip(String text) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: context.colors.surfaceLight,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(text,
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: context.colors.textMuted, fontSize: 11, fontWeight: FontWeight.w500)),
-    );
+    return OmniInfoChip(label: text);
   }
 }

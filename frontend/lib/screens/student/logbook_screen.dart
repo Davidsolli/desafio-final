@@ -5,6 +5,7 @@ import '../../theme/app_colors.dart';
 import '../../theme/theme_colors.dart';
 import '../../providers/logbook_provider.dart';
 import '../../services/logbook_service.dart';
+import '../../shared/widgets/index.dart';
 
 class LogbookScreen extends StatefulWidget {
   const LogbookScreen({super.key});
@@ -45,52 +46,24 @@ class _LogbookScreenState extends State<LogbookScreen> {
               child: Consumer<LogbookProvider>(
                 builder: (context, logbookProvider, _) {
                   if (logbookProvider.isLoading) {
-                    return const Center(
-                      child: CircularProgressIndicator(),
-                    );
+                    return const OmniLoader();
                   }
 
                   if (logbookProvider.error != null) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.error_outline, size: 48, color: AppColors.accentError),
-                          const SizedBox(height: 16),
-                          Text(logbookProvider.error ?? 'Erro ao carregar'),
-                          const SizedBox(height: 16),
-                          ElevatedButton(
-                            onPressed: () => logbookProvider.loadSessions(),
-                            child: const Text('Tentar novamente'),
-                          ),
-                        ],
-                      ),
+                    return OmniErrorState(
+                      message: logbookProvider.error ?? 'Erro ao carregar',
+                      onRetry: logbookProvider.loadSessions,
                     );
                   }
 
                   final filteredSessions = _filterSessions(logbookProvider.sessions);
 
                   if (!logbookProvider.hasSessions || filteredSessions.isEmpty) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.notes_outlined, size: 48, color: context.colors.textMuted),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Nenhuma sessão registrada',
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  color: context.colors.textSecondary,
-                                ),
-                          ),
-                          const SizedBox(height: 24),
-                          ElevatedButton.icon(
-                            onPressed: () => _showCreateSessionDialog(context),
-                            icon: const Icon(Icons.add),
-                            label: const Text('Registrar Sessão'),
-                          ),
-                        ],
-                      ),
+                    return OmniEmptyState(
+                      icon: Icons.notes_outlined,
+                      title: 'Nenhuma sessão registrada',
+                      actionLabel: 'Registrar Sessão',
+                      onAction: () => _showCreateSessionDialog(context),
                     );
                   }
 
@@ -322,20 +295,9 @@ class _LogbookScreenState extends State<LogbookScreen> {
   }
 
   Widget _buildIntensityBadge(String intensity) {
-    final color = _getIntensityColor(intensity);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        _getIntensityLabel(intensity),
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: color,
-              fontWeight: FontWeight.w600,
-            ),
-      ),
+    return OmniStatusBadge(
+      label: _getIntensityLabel(intensity),
+      color: _getIntensityColor(intensity),
     );
   }
 

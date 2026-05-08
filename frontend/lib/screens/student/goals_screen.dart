@@ -53,43 +53,18 @@ class _GoalsScreenState extends State<GoalsScreen> {
                   }
 
                   if (goalProvider.error != null) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.error_outline, size: 48, color: AppColors.accentError),
-                          const SizedBox(height: 16),
-                          Text(goalProvider.error ?? 'Erro ao carregar metas'),
-                          const SizedBox(height: 16),
-                          OmniButton(
-                            text: 'Tentar novamente',
-                            onPressed: () => goalProvider.loadGoals(status: _selectedFilter),
-                          ),
-                        ],
-                      ),
+                    return OmniErrorState(
+                      message: goalProvider.error ?? 'Erro ao carregar metas',
+                      onRetry: () => goalProvider.loadGoals(status: _selectedFilter),
                     );
                   }
 
                   if (!goalProvider.hasGoals) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.flag_outlined, size: 48, color: context.colors.textMuted),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Nenhuma meta ${_selectedFilter == 'active' ? 'ativa' : _selectedFilter == 'completed' ? 'concluída' : 'expirada'}',
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  color: context.colors.textSecondary,
-                                ),
-                          ),
-                          const SizedBox(height: 24),
-                          OmniButton(
-                            text: '➕ Criar Meta',
-                            onPressed: () => _showCreateGoalDialog(context),
-                          ),
-                        ],
-                      ),
+                    return OmniEmptyState(
+                      icon: Icons.flag_outlined,
+                      title: 'Nenhuma meta ${_selectedFilter == 'active' ? 'ativa' : _selectedFilter == 'completed' ? 'concluída' : 'expirada'}',
+                      actionLabel: '➕ Criar Meta',
+                      onAction: () => _showCreateGoalDialog(context),
                     );
                   }
 
@@ -295,16 +270,9 @@ class _GoalsScreenState extends State<GoalsScreen> {
                 ],
               ),
               const SizedBox(height: 6),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: LinearProgressIndicator(
-                  value: (goal.progressPercentage / 100).clamp(0.0, 1.0),
-                  minHeight: 6,
-                  backgroundColor: context.colors.surfaceLight,
-                  valueColor: AlwaysStoppedAnimation(
-                    goal.isCompleted ? Colors.green : AppColors.primary,
-                  ),
-                ),
+              OmniProgressBar(
+                value: (goal.progressPercentage / 100).clamp(0.0, 1.0),
+                progressColor: goal.isCompleted ? Colors.green : null,
               ),
               const SizedBox(height: 10),
               Row(
@@ -333,19 +301,9 @@ class _GoalsScreenState extends State<GoalsScreen> {
                       ),
                     ],
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: GoalUtils.getStatusColor(goal.status).withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      GoalUtils.getStatusLabel(goal.status),
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: GoalUtils.getStatusColor(goal.status),
-                            fontWeight: FontWeight.w600,
-                          ),
-                    ),
+                  OmniStatusBadge(
+                    label: GoalUtils.getStatusLabel(goal.status),
+                    color: GoalUtils.getStatusColor(goal.status),
                   ),
                 ],
               ),

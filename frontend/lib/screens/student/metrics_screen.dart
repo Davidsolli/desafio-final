@@ -9,6 +9,7 @@ import '../../providers/logbook_provider.dart';
 import '../../services/dashboard_service.dart';
 import '../../widgets/frequency_bar_chart.dart';
 import '../../widgets/progression_line_chart.dart';
+import '../../shared/widgets/index.dart';
 
 class MetricsScreen extends StatefulWidget {
   const MetricsScreen({super.key});
@@ -114,7 +115,7 @@ class _MetricsScreenState extends State<MetricsScreen> {
                     if (userProvider.isLoading) {
                       return const SizedBox(
                         height: 300,
-                        child: Center(child: CircularProgressIndicator()),
+                        child: OmniLoader(),
                       );
                     }
 
@@ -222,10 +223,7 @@ class _MetricsScreenState extends State<MetricsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '💪 Métricas Corporais',
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
-          ),
+          OmniSectionHeader(title: '💪 Métricas Corporais'),
           const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.all(14),
@@ -261,31 +259,11 @@ class _MetricsScreenState extends State<MetricsScreen> {
 
   Widget _buildMetricCard(String label, String value, String unit, IconData icon) {
     return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: context.colors.background,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Column(
-          children: [
-            Icon(icon, color: AppColors.primary, size: 20),
-            const SizedBox(height: 6),
-            Text(
-              value,
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.colors.textMuted),
-            ),
-            Text(
-              unit,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.colors.textMuted, fontSize: 10),
-            ),
-          ],
-        ),
+      child: OmniStatCard(
+        icon: icon,
+        value: value,
+        label: label,
+        unit: unit,
       ),
     );
   }
@@ -304,10 +282,7 @@ class _MetricsScreenState extends State<MetricsScreen> {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                '🏋️ Treinos',
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
-              ),
+              OmniSectionHeader(title: '🏋️ Treinos'),
               const SizedBox(height: 12),
               Container(
                 padding: const EdgeInsets.all(14),
@@ -359,10 +334,7 @@ class _MetricsScreenState extends State<MetricsScreen> {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                '🎯 Metas',
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
-              ),
+              OmniSectionHeader(title: '🎯 Metas'),
               const SizedBox(height: 12),
               Container(
                 padding: const EdgeInsets.all(14),
