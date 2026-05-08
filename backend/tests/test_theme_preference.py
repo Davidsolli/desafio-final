@@ -69,44 +69,41 @@ class TestThemePreferenceIntegration:
     """Testes de integração para theme_preference (requerem DB)."""
 
     @pytest.mark.asyncio
-    async def test_update_theme_preference_endpoint_valid(self, client, authenticated_user_headers):
+    async def test_update_theme_preference_endpoint_valid(self, auth_client):
         """Testar PUT /users/me/theme-preference com tema válido."""
-        response = client.put(
+        response = await auth_client.put(
             "/api/v1/users/me/theme-preference",
             json={"theme_preference": "dark"},
-            headers=authenticated_user_headers,
         )
         assert response.status_code == 200
         data = response.json()
         assert data["theme_preference"] == "dark"
 
     @pytest.mark.asyncio
-    async def test_update_theme_preference_endpoint_all_valid_themes(self, client, authenticated_user_headers):
+    async def test_update_theme_preference_endpoint_all_valid_themes(self, auth_client):
         """Testar PUT /users/me/theme-preference com todos os temas válidos."""
         for theme in ["light", "dark", "system"]:
-            response = client.put(
+            response = await auth_client.put(
                 "/api/v1/users/me/theme-preference",
                 json={"theme_preference": theme},
-                headers=authenticated_user_headers,
             )
             assert response.status_code == 200
             data = response.json()
             assert data["theme_preference"] == theme
 
     @pytest.mark.asyncio
-    async def test_update_theme_preference_endpoint_invalid_theme(self, client, authenticated_user_headers):
+    async def test_update_theme_preference_endpoint_invalid_theme(self, auth_client):
         """Testar PUT /users/me/theme-preference com tema inválido."""
-        response = client.put(
+        response = await auth_client.put(
             "/api/v1/users/me/theme-preference",
             json={"theme_preference": "invalid"},
-            headers=authenticated_user_headers,
         )
         assert response.status_code == 422  # Validation error
 
     @pytest.mark.asyncio
-    async def test_update_theme_preference_endpoint_unauthenticated(self, client):
+    async def test_update_theme_preference_endpoint_unauthenticated(self, async_client):
         """Testar PUT /users/me/theme-preference sem autenticação."""
-        response = client.put(
+        response = await async_client.put(
             "/api/v1/users/me/theme-preference",
             json={"theme_preference": "dark"},
         )

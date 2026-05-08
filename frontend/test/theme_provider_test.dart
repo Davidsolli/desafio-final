@@ -32,7 +32,7 @@ void main() {
       await provider.init();
 
       // Começa em system, muda para dark
-      provider.themeMode = ThemeMode.light;
+      await provider.setTheme(ThemeMode.light);
       await provider.toggleTheme();
       expect(provider.isDark, isTrue);
 
@@ -45,7 +45,7 @@ void main() {
       final provider = ThemeProvider();
       await provider.init();
 
-      provider.themeMode = ThemeMode.light;
+      await provider.setTheme(ThemeMode.light);
       await provider.toggleTheme();
 
       final prefs = await SharedPreferences.getInstance();
@@ -82,13 +82,13 @@ void main() {
       final provider = ThemeProvider();
       await provider.init();
 
-      provider.themeMode = ThemeMode.dark;
+      await provider.setTheme(ThemeMode.dark);
       expect(provider.isDark, isTrue);
 
-      provider.themeMode = ThemeMode.light;
+      await provider.setTheme(ThemeMode.light);
       expect(provider.isDark, isFalse);
 
-      provider.themeMode = ThemeMode.system;
+      await provider.setTheme(ThemeMode.system);
       expect(provider.isDark, isFalse);
     });
 
@@ -101,7 +101,7 @@ void main() {
         changeCount++;
       });
 
-      provider.themeMode = ThemeMode.light;
+      await provider.setTheme(ThemeMode.light);
       await provider.toggleTheme();
 
       expect(changeCount, greaterThan(0));

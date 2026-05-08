@@ -219,6 +219,8 @@ class UserService:
             user.phone_whatsapp = dto.phone_whatsapp
         if dto.goal_type is not None:
             user.goal_type = dto.goal_type
+        if dto.theme_preference is not None:
+            user.theme_preference = dto.theme_preference
 
         try:
             updated_user = await self.repository.update(user)
