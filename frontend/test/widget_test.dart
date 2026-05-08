@@ -10,13 +10,19 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omniconnect_fitness/main.dart';
 import 'package:omniconnect_fitness/services/api_client.dart';
+import 'package:omniconnect_fitness/services/notification_service.dart';
 
 void main() {
   testWidgets('Counter increments smoke test', (WidgetTester tester) async {
     // Build our app and trigger a frame.
     final apiClient = ApiClient();
     await apiClient.initialize();
-    await tester.pumpWidget(OmniConnectApp(apiClient: apiClient));
+    final notificationService = NotificationService(apiClient: apiClient);
+    
+    await tester.pumpWidget(OmniConnectApp(
+      apiClient: apiClient,
+      notificationService: notificationService,
+    ));
 
     // Verify that our counter starts at 0.
     expect(find.text('0'), findsOneWidget);
