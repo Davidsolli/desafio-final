@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/theme_colors.dart';
+import '../../theme/theme_provider.dart';
 import '../../routes/app_routes.dart';
 import '../../providers/admin_provider.dart';
 import '../../models/admin_models.dart';
@@ -106,6 +107,49 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                     child: _isEditing && admin != null ? _buildEditingForm(context, provider, admin) : _buildProfileDisplay(context, admin),
                   ),
                   const SizedBox(height: 32),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Preferências',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.textSecondary)),
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: context.colors.surface,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: context.colors.border),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    context.read<ThemeProvider>().isDark ? Icons.dark_mode : Icons.light_mode,
+                                    color: AppColors.primary,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    context.read<ThemeProvider>().isDark ? 'Modo Escuro' : 'Modo Claro',
+                                    style: Theme.of(context).textTheme.bodyMedium,
+                                  ),
+                                ],
+                              ),
+                              Switch(
+                                value: context.read<ThemeProvider>().isDark,
+                                onChanged: (_) => context.read<ThemeProvider>().toggleTheme(),
+                                activeColor: AppColors.primary,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 32),
+                      ],
+                    ),
+                  ),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: SizedBox(
