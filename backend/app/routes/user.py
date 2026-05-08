@@ -424,7 +424,14 @@ async def update_theme_preference(
     try:
         update_dto = UpdateUserDTO(theme_preference=dto.theme_preference)
         return await controller.update_user(current_user.id, update_dto)
+    except UserNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuário não encontrado",
+        )
     except Exception as e:
+        import logging
+        logging.error(f"Erro inesperado ao atualizar preferência de tema: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Erro ao atualizar preferência de tema",
