@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/theme_colors.dart';
 import '../../services/user_service.dart';
+import '../../shared/widgets/index.dart';
 
 class TrainerStudentsScreen extends StatefulWidget {
   const TrainerStudentsScreen({super.key});
@@ -92,29 +93,17 @@ class _TrainerStudentsScreenState extends State<TrainerStudentsScreen> {
             const SizedBox(height: 16),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: TextField(
+              child: OmniTextField(
                 controller: _searchController,
-                decoration: InputDecoration(
-                  hintText: 'Buscar aluno...',
-                  hintStyle: TextStyle(color: context.colors.textMuted),
-                  prefixIcon: Icon(Icons.search, color: context.colors.textMuted),
-                  filled: true,
-                  fillColor: context.colors.surface,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: context.colors.border),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                ),
-                style: TextStyle(color: context.colors.textPrimary),
+                labelText: 'Buscar aluno...',
+                hintText: 'Digite o nome do aluno',
+                prefixIcon: Icons.search,
               ),
             ),
             const SizedBox(height: 16),
             Expanded(
               child: _isLoading
-                  ? const Center(
-                      child: CircularProgressIndicator(color: AppColors.primary),
-                    )
+                  ? const OmniLoader()
                   : _error != null
                       ? Center(
                           child: Column(
@@ -125,10 +114,10 @@ class _TrainerStudentsScreenState extends State<TrainerStudentsScreen> {
                               Text(_error!,
                                   style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.textMuted)),
                               const SizedBox(height: 16),
-                              TextButton.icon(
+                              OmniButton(
+                                text: '🔄 Tentar novamente',
                                 onPressed: _loadStudents,
-                                icon: const Icon(Icons.refresh, size: 16),
-                                label: const Text('Tentar novamente'),
+                                isOutlined: true,
                               ),
                             ],
                           ),

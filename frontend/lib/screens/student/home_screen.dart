@@ -8,6 +8,7 @@ import '../../routes/app_routes.dart';
 import '../../services/api_client.dart';
 import '../../services/home_service.dart';
 import '../../providers/home_provider.dart';
+import '../../shared/widgets/index.dart';
 
 // HomeScreen creates and injects HomeProvider locally so main.dart stays
 // untouched. The provider is scoped to this route and disposed with it.
@@ -41,9 +42,7 @@ class _HomeBody extends StatelessWidget {
         if (provider.isLoading) {
           return Scaffold(
             backgroundColor: context.colors.background,
-            body: Center(
-              child: CircularProgressIndicator(color: AppColors.primary),
-            ),
+            body: const OmniLoader(),
           );
         }
 
@@ -69,10 +68,9 @@ class _HomeBody extends StatelessWidget {
                           ?.copyWith(color: context.colors.textSecondary),
                     ),
                     const SizedBox(height: 24),
-                    ElevatedButton.icon(
+                    OmniButton(
+                      text: 'Tentar novamente',
                       onPressed: provider.fetchHomeData,
-                      icon: const Icon(Icons.refresh, size: 18),
-                      label: const Text('Tentar novamente'),
                     ),
                   ],
                 ),

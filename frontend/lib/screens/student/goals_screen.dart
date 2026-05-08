@@ -7,6 +7,7 @@ import '../../providers/goal_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/goal_service.dart';
 import '../../utils/goal_utils.dart';
+import '../../shared/widgets/index.dart';
 import 'goal_detail_screen.dart';
 
 class GoalsScreen extends StatefulWidget {
@@ -48,7 +49,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
               child: Consumer<GoalProvider>(
                 builder: (context, goalProvider, _) {
                   if (goalProvider.isLoading) {
-                    return const Center(child: CircularProgressIndicator());
+                    return const OmniLoader();
                   }
 
                   if (goalProvider.error != null) {
@@ -60,9 +61,9 @@ class _GoalsScreenState extends State<GoalsScreen> {
                           const SizedBox(height: 16),
                           Text(goalProvider.error ?? 'Erro ao carregar metas'),
                           const SizedBox(height: 16),
-                          ElevatedButton(
+                          OmniButton(
+                            text: 'Tentar novamente',
                             onPressed: () => goalProvider.loadGoals(status: _selectedFilter),
-                            child: const Text('Tentar novamente'),
                           ),
                         ],
                       ),
@@ -83,10 +84,9 @@ class _GoalsScreenState extends State<GoalsScreen> {
                                 ),
                           ),
                           const SizedBox(height: 24),
-                          ElevatedButton.icon(
+                          OmniButton(
+                            text: '➕ Criar Meta',
                             onPressed: () => _showCreateGoalDialog(context),
-                            icon: const Icon(Icons.add),
-                            label: const Text('Criar Meta'),
                           ),
                         ],
                       ),
@@ -123,11 +123,11 @@ class _GoalsScreenState extends State<GoalsScreen> {
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Center(
         child: goalProvider.isLoadingMore
-            ? const CircularProgressIndicator()
-            : OutlinedButton.icon(
+            ? const OmniLoader()
+            : OmniButton(
+                text: '⬇️ Carregar mais',
                 onPressed: () => goalProvider.loadMoreGoals(),
-                icon: const Icon(Icons.expand_more),
-                label: const Text('Carregar mais'),
+                isOutlined: true,
               ),
       ),
     );
@@ -383,20 +383,16 @@ class _GoalsScreenState extends State<GoalsScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                TextField(
+                OmniTextField(
                   controller: titleController,
-                  decoration: const InputDecoration(
-                    labelText: 'Título *',
-                    hintText: 'Ex: Emagrecer 5kg',
-                  ),
+                  labelText: 'Título *',
+                  hintText: 'Ex: Emagrecer 5kg',
                 ),
                 const SizedBox(height: 12),
-                TextField(
+                OmniTextField(
                   controller: descriptionController,
-                  decoration: const InputDecoration(
-                    labelText: 'Descrição (opcional)',
-                    hintText: 'Ex: Objetivo para o mês',
-                  ),
+                  labelText: 'Descrição (opcional)',
+                  hintText: 'Ex: Objetivo para o mês',
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
@@ -408,30 +404,24 @@ class _GoalsScreenState extends State<GoalsScreen> {
                   onChanged: (val) => setDialogState(() => selectedCategory = val),
                 ),
                 const SizedBox(height: 12),
-                TextField(
+                OmniTextField(
                   controller: currentValueController,
+                  labelText: 'Valor inicial *',
+                  hintText: 'Ex: 80',
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(
-                    labelText: 'Valor inicial *',
-                    hintText: 'Ex: 80',
-                  ),
                 ),
                 const SizedBox(height: 12),
-                TextField(
+                OmniTextField(
                   controller: targetValueController,
+                  labelText: 'Valor alvo *',
+                  hintText: 'Ex: 75',
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(
-                    labelText: 'Valor alvo *',
-                    hintText: 'Ex: 75',
-                  ),
                 ),
                 const SizedBox(height: 12),
-                TextField(
+                OmniTextField(
                   controller: unitController,
-                  decoration: const InputDecoration(
-                    labelText: 'Unidade *',
-                    hintText: 'Ex: kg, cm, vezes',
-                  ),
+                  labelText: 'Unidade *',
+                  hintText: 'Ex: kg, cm, vezes',
                 ),
                 const SizedBox(height: 12),
                 OutlinedButton.icon(
@@ -461,9 +451,10 @@ class _GoalsScreenState extends State<GoalsScreen> {
               onPressed: isSaving ? null : () => Navigator.pop(dialogContext),
               child: const Text('Cancelar'),
             ),
-            TextButton(
+            OmniButton(
+              text: 'Criar',
               onPressed: isSaving
-                  ? null
+                  ? () {}
                   : () {
                       final title = titleController.text.trim();
                       final unit = unitController.text.trim();
@@ -547,13 +538,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
                         );
                       });
                     },
-              child: isSaving
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Criar'),
+              isLoading: isSaving,
             ),
           ],
         ),
@@ -572,22 +557,21 @@ class _GoalsScreenState extends State<GoalsScreen> {
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) => AlertDialog(
           title: const Text('Atualizar Progresso'),
-          content: TextField(
+          content: OmniTextField(
             controller: currentValueController,
+            labelText: 'Valor atual (${goal.unit})',
+            hintText: goal.currentValue.toStringAsFixed(1),
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: InputDecoration(
-              labelText: 'Valor atual (${goal.unit})',
-              hintText: goal.currentValue.toStringAsFixed(1),
-            ),
           ),
           actions: [
             TextButton(
               onPressed: isSaving ? null : () => Navigator.pop(dialogContext),
               child: const Text('Cancelar'),
             ),
-            TextButton(
+            OmniButton(
+              text: 'Atualizar',
               onPressed: isSaving
-                  ? null
+                  ? () {}
                   : () {
                       final newValue = double.tryParse(currentValueController.text);
                       if (newValue == null || newValue < 0) {
@@ -609,13 +593,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
                         );
                       });
                     },
-              child: isSaving
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Atualizar'),
+              isLoading: isSaving,
             ),
           ],
         ),

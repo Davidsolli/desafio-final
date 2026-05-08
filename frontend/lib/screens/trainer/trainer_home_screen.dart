@@ -8,6 +8,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/dashboard_provider.dart';
 import '../../services/dashboard_service.dart';
 import '../../services/api_client.dart';
+import '../../shared/widgets/index.dart';
 
 class TrainerHomeScreen extends StatefulWidget {
   const TrainerHomeScreen({super.key});
@@ -46,9 +47,7 @@ class _TrainerHomeScreenState extends State<TrainerHomeScreen> {
           child: Consumer<DashboardProvider>(
             builder: (context, provider, _) {
               if (provider.isLoading) {
-                return const Center(
-                  child: CircularProgressIndicator(color: AppColors.primary),
-                );
+                return const OmniLoader();
               }
 
               if (provider.error != null) {
@@ -61,9 +60,9 @@ class _TrainerHomeScreenState extends State<TrainerHomeScreen> {
                       Text(provider.error ?? 'Erro ao carregar',
                           style: Theme.of(context).textTheme.bodyLarge),
                       const SizedBox(height: 24),
-                      ElevatedButton(
+                      OmniButton(
+                        text: 'Tentar Novamente',
                         onPressed: () => _initDashboard(),
-                        child: const Text('Tentar Novamente'),
                       ),
                     ],
                   ),

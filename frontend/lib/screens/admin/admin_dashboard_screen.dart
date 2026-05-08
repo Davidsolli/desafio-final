@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/theme_colors.dart';
 import '../../providers/admin_provider.dart';
+import '../../shared/widgets/index.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({Key? key}) : super(key: key);
@@ -46,7 +47,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             final inactiveCount = provider.trainers.where((t) => !t.isActive).length;
 
             if (provider.isLoading) {
-              return const Center(child: CircularProgressIndicator());
+              return const Center(child: OmniLoader());
             }
 
             if (provider.error != null) {
@@ -56,9 +57,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   children: [
                     Text('Erro: ${provider.error}'),
                     const SizedBox(height: 16),
-                    ElevatedButton(
+                    OmniButton(
+                      text: 'Tentar novamente',
                       onPressed: () => provider.loadTrainers(),
-                      child: const Text('Tentar novamente'),
                     ),
                   ],
                 ),
@@ -89,30 +90,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   child: Row(
                     children: [
                       Expanded(
-                        child: TextField(
+                        child: OmniTextField(
                           controller: _searchController,
-                          decoration: InputDecoration(
-                            hintText: 'Buscar trainer...',
-                            hintStyle: TextStyle(color: context.colors.textMuted),
-                            prefixIcon: Icon(Icons.search, color: context.colors.textMuted),
-                            filled: true,
-                            fillColor: context.colors.surface,
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide(color: context.colors.border),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                          ),
+                          labelText: 'Buscar trainer...',
+                          hintText: 'Digite nome ou email',
+                          prefixIcon: Icons.search,
                         ),
                       ),
                       const SizedBox(width: 8),
-                      ElevatedButton(
+                      OmniButton(
+                        text: '➕',
                         onPressed: () => context.push('/admin/add-trainer'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                        ),
-                        child: const Icon(Icons.add, color: Colors.white),
+                        width: 48,
                       ),
                     ],
                   ),

@@ -7,6 +7,7 @@ import '../../theme/theme_colors.dart';
 import '../../models/workout_sheet_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/workout_sheet_provider.dart';
+import '../../shared/widgets/index.dart';
 
 class WorkoutsScreen extends StatefulWidget {
   const WorkoutsScreen({super.key});
@@ -141,9 +142,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
               child: Consumer<WorkoutSheetProvider>(
                 builder: (ctx, provider, _) {
                   if (provider.isLoading) {
-                    return const Center(
-                      child: CircularProgressIndicator(color: AppColors.primary),
-                    );
+                    return const OmniLoader();
                   }
 
                   if (provider.error != null) {
@@ -159,10 +158,9 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                                   .bodySmall
                                   ?.copyWith(color: context.colors.textMuted)),
                           const SizedBox(height: 16),
-                          ElevatedButton.icon(
+                          OmniButton(
+                            text: '🔄 Tentar Novamente',
                             onPressed: _loadUserSheets,
-                            icon: const Icon(Icons.refresh),
-                            label: const Text('Tentar Novamente'),
                           ),
                         ],
                       ),
@@ -488,12 +486,8 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                 child: SizedBox(
                   width: double.infinity,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
+                  child: OmniButton(
+                    text: '✅ Finalizar Treino',
                     onPressed: () {
                       setState(() {
                         _selectedSheetId = null;
@@ -507,11 +501,6 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
                         ),
                       );
                     },
-                    child: Text('✅ Finalizar Treino',
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodyMedium
-                            ?.copyWith(color: Colors.white, fontWeight: FontWeight.w600)),
                   ),
                 ),
               ),

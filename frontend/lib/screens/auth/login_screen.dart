@@ -5,6 +5,7 @@ import '../../theme/app_colors.dart';
 import '../../theme/theme_colors.dart';
 import '../../routes/app_routes.dart';
 import '../../providers/auth_provider.dart';
+import '../../shared/widgets/index.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -16,7 +17,6 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  bool _obscurePassword = true;
   bool _isLoading = false;
 
   @override
@@ -120,64 +120,26 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                     ),
                     const SizedBox(height: 16),
-                    // Email
-                    TextField(
+                    OmniTextField(
                       controller: _emailController,
-                      decoration: InputDecoration(
-                        labelText: 'Email',
-                        hintText: 'seu@email.com',
-                        prefixIcon: const Icon(Icons.email_outlined),
-                      ),
+                      labelText: 'Email',
+                      hintText: 'seu@email.com',
+                      prefixIcon: Icons.email_outlined,
                     ),
                     const SizedBox(height: 12),
-                    // Senha
-                    TextField(
+                    OmniTextField(
                       controller: _passwordController,
-                      obscureText: _obscurePassword,
-                      decoration: InputDecoration(
-                        labelText: 'Senha',
-                        hintText: '••••••••',
-                        prefixIcon: const Icon(Icons.lock_outlined),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscurePassword
-                                ? Icons.visibility_off_outlined
-                                : Icons.visibility_outlined,
-                          ),
-                          onPressed: () {
-                            setState(() => _obscurePassword = !_obscurePassword);
-                          },
-                        ),
-                      ),
+                      labelText: 'Senha',
+                      hintText: '••••••••',
+                      obscureText: true,
+                      prefixIcon: Icons.lock_outlined,
                     ),
                     const SizedBox(height: 20),
-                    // Botão Login
-                    SizedBox(
+                    OmniButton(
+                      text: 'Entrar',
+                      onPressed: _handleLogin,
+                      isLoading: _isLoading,
                       width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: _isLoading ? null : _handleLogin,
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          backgroundColor: AppColors.primary,
-                        ),
-                        child: _isLoading
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor:
-                                      AlwaysStoppedAnimation(Colors.white),
-                                ),
-                              )
-                            : Text(
-                                'Entrar',
-                                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                              ),
-                      ),
                     ),
                     const SizedBox(height: 16),
                     // Divider
@@ -205,26 +167,11 @@ class _LoginScreenState extends State<LoginScreen> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    // Botão "Tenho um código"
-                    SizedBox(
+                    OmniButton(
+                      text: 'Tenho um Código de Acesso',
+                      onPressed: () => context.go(AppRoutes.inviteCode),
+                      isOutlined: true,
                       width: double.infinity,
-                      child: OutlinedButton(
-                        onPressed: () => context.go(AppRoutes.inviteCode),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          side: BorderSide(
-                            color: AppColors.primary,
-                            width: 1.5,
-                          ),
-                        ),
-                        child: Text(
-                          'Tenho um Código de Acesso',
-                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                color: AppColors.primary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                        ),
-                      ),
                     ),
                   ],
                 ),
