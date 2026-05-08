@@ -21,22 +21,41 @@ import 'providers/workout_sheet_provider.dart';
 import 'providers/invitation_provider.dart';
 import 'providers/admin_provider.dart';
 
+import 'package:firebase_core/firebase_core.dart';
+import 'services/notification_service.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Inicializa o Firebase
+  try {
+    await Firebase.initializeApp();
+  } catch (e) {
+    debugPrint('Erro ao inicializar Firebase: $e');
+  }
 
   // Inicializa API Client
   final apiClient = ApiClient();
   await apiClient.initialize();
 
-  runApp(OmniConnectApp(apiClient: apiClient));
+  // Inicializa o serviço de notificações
+  final notificationService = NotificationService(apiClient: apiClient);
+  await notificationService.initialize();
+
+  runApp(OmniConnectApp(
+    apiClient: apiClient, 
+    notificationService: notificationService
+  ));
 }
 
 class OmniConnectApp extends StatelessWidget {
   final ApiClient apiClient;
+  final NotificationService notificationService;
 
   const OmniConnectApp({
     Key? key,
     required this.apiClient,
+    required this.notificationService,
   }) : super(key: key);
 
   @override
@@ -45,6 +64,9 @@ class OmniConnectApp extends StatelessWidget {
       providers: [
         // API Client (singleton)
         Provider<ApiClient>.value(value: apiClient),
+        
+        // Notification Service
+        Provider<NotificationService>.value(value: notificationService),
 
         // Auth Service (depende de ApiClient)
         ProxyProvider<ApiClient, AuthService>(
