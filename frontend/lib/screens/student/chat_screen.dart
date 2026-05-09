@@ -326,6 +326,7 @@ class _ChatScreenState extends State<ChatScreen> {
       body: SafeArea(
         child: Column(
           children: [
+            const _ProfessionalDisclaimer(),
             Expanded(
               child: ListView.builder(
                 controller: _scrollController,
@@ -452,6 +453,47 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Banner persistente do Card 19.9: lembra que o assistente é informativo.
+class _ProfessionalDisclaimer extends StatelessWidget {
+  const _ProfessionalDisclaimer();
+
+  static const String text =
+      'Este assistente é informativo e não substitui a orientação do seu '
+      'Personal Trainer ou Nutricionista.';
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.accentWarning.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: AppColors.accentWarning.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.info_outline,
+              color: AppColors.accentWarning, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                fontSize: 11,
+                color: context.colors.textSecondary,
+                height: 1.3,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
