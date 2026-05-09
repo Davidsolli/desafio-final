@@ -1,11 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:omniconnect_fitness/services/notification_service.dart';
 import 'package:omniconnect_fitness/services/api_client.dart';
 
-// Mock classes
-class MockApiClient extends Mock implements ApiClient {}
+import 'notification_service_test.mocks.dart';
 
+@GenerateMocks([ApiClient])
 void main() {
   group('NotificationService', () {
     late MockApiClient mockApiClient;
@@ -16,11 +17,9 @@ void main() {
       notificationService = NotificationService(apiClient: mockApiClient);
     });
 
-    testWidgets('test_enviar_token_fcm_ao_backend', (WidgetTester tester) async {
-      // Teste: Enviar token FCM ao backend
+    test('sendTokenToBackend chama PUT com o token correto', () async {
       const token = 'mock_fcm_token_123';
 
-      // Mock da chamada de API
       when(
         mockApiClient.put<Map<String, dynamic>>(
           '/api/v1/notifications/token',
@@ -29,22 +28,21 @@ void main() {
         ),
       ).thenAnswer((_) async => {'success': true});
 
-      // Executar
       await notificationService.sendTokenToBackend(token);
 
-      // Verificar se foi chamado
-      verify(
+      final captured = verify(
         mockApiClient.put<Map<String, dynamic>>(
           '/api/v1/notifications/token',
-          body: anything,
-          fromJson: anything,
+          body: captureAnyNamed('body'),
+          fromJson: anyNamed('fromJson'),
         ),
-      ).called(1);
+      )..called(1);
+
+      final sentBody = captured.captured.first as Map<String, dynamic>;
+      expect(sentBody['fcm_token'], equals(token));
     });
 
-    testWidgets('test_carregar_preferencias_notificacao',
-        (WidgetTester tester) async {
-      // Teste: Carregar preferências de notificação
+    test('getPreferences retorna mapa com todas as preferências', () async {
       final mockPrefs = {
         'notifications_enabled': true,
         'workout_reminder_enabled': true,
@@ -55,7 +53,6 @@ void main() {
         'silent_days': [0, 6],
       };
 
-      // Mock da chamada
       when(
         mockApiClient.get<Map<String, dynamic>>(
           '/api/v1/notifications/preferences',
@@ -63,25 +60,21 @@ void main() {
         ),
       ).thenAnswer((_) async => mockPrefs);
 
-      // Executar
       final prefs = await notificationService.getPreferences();
 
-      // Verificar
       expect(prefs['notifications_enabled'], isTrue);
       expect(prefs['workout_reminder_enabled'], isTrue);
       expect(prefs['quiet_hours_start'], equals('22:00'));
       expect(prefs['silent_days'], equals([0, 6]));
     });
 
-    testWidgets('test_atualizar_preferencias_notificacao',
-        (WidgetTester tester) async {
-      // Teste: Atualizar preferências
+    test('updatePreferences retorna true quando API responde com sucesso',
+        () async {
       final updateData = {
         'workout_reminder_time': '18:00',
         'notifications_enabled': false,
       };
 
-      // Mock da chamada
       when(
         mockApiClient.put<Map<String, dynamic>>(
           '/api/v1/notifications/preferences',
@@ -90,23 +83,20 @@ void main() {
         ),
       ).thenAnswer((_) async => updateData);
 
-      // Executar
       final success = await notificationService.updatePreferences(updateData);
 
-      // Verificar
       expect(success, isTrue);
       verify(
         mockApiClient.put<Map<String, dynamic>>(
           '/api/v1/notifications/preferences',
-          body: anything,
-          fromJson: anything,
+          body: anyNamed('body'),
+          fromJson: anyNamed('fromJson'),
         ),
       ).called(1);
     });
 
-    testWidgets('test_preferencias_invalidas_retorna_vazio',
-        (WidgetTester tester) async {
-      // Teste: Chamada com erro retorna mapa vazio
+    test('getPreferences retorna mapa vazio quando a API lança exceção',
+        () async {
       when(
         mockApiClient.get<Map<String, dynamic>>(
           '/api/v1/notifications/preferences',
@@ -114,18 +104,12 @@ void main() {
         ),
       ).thenThrow(Exception('Network error'));
 
-      // Executar
       final prefs = await notificationService.getPreferences();
 
-      // Verificar - retorna vazio em caso de erro
       expect(prefs.isEmpty, isTrue);
     });
 
-    testWidgets('test_atualizar_preferencias_com_erro_retorna_falso',
-        (WidgetTester tester) async {
-      // Teste: Atualizar com erro retorna false
-      final updateData = {'notifications_enabled': true};
-
+    test('updatePreferences retorna false quando a API lança exceção', () async {
       when(
         mockApiClient.put<Map<String, dynamic>>(
           '/api/v1/notifications/preferences',
@@ -134,10 +118,9 @@ void main() {
         ),
       ).thenThrow(Exception('API error'));
 
-      // Executar
-      final success = await notificationService.updatePreferences(updateData);
+      final success =
+          await notificationService.updatePreferences({'notifications_enabled': true});
 
-      // Verificar
       expect(success, isFalse);
     });
   });

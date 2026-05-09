@@ -4,13 +4,18 @@ import 'api_client.dart';
 
 class NotificationService {
   final ApiClient apiClient;
-  final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
-  final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
+  final FirebaseMessaging _firebaseMessaging;
+  final FlutterLocalNotificationsPlugin _localNotifications;
 
-  NotificationService({required this.apiClient});
+  NotificationService({
+    required this.apiClient,
+    FirebaseMessaging? firebaseMessaging,
+    FlutterLocalNotificationsPlugin? localNotifications,
+  })  : _firebaseMessaging = firebaseMessaging ?? FirebaseMessaging.instance,
+        _localNotifications =
+            localNotifications ?? FlutterLocalNotificationsPlugin();
 
   Future<void> initialize() async {
-    // 1. Pedir Permissão (Importante no iOS, no Android 13+ abre popup nativo)
     NotificationSettings settings = await _firebaseMessaging.requestPermission(
       alert: true,
       badge: true,
@@ -18,21 +23,15 @@ class NotificationService {
     );
 
     if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-      print('Usuário aceitou as notificações.');
-      
-      // 2. Pegar o Token FCM
       String? token = await _firebaseMessaging.getToken();
       if (token != null) {
-        print('FCM Token: $token');
         await sendTokenToBackend(token);
       }
 
-      // 3. Ouvir quando o token for atualizado
       _firebaseMessaging.onTokenRefresh.listen((newToken) {
         sendTokenToBackend(newToken);
       });
 
-      // 4. Configurar handler para quando o app está aberto (foreground)
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
         _showLocalNotification(message);
       });
@@ -46,17 +45,15 @@ class NotificationService {
         body: {'fcm_token': token},
         fromJson: (json) => json as Map<String, dynamic>,
       );
-      print('Token enviado ao backend com sucesso');
     } catch (e) {
       print('Erro ao enviar token FCM pro backend: $e');
     }
   }
 
   void _showLocalNotification(RemoteMessage message) async {
-    // Config básica para mostrar notificação heads-up quando o app tá aberto
     const androidDetails = AndroidNotificationDetails(
-      'omniconnect_channel', // id do canal
-      'Lembretes OmniConnect', // nome do canal
+      'omniconnect_channel',
+      'Lembretes OmniConnect',
       importance: Importance.max,
       priority: Priority.high,
     );
