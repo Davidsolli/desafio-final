@@ -43,6 +43,15 @@ def _get_async_session_local():
     return _AsyncSessionLocal
 
 
+def async_session_maker():
+    """
+    Fábrica de sessões para uso em background tasks (não em rotas FastAPI).
+    Retorna um AsyncSession como context manager: `async with async_session_maker() as session`.
+    Para rotas FastAPI, use `Depends(get_db)` em vez desta função.
+    """
+    return _get_async_session_local()()
+
+
 async def get_db() -> AsyncSession:
     """Dependency injection para obter sessão de banco."""
     session_local = _get_async_session_local()
