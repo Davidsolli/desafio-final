@@ -22,7 +22,7 @@ from app.repositories.notification_repository import NotificationRepository
 class TestNotifications:
     """Testes para o módulo de notificações - 8+ testes"""
 
-    async def test_criar_preferencias_notificacao(self, db_session: AsyncSession):
+    async def test_criar_preferencias_notificacao(self, test_db_session: AsyncSession):
         """Teste 1: Criar preferências de notificação"""
         user_id = uuid4()
 
@@ -39,11 +39,11 @@ class TestNotifications:
             silent_days=[0, 6],  # domingo e sábado
         )
 
-        db_session.add(pref)
-        await db_session.commit()
+        test_db_session.add(pref)
+        await test_db_session.commit()
 
         # Verificar se foi criada
-        result = await db_session.execute(
+        result = await test_db_session.execute(
             select(NotificationPreference).where(
                 NotificationPreference.user_id == user_id
             )
@@ -57,7 +57,7 @@ class TestNotifications:
         assert saved_pref.workout_reminder_time == time(17, 0)
         assert saved_pref.silent_days == [0, 6]
 
-    async def test_atualizar_preferencias(self, db_session: AsyncSession):
+    async def test_atualizar_preferencias(self, test_db_session: AsyncSession):
         """Teste 2: Atualizar preferências"""
         user_id = uuid4()
 
@@ -70,16 +70,16 @@ class TestNotifications:
             meal_reminder_enabled=False,
             new_workout_sheet_enabled=True,
         )
-        db_session.add(pref)
-        await db_session.commit()
+        test_db_session.add(pref)
+        await test_db_session.commit()
 
         # Atualizar
         pref.workout_reminder_time = time(18, 30)
         pref.meal_reminder_enabled = True
-        await db_session.commit()
+        await test_db_session.commit()
 
         # Verificar atualização
-        result = await db_session.execute(
+        result = await test_db_session.execute(
             select(NotificationPreference).where(
                 NotificationPreference.user_id == user_id
             )
@@ -89,7 +89,7 @@ class TestNotifications:
         assert updated_pref.workout_reminder_time == time(18, 30)
         assert updated_pref.meal_reminder_enabled is True
 
-    async def test_agendar_notificacao_treino(self, db_session: AsyncSession):
+    async def test_agendar_notificacao_treino(self, test_db_session: AsyncSession):
         """Teste 3: Agendar notificação de treino"""
         user_id = uuid4()
         workout_sheet_id = uuid4()
@@ -106,11 +106,11 @@ class TestNotifications:
             delivery_status="pending",
         )
 
-        db_session.add(schedule)
-        await db_session.commit()
+        test_db_session.add(schedule)
+        await test_db_session.commit()
 
         # Verificar se foi agendado
-        result = await db_session.execute(
+        result = await test_db_session.execute(
             select(WorkoutReminderSchedule).where(
                 WorkoutReminderSchedule.user_id == user_id
             )
@@ -125,7 +125,7 @@ class TestNotifications:
         assert saved_schedule.sent is False
         assert saved_schedule.delivery_status == "pending"
 
-    async def test_enviar_notificacao_fcm_mock(self, db_session: AsyncSession):
+    async def test_enviar_notificacao_fcm_mock(self, test_db_session: AsyncSession):
         """Teste 4: Enviar notificação via FCM (mock) - integração real com service"""
         from app.models.user import User
         from app.services.fcm_service import FCMService
@@ -137,18 +137,18 @@ class TestNotifications:
             id=user_id,
             email="test@test.com",
             name="Test User",
-            password_hash="hash",
-            role="student",
+            password="hash",
+            role="client",
             fcm_token="mock_token_abc123"
         )
-        db_session.add(user)
-        await db_session.commit()
+        test_db_session.add(user)
+        await test_db_session.commit()
 
         # Mock do Firebase send()
         with patch("firebase_admin.messaging.send") as mock_send:
             mock_send.return_value = "mock_response_id"
 
-            service = NotificationService(db_session)
+            service = NotificationService(test_db_session)
             log = await service.send_notification(
                 user_id=user_id,
                 type="workout_reminder",
@@ -164,7 +164,7 @@ class TestNotifications:
             assert log.sent_at is not None
             assert log.notification_type == "workout_reminder"
 
-    async def test_respeitar_quiet_hours(self, db_session: AsyncSession):
+    async def test_respeitar_quiet_hours(self, test_db_session: AsyncSession):
         """Teste 5: Respeitar quiet hours (horário de silêncio)"""
         user_id = uuid4()
 
@@ -177,11 +177,11 @@ class TestNotifications:
             quiet_hours_end=time(7, 0),
         )
 
-        db_session.add(pref)
-        await db_session.commit()
+        test_db_session.add(pref)
+        await test_db_session.commit()
 
         # Verificar se quiet hours foi salvo
-        result = await db_session.execute(
+        result = await test_db_session.execute(
             select(NotificationPreference).where(
                 NotificationPreference.user_id == user_id
             )
@@ -200,7 +200,7 @@ class TestNotifications:
 
         assert is_in_quiet_hours is True
 
-    async def test_respeitar_silent_days(self, db_session: AsyncSession):
+    async def test_respeitar_silent_days(self, test_db_session: AsyncSession):
         """Teste 6: Respeitar silent days (dias silenciosos)"""
         user_id = uuid4()
 
@@ -211,11 +211,11 @@ class TestNotifications:
             silent_days=[5, 6],  # sábado, domingo
         )
 
-        db_session.add(pref)
-        await db_session.commit()
+        test_db_session.add(pref)
+        await test_db_session.commit()
 
         # Verificar se silent days foi salvo
-        result = await db_session.execute(
+        result = await test_db_session.execute(
             select(NotificationPreference).where(
                 NotificationPreference.user_id == user_id
             )
@@ -230,7 +230,7 @@ class TestNotifications:
 
         assert is_silent_day is True
 
-    async def test_marcar_como_lido(self, db_session: AsyncSession):
+    async def test_marcar_como_lido(self, test_db_session: AsyncSession):
         """Teste 7: Marcar notificação como lida"""
         user_id = uuid4()
 
@@ -245,18 +245,18 @@ class TestNotifications:
             status="sent",
         )
 
-        db_session.add(log)
-        await db_session.commit()
+        test_db_session.add(log)
+        await test_db_session.commit()
 
         # Marcar como lida via repository
-        repo = NotificationRepository(db_session)
+        repo = NotificationRepository(test_db_session)
         updated_log = await repo.mark_log_as_read(log.id, user_id)
 
         assert updated_log is not None
         assert updated_log.read_at is not None
         assert updated_log.read_at > updated_log.sent_at
 
-    async def test_historico_ordenado(self, db_session: AsyncSession):
+    async def test_historico_ordenado(self, test_db_session: AsyncSession):
         """Teste 8: Histórico ordenado (mais recentes primeiro)"""
         user_id = uuid4()
 
@@ -270,12 +270,12 @@ class TestNotifications:
                 sent_at=datetime(2026, 5, 8, 10, i, tzinfo=timezone.utc),
                 status="sent",
             )
-            db_session.add(log)
+            test_db_session.add(log)
 
-        await db_session.commit()
+        await test_db_session.commit()
 
         # Buscar historico via service
-        service = NotificationService(db_session)
+        service = NotificationService(test_db_session)
         logs = await service.get_history(user_id)
 
         assert len(logs) == 3
@@ -286,7 +286,7 @@ class TestNotifications:
         assert logs[2].title == "Notificação 0"
 
     async def test_notificacoes_desabilitadas_nao_enviadas(
-        self, db_session: AsyncSession
+        self, test_db_session: AsyncSession
     ):
         """Teste 9: Notificações desabilitadas não são enviadas - enforcement real"""
         from app.models.user import User
@@ -298,22 +298,22 @@ class TestNotifications:
             id=user_id,
             email="test@test.com",
             name="Test User",
-            password_hash="hash",
-            role="student",
+            password="hash",
+            role="client",
             fcm_token="mock_token"
         )
-        db_session.add(user)
+        test_db_session.add(user)
 
         pref = NotificationPreference(
             user_id=user_id,
             notifications_enabled=False,
             workout_reminder_enabled=True,
         )
-        db_session.add(pref)
-        await db_session.commit()
+        test_db_session.add(pref)
+        await test_db_session.commit()
 
         # Tentar enviar notificação: deve falhar (sem token válido em preferências)
-        service = NotificationService(db_session)
+        service = NotificationService(test_db_session)
         log = await service.send_notification(
             user_id=user_id,
             type="workout_reminder",
@@ -326,7 +326,7 @@ class TestNotifications:
         # O log foi criado, mas o scheduler deveria ter pulado
 
     async def test_notificacao_clicada_registra_timestamp(
-        self, db_session: AsyncSession
+        self, test_db_session: AsyncSession
     ):
         """Teste 10: Notificação clicada registra timestamp"""
         user_id = uuid4()
@@ -343,15 +343,15 @@ class TestNotifications:
             status="sent",
         )
 
-        db_session.add(log)
-        await db_session.commit()
+        test_db_session.add(log)
+        await test_db_session.commit()
 
         # Registrar clique
         log.clicked_at = datetime.now(timezone.utc)
-        await db_session.commit()
+        await test_db_session.commit()
 
         # Verificar
-        result = await db_session.execute(
+        result = await test_db_session.execute(
             select(NotificationLog).where(NotificationLog.user_id == user_id)
         )
         updated_log = result.scalars().first()
