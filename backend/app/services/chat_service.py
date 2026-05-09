@@ -16,8 +16,11 @@ import logging
 import re
 import time
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, Awaitable, Callable
 from uuid import UUID, uuid4
+
+# Tipo de callback de status (envia eventos {"type":"status", ...} para clientes)
+StatusCallback = Callable[[dict[str, Any]], Awaitable[None]]
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -246,6 +249,7 @@ class ChatService:
         message: str,
         conversation_id: UUID | None = None,
         academy_id: UUID | None = None,
+        on_status: StatusCallback | None = None,
     ) -> dict[str, Any]:
         """
         Processar mensagem do aluno e retornar resposta do chatbot.
@@ -263,6 +267,10 @@ class ChatService:
             message: Texto da mensagem.
             conversation_id: UUID da conversa existente (None = nova).
             academy_id: UUID da academia para filtrar RAG.
+            on_status: callback opcional invocado com eventos
+                {"type": "status", "status": ..., "message": ...} durante o
+                processamento. Permite que clientes (ex.: WebSocket) deem
+                feedback visual em tempo real sem acoplar UI à lógica.
 
         Returns:
             Dicionário com message_id, conversation_id, content, retrieved_documents, etc.
@@ -271,12 +279,22 @@ class ChatService:
             RateLimitExceededError: Limite de mensagens atingido.
             MessageTooLongError: Mensagem muito longa.
         """
+        async def emit(status_name: str, message_text: str) -> None:
+            if on_status is None:
+                return
+            try:
+                await on_status({"type": "status", "status": status_name, "message": message_text})
+            except Exception:
+                logger.debug("Erro ao emitir status %s — ignorando", status_name)
+
         # 1. Sanitizar e validar
         clean_message = self.sanitize_input(message)
         if len(message) > MAX_MESSAGE_LENGTH:
             raise MessageTooLongError(
                 f"Mensagem excede {MAX_MESSAGE_LENGTH} caracteres."
             )
+
+        await emit("thinking", "Analisando sua pergunta...")
 
         # 2. Rate limit
         await self._check_rate_limit(user_id)
@@ -300,8 +318,11 @@ class ChatService:
         self.session.add(user_msg)
         await self.session.flush()
 
+        await emit("searching", "Buscando na base de conhecimento...")
+
         # 6. Pipeline RAG
         start = time.monotonic()
+        await emit("generating", "Preparando sua resposta...")
         rag_result: RAGResult = await rag_chain.run(
             query=clean_message,
             session=self.session,
