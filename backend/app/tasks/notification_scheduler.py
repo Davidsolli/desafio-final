@@ -146,7 +146,8 @@ class NotificationScheduler:
                     meal_time = pref.meal_reminder_time
                     target_minutes = meal_time.hour * 60 + meal_time.minute
 
-                    if abs(current_minutes - target_minutes) > WINDOW_MINUTES:
+                    diff = abs(current_minutes - target_minutes)
+                    if min(diff, 1440 - diff) > WINDOW_MINUTES:
                         continue
 
                     # send_notification aplica os demais guards (quiet hours, silent days)
