@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -9,6 +10,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.config.database import init_db
 from app.routes import user, auth, chat, logbook, goal, invitation, password
+from app.tasks.cleanup_tasks import background_cleanup_task
 from app.routes.workout_sheet import router as workout_sheet_router, catalog_router as exercise_catalog_router
 from app.routes.food_catalog import router as food_catalog_router
 from app.routes.diet import custom_food_router, diet_router
@@ -19,12 +21,22 @@ from app.routes.diet_logbook import router as diet_logbook_router
 async def lifespan(app: FastAPI):
     """
     Gerenciar lifecycle da aplicação.
-    Inicializa o banco de dados na startup.
+    Inicializa o banco de dados e inicia tasks de limpeza na startup.
     """
     # Startup
     await init_db()
+
+    # Iniciar task de limpeza de tokens expirados (background)
+    cleanup_task = asyncio.create_task(background_cleanup_task())
+
     yield
-    # Shutdown (aqui iria lógica de cleanup se necessário)
+
+    # Shutdown: Cancelar task de limpeza
+    cleanup_task.cancel()
+    try:
+        await cleanup_task
+    except asyncio.CancelledError:
+        pass
 
 
 # Inicialização da aplicação

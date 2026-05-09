@@ -113,6 +113,29 @@ class PasswordResetRepository:
         result = await self.session.execute(query)
         return result.scalars().all()
 
+    async def get_active_by_user(self, user_id: UUID) -> Optional[PasswordResetToken]:
+        """
+        Buscar token ativo (não usado e não expirado) de um usuário.
+
+        Garante idempotência: se houver token válido para o mesmo usuário,
+        reutilizar em vez de gerar novo.
+
+        Args:
+            user_id: UUID do usuário
+
+        Returns:
+            PasswordResetToken ativo ou None se não há
+        """
+        query = select(PasswordResetToken).where(
+            and_(
+                PasswordResetToken.user_id == user_id,
+                PasswordResetToken.used == False,
+                PasswordResetToken.expires_at > datetime.now(timezone.utc),
+            )
+        ).order_by(PasswordResetToken.created_at.desc())
+        result = await self.session.execute(query)
+        return result.scalar_one_or_none()
+
     async def delete_by_token_hash(self, token_hash: str) -> bool:
         """
         Deletar token específico por hash.
