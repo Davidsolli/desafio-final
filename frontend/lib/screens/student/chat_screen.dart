@@ -1,154 +1,213 @@
-import 'dart:convert';
 import 'dart:async';
-import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
+import 'dart:convert';
+
 import 'package:animate_do/animate_do.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+
+import '../../config/api_config.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/theme_colors.dart';
-import '../../routes/app_routes.dart';
-import '../../config/api_config.dart';
 
+/// Tela do chatbot do aluno.
+///
+/// Suporta 3 modos:
+/// - Conversa nova: instancia, conecta WS, primeira pergunta cria conversa.
+/// - Conversa existente: passar `conversationId` para retomar.
+/// - Testes: passar `channelFactory` (e opcionalmente `jwtToken`) para
+///   evitar a leitura de `SharedPreferences` e usar um canal fake.
 class ChatScreen extends StatefulWidget {
-  const ChatScreen({super.key});
+  final String? conversationId;
+
+  /// Fábrica de WebSocketChannel — apenas para testes.
+  @visibleForTesting
+  final WebSocketChannel Function(Uri uri)? channelFactory;
+
+  /// Token JWT injetado — apenas para testes (sem `SharedPreferences`).
+  @visibleForTesting
+  final String? jwtToken;
+
+  const ChatScreen({
+    super.key,
+    this.conversationId,
+    this.channelFactory,
+    this.jwtToken,
+  });
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
+class _ChatMsg {
+  final String role;
+  final String text;
+  final String time;
+  _ChatMsg({required this.role, required this.text, required this.time});
+}
+
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
-  final List<Map<String, String>> _messages = [];
+  final List<_ChatMsg> _messages = [];
+
   WebSocketChannel? _channel;
   bool _isConnected = false;
   String? _conversationId;
 
+  // Indicador de carregamento (Card 18.7)
+  bool _isTyping = false;
+  String _typingStatus = '';
+
   @override
   void initState() {
     super.initState();
+    _conversationId = widget.conversationId;
     _connectWebSocket();
   }
 
   Future<void> _connectWebSocket() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('jwt_token');
+    final token = widget.jwtToken ?? await _readToken();
 
     if (token == null || token.isEmpty) {
-      if (mounted) {
-        setState(() {
-          _messages.add({
-            'role': 'assistant',
-            'text': 'Erro de autenticação. Por favor, faça login novamente.',
-            'time': _formatTime(),
-          });
-        });
-      }
+      if (!mounted) return;
+      setState(() {
+        _messages.add(_ChatMsg(
+          role: 'assistant',
+          text: 'Erro de autenticação. Por favor, faça login novamente.',
+          time: _formatTime(),
+        ));
+      });
       return;
     }
 
-    // Usa ApiConfig para URL base (não hardcoded)
-    final wsBaseUrl = ApiConfig.wsBaseUrl;
-    if (wsBaseUrl == null) return;
-    
-    final wsUrl = Uri.parse('$wsBaseUrl/api/v1/chat/ws');
+    final wsUri = _resolveWsUri();
+    if (wsUri == null) return;
 
     try {
-      _channel = WebSocketChannel.connect(wsUrl);
+      _channel = (widget.channelFactory ?? WebSocketChannel.connect)(wsUri);
 
-      // Aguarda confirmação de conexão e envia autenticação
       _channel!.stream.listen(
-        (message) async {
-          final data = jsonDecode(message);
-
-          // Responde ao handshake de autenticação
-          if (data['type'] == 'auth_success') {
-            if (mounted) {
-              setState(() {
-                _isConnected = true;
-                _messages.add({
-                  'role': 'assistant',
-                  'text': 'Olá! 👋 Sou seu assistente fitness conectado. Como posso te ajudar hoje?',
-                  'time': _formatTime(),
-                });
-              });
-            }
-          } else if (data['type'] == 'auth_error') {
-            if (mounted) {
-              setState(() {
-                _isConnected = false;
-                _messages.add({
-                  'role': 'assistant',
-                  'text': 'Erro de autenticação: ${data['error'] ?? 'Desconhecido'}',
-                  'time': _formatTime(),
-                });
-              });
-            }
-            _channel?.sink.close();
-          } else if (data['type'] == 'response') {
-            if (data['conversation_id'] != null) {
-              _conversationId = data['conversation_id'];
-            }
-            if (mounted) {
-              setState(() {
-                _messages.add({
-                  'role': 'assistant',
-                  'text': data['content'] ?? '',
-                  'time': _formatTime(),
-                });
-              });
-            }
-          } else if (data['type'] == 'error' || data['type'] == 'timeout') {
-            if (mounted) {
-              setState(() {
-                _messages.add({
-                  'role': 'assistant',
-                  'text': 'Desculpe, ocorreu um erro: ${data['error'] ?? 'Desconhecido'}',
-                  'time': _formatTime(),
-                });
-              });
-            }
-            if (data['type'] == 'timeout') {
-              _channel?.sink.close();
-            }
-          }
-        },
+        _handleServerMessage,
         onDone: () {
-          if (mounted) {
-            setState(() {
-              _isConnected = false;
-            });
-          }
+          if (!mounted) return;
+          setState(() => _isConnected = false);
         },
         onError: (error) {
-          if (mounted) {
-            setState(() {
-              _isConnected = false;
-              _messages.add({
-                'role': 'assistant',
-                'text': 'Erro de conexão com o servidor: $error',
-                'time': _formatTime(),
-              });
-            });
-          }
+          if (!mounted) return;
+          setState(() {
+            _isConnected = false;
+            _messages.add(_ChatMsg(
+              role: 'assistant',
+              text: 'Erro de conexão com o servidor: $error',
+              time: _formatTime(),
+            ));
+          });
         },
       );
 
-      // Envia autenticação na primeira mensagem (após slight delay para garantir que stream está listening)
-      await Future.delayed(const Duration(milliseconds: 100));
-      final authMsg = jsonEncode({'type': 'auth', 'token': token});
-      _channel!.sink.add(authMsg);
+      // Pequeno delay para garantir que o stream está em listening antes do auth
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      _channel!.sink.add(jsonEncode({'type': 'auth', 'token': token}));
     } catch (e) {
-      if (mounted) {
+      if (!mounted) return;
+      setState(() {
+        _isConnected = false;
+        _messages.add(_ChatMsg(
+          role: 'assistant',
+          text: 'Falha ao conectar no servidor: $e',
+          time: _formatTime(),
+        ));
+      });
+    }
+  }
+
+  Future<String?> _readToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('jwt_token');
+  }
+
+  Uri? _resolveWsUri() {
+    final wsBase = ApiConfig.wsBaseUrl;
+    if (wsBase == null) return null;
+    return Uri.parse('$wsBase/api/v1/chat/ws');
+  }
+
+  void _handleServerMessage(dynamic raw) {
+    Map<String, dynamic> data;
+    try {
+      data = jsonDecode(raw as String) as Map<String, dynamic>;
+    } catch (_) {
+      return;
+    }
+    if (!mounted) return;
+
+    final type = data['type'] as String?;
+    switch (type) {
+      case 'auth_success':
+        setState(() {
+          _isConnected = true;
+          if (_messages.isEmpty) {
+            _messages.add(_ChatMsg(
+              role: 'assistant',
+              text:
+                  'Olá! 👋 Sou seu assistente fitness conectado. Como posso te ajudar hoje?',
+              time: _formatTime(),
+            ));
+          }
+        });
+        break;
+
+      case 'auth_error':
         setState(() {
           _isConnected = false;
-          _messages.add({
-            'role': 'assistant',
-            'text': 'Falha ao conectar no servidor: $e',
-            'time': _formatTime(),
-          });
+          _messages.add(_ChatMsg(
+            role: 'assistant',
+            text:
+                'Erro de autenticação: ${data['error'] ?? 'Desconhecido'}',
+            time: _formatTime(),
+          ));
         });
-      }
+        _channel?.sink.close();
+        break;
+
+      case 'status':
+        setState(() {
+          _isTyping = true;
+          _typingStatus =
+              (data['message'] as String?) ?? 'Pensando...';
+        });
+        break;
+
+      case 'response':
+        if (data['conversation_id'] != null) {
+          _conversationId = data['conversation_id'] as String;
+        }
+        setState(() {
+          _isTyping = false;
+          _typingStatus = '';
+          _messages.add(_ChatMsg(
+            role: 'assistant',
+            text: (data['content'] as String?) ?? '',
+            time: _formatTime(),
+          ));
+        });
+        break;
+
+      case 'error':
+      case 'timeout':
+        setState(() {
+          _isTyping = false;
+          _typingStatus = '';
+          _messages.add(_ChatMsg(
+            role: 'assistant',
+            text:
+                'Desculpe, ocorreu um erro: ${data['error'] ?? 'Desconhecido'}',
+            time: _formatTime(),
+          ));
+        });
+        if (type == 'timeout') _channel?.sink.close();
+        break;
     }
   }
 
@@ -165,36 +224,36 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _sendMessage() {
-    if (_messageController.text.trim().isEmpty) return;
-
     final text = _messageController.text.trim();
-    
+    if (text.isEmpty) return;
+
     setState(() {
-      _messages.add({
-        'role': 'user',
-        'text': text,
-        'time': _formatTime(),
-      });
+      _messages.add(_ChatMsg(
+        role: 'user',
+        text: text,
+        time: _formatTime(),
+      ));
+      // Mostra indicador imediatamente — não esperar status do servidor
+      _isTyping = true;
+      _typingStatus = 'Analisando sua pergunta...';
     });
 
     if (_isConnected && _channel != null) {
-      final payload = {
-        'type': 'message',
-        'content': text,
-      };
-      
+      final payload = <String, dynamic>{'type': 'message', 'content': text};
       if (_conversationId != null) {
         payload['conversation_id'] = _conversationId!;
       }
-
       _channel!.sink.add(jsonEncode(payload));
     } else {
       setState(() {
-        _messages.add({
-          'role': 'assistant',
-          'text': 'Você está desconectado. Reinicie o aplicativo para tentar novamente.',
-          'time': _formatTime(),
-        });
+        _isTyping = false;
+        _typingStatus = '';
+        _messages.add(_ChatMsg(
+          role: 'assistant',
+          text:
+              'Você está desconectado. Reinicie o aplicativo para tentar novamente.',
+          time: _formatTime(),
+        ));
       });
     }
 
@@ -215,19 +274,25 @@ class _ChatScreenState extends State<ChatScreen> {
                 color: AppColors.primary.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(Icons.android, color: AppColors.primary, size: 20),
+              child: const Icon(Icons.android,
+                  color: AppColors.primary, size: 20),
             ),
             const SizedBox(width: 10),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('Assistente IA',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodyMedium
+                        ?.copyWith(fontWeight: FontWeight.w600)),
                 Text(
                   _isConnected ? 'Online' : 'Desconectado',
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: _isConnected ? Colors.green : context.colors.textSecondary,
-                  ),
+                        color: _isConnected
+                            ? Colors.green
+                            : context.colors.textSecondary,
+                      ),
                 ),
               ],
             ),
@@ -239,43 +304,67 @@ class _ChatScreenState extends State<ChatScreen> {
           children: [
             Expanded(
               child: ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                itemCount: _messages.length,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                itemCount: _messages.length + (_isTyping ? 1 : 0),
                 itemBuilder: (context, index) {
+                  if (_isTyping && index == _messages.length) {
+                    return _TypingIndicator(status: _typingStatus);
+                  }
                   final msg = _messages[index];
-                  final isUser = msg['role'] == 'user';
-
+                  final isUser = msg.role == 'user';
                   return FadeInUp(
                     delay: Duration(milliseconds: index * 50),
                     child: Padding(
                       padding: const EdgeInsets.only(bottom: 12),
                       child: Align(
-                        alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+                        alignment: isUser
+                            ? Alignment.centerRight
+                            : Alignment.centerLeft,
                         child: Container(
                           constraints: BoxConstraints(
                             maxWidth: MediaQuery.of(context).size.width * 0.75,
                           ),
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 10),
                           decoration: BoxDecoration(
-                            color: isUser ? AppColors.primary : context.colors.surface,
-                            border: isUser ? null : Border.all(color: context.colors.border, width: 1),
+                            color: isUser
+                                ? AppColors.primary
+                                : context.colors.surface,
+                            border: isUser
+                                ? null
+                                : Border.all(
+                                    color: context.colors.border, width: 1),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Column(
-                            crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                            crossAxisAlignment: isUser
+                                ? CrossAxisAlignment.end
+                                : CrossAxisAlignment.start,
                             children: [
                               Text(
-                                msg['text']!,
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: isUser ? Colors.white : context.colors.textPrimary,
+                                msg.text,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                      color: isUser
+                                          ? Colors.white
+                                          : context.colors.textPrimary,
                                       height: 1.4,
                                     ),
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                msg['time']!,
-                                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                      color: isUser ? Colors.white.withValues(alpha: 0.7) : context.colors.textMuted,
+                                msg.time,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .labelSmall
+                                    ?.copyWith(
+                                      color: isUser
+                                          ? Colors.white
+                                              .withValues(alpha: 0.7)
+                                          : context.colors.textMuted,
                                       fontSize: 10,
                                     ),
                               ),
@@ -292,7 +381,8 @@ class _ChatScreenState extends State<ChatScreen> {
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
               decoration: BoxDecoration(
                 color: context.colors.surface,
-                border: Border(top: BorderSide(color: context.colors.border, width: 1)),
+                border: Border(
+                    top: BorderSide(color: context.colors.border, width: 1)),
               ),
               child: Row(
                 children: [
@@ -301,15 +391,18 @@ class _ChatScreenState extends State<ChatScreen> {
                       controller: _messageController,
                       enabled: _isConnected,
                       decoration: InputDecoration(
-                        hintText: _isConnected ? 'Pergunte algo...' : 'Conectando...',
-                        hintStyle: TextStyle(color: context.colors.textMuted),
+                        hintText:
+                            _isConnected ? 'Pergunte algo...' : 'Conectando...',
+                        hintStyle:
+                            TextStyle(color: context.colors.textMuted),
                         filled: true,
                         fillColor: context.colors.surfaceLight,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
                           borderSide: BorderSide.none,
                         ),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 12),
                       ),
                       style: TextStyle(color: context.colors.textPrimary),
                       minLines: 1,
@@ -324,7 +417,8 @@ class _ChatScreenState extends State<ChatScreen> {
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: IconButton(
-                      icon: const Icon(Icons.send, color: Colors.white, size: 20),
+                      icon: const Icon(Icons.send,
+                          color: Colors.white, size: 20),
                       onPressed: _isConnected ? _sendMessage : null,
                     ),
                   ),
@@ -332,6 +426,113 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Indicador animado "o bot está pensando".
+///
+/// Exibe ícone do bot + 3 pontos pulsando + texto de status.
+class _TypingIndicator extends StatefulWidget {
+  final String status;
+  const _TypingIndicator({required this.status});
+
+  @override
+  State<_TypingIndicator> createState() => _TypingIndicatorState();
+}
+
+class _TypingIndicatorState extends State<_TypingIndicator>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Container(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: context.colors.surface,
+            border:
+                Border.all(color: context.colors.border, width: 1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Icon(Icons.android,
+                    color: AppColors.primary, size: 16),
+              ),
+              const SizedBox(width: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  AnimatedBuilder(
+                    animation: _controller,
+                    builder: (_, __) => Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: List.generate(3, (i) {
+                        final t =
+                            (_controller.value * 3 - i).clamp(0.0, 1.0);
+                        final opacity =
+                            (t < 0.5 ? t * 2 : (1 - t) * 2).clamp(0.2, 1.0);
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 2),
+                          child: Opacity(
+                            opacity: opacity,
+                            child: Container(
+                              width: 6,
+                              height: 6,
+                              decoration: const BoxDecoration(
+                                color: AppColors.primary,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          ),
+                        );
+                      }),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    widget.status,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: context.colors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
