@@ -215,9 +215,23 @@ class ChatService:
         """
         Montar contexto do aluno para o pipeline RAG.
 
-        Busca perfil do usuário. A ficha ativa seria buscada do módulo
-        de treinos quando disponível (PRD_FICHA_TREINO).
+        Inclui dados REAIS do aluno autenticado:
+        - Perfil (nome, role, dados corporais, objetivo)
+        - Ficha de treino ativa (mais recente)
+        - Metas em andamento
+        - Histórico recente de treinos completos
+        - Dieta ativa
+
+        Cada bloco é resiliente: se a busca falhar ou não houver dados,
+        retorna estrutura vazia (lista [] ou None) sem propagar exceção.
+        Isto isola o chatbot de falhas pontuais em outros módulos.
         """
+        from app.models.diet import Diet
+        from app.models.goal import Goal
+        from app.models.logbook import WorkoutSession
+        from app.models.workout_sheet import WorkoutSheet
+
+        # ── Perfil ────────────────────────────────────────────────────────
         stmt = select(User).where(User.id == user_id, User.is_active == True)
         result = await self.session.execute(stmt)
         user = result.scalar_one_or_none()
@@ -232,13 +246,121 @@ class ChatService:
                 "age": user.age or 0,
                 "gender": user.gender or "não informado",
                 "goal_type": user.goal_type or "não informado",
-                "level": "não informado",     # Campo futuro do perfil
-                "objective": "não informado", # Campo futuro do perfil
+                "level": "não informado",
+                "objective": user.goal_type or "não informado",
             }
+
+        # ── Ficha de treino ativa (mais recente) ──────────────────────────
+        active_workout_sheet: dict[str, Any] | None = None
+        try:
+            sheet_stmt = (
+                select(WorkoutSheet)
+                .where(
+                    WorkoutSheet.user_id == user_id,
+                    WorkoutSheet.is_active == True,
+                )
+                .order_by(WorkoutSheet.created_at.desc())
+                .limit(1)
+            )
+            sheet_result = await self.session.execute(sheet_stmt)
+            sheet = sheet_result.scalar_one_or_none()
+            if sheet:
+                exercises_summary = [
+                    {
+                        "name": ex.name,
+                        "muscle_group": ex.muscle_group,
+                        "sets": ex.series,
+                        "reps": ex.repetitions,
+                        "load_kg": ex.load_kg,
+                    }
+                    for ex in (sheet.exercises or [])[:10]
+                ]
+                active_workout_sheet = {
+                    "id": str(sheet.id),
+                    "name": sheet.name,
+                    "day_of_week": sheet.day_of_week,
+                    "exercises": exercises_summary,
+                }
+        except Exception as exc:
+            logger.debug("Falha ao carregar ficha ativa: %s", exc)
+
+        # ── Metas em andamento ────────────────────────────────────────────
+        active_goals: list[dict[str, Any]] = []
+        try:
+            goal_stmt = (
+                select(Goal)
+                .where(Goal.user_id == user_id, Goal.status == "active")
+                .order_by(Goal.target_date.asc())
+                .limit(5)
+            )
+            goal_result = await self.session.execute(goal_stmt)
+            for goal in goal_result.scalars().all():
+                active_goals.append(
+                    {
+                        "id": str(goal.id),
+                        "title": goal.title,
+                        "category": goal.category,
+                        "current_value": goal.current_value,
+                        "target_value": goal.target_value,
+                        "unit": goal.unit,
+                        "progress_percentage": goal.progress_percentage,
+                    }
+                )
+        except Exception as exc:
+            logger.debug("Falha ao carregar metas: %s", exc)
+
+        # ── Histórico recente de treinos ──────────────────────────────────
+        recent_history: list[dict[str, Any]] = []
+        try:
+            history_stmt = (
+                select(WorkoutSession)
+                .where(
+                    WorkoutSession.user_id == user_id,
+                    WorkoutSession.status == "completed",
+                )
+                .order_by(WorkoutSession.session_date.desc())
+                .limit(3)
+            )
+            history_result = await self.session.execute(history_stmt)
+            for session_obj in history_result.scalars().all():
+                recent_history.append(
+                    {
+                        "id": str(session_obj.id),
+                        "session_date": session_obj.session_date.isoformat(),
+                        "difficulty_level": session_obj.difficulty_level,
+                        "mood": session_obj.mood,
+                    }
+                )
+        except Exception as exc:
+            logger.debug("Falha ao carregar histórico de treinos: %s", exc)
+
+        # ── Dieta ativa ───────────────────────────────────────────────────
+        active_diet: dict[str, Any] | None = None
+        try:
+            diet_stmt = (
+                select(Diet)
+                .where(Diet.user_id == user_id, Diet.is_active == True)
+                .order_by(Diet.updated_at.desc())
+                .limit(1)
+            )
+            diet_result = await self.session.execute(diet_stmt)
+            diet = diet_result.scalar_one_or_none()
+            if diet:
+                active_diet = {
+                    "id": str(diet.id),
+                    "name": diet.name,
+                    "goal": diet.goal,
+                    "is_custom": diet.is_custom,
+                }
+        except Exception as exc:
+            logger.debug("Falha ao carregar dieta ativa: %s", exc)
 
         return {
             "user_profile": user_profile,
-            "active_workout_sheet": None,  # Integração futura com PRD_FICHA_TREINO
+            "active_workout_sheet": active_workout_sheet,
+            "active_goals": active_goals,
+            "recent_history": recent_history,
+            "active_diet": active_diet,
         }
 
     # ── Enviar Mensagem (fluxo principal) ─────────────────────────────────

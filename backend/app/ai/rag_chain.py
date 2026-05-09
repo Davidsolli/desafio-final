@@ -292,7 +292,7 @@ class RAGChain:
             exercises = sheet.get("exercises", [])
             ex_lines = "\n".join(
                 f"  - {ex.get('name', '?')}: {ex.get('sets', '?')}x{ex.get('reps', '?')}"
-                for ex in exercises[:10]  # limitar exibição
+                for ex in exercises[:10]
             )
             workout_sheet_str = (
                 f"Ficha: {sheet.get('name', 'Ficha Ativa')}\n"
@@ -300,6 +300,42 @@ class RAGChain:
             )
         else:
             workout_sheet_str = "Nenhuma ficha ativa encontrada."
+
+        # Metas em andamento (opcional)
+        active_goals = user_context.get("active_goals") or []
+        if active_goals:
+            goal_lines = "\n".join(
+                f"  - {g.get('title', '?')} "
+                f"({g.get('current_value', '?')}/{g.get('target_value', '?')} {g.get('unit', '')})"
+                for g in active_goals[:5]
+            )
+            goals_block = f"\n\nMetas em Andamento:\n{goal_lines}"
+        else:
+            goals_block = ""
+
+        # Dieta ativa (opcional)
+        diet = user_context.get("active_diet")
+        if diet:
+            diet_block = (
+                f"\n\nDieta Ativa: {diet.get('name', '?')}"
+                f" (objetivo: {diet.get('goal') or 'não informado'})"
+            )
+        else:
+            diet_block = ""
+
+        # Histórico recente de treinos completos (opcional)
+        recent = user_context.get("recent_history") or []
+        if recent:
+            hist_lines = "\n".join(
+                f"  - {item.get('session_date', '')} (esforço: {item.get('difficulty_level', '?')}, humor: {item.get('mood', '?')})"
+                for item in recent[:3]
+            )
+            history_block = f"\n\nÚltimos Treinos Concluídos:\n{hist_lines}"
+        else:
+            history_block = ""
+
+        # Anexa blocos extras à ficha (mantém estrutura do template)
+        workout_sheet_str = workout_sheet_str + goals_block + diet_block + history_block
 
         # Formatar documentos recuperados
         if retrieved_docs:
