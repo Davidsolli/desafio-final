@@ -9,9 +9,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Index
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
-from sqlalchemy.orm import declarative_base
-
-Base = declarative_base()
+from app.models.user import Base
 
 
 class PasswordResetToken(Base):
