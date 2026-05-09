@@ -8,6 +8,7 @@ Responsável por:
 - Incremento de token_version para invalidar JWTs
 """
 
+import logging
 import secrets
 import hashlib
 import re
@@ -15,6 +16,8 @@ import bcrypt
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
 from uuid import UUID
+
+logger = logging.getLogger(__name__)
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -39,6 +42,12 @@ class PasswordMismatchError(Exception):
 
 class InvalidTokenError(Exception):
     """Exceção quando token é inválido, expirado ou já usado."""
+
+    pass
+
+
+class AuthenticationError(Exception):
+    """Exceção quando credenciais de autenticação estão incorretas."""
 
     pass
 
@@ -105,7 +114,7 @@ class PasswordService:
         """
         return not bcrypt.checkpw(new_password.encode(), current_hash.encode())
 
-    async def forgot_password(self, email: str) -> Tuple[str, str] | None:
+    async def forgot_password(self, email: str) -> str | None:
         """
         Iniciar recuperação de senha por email.
 
@@ -119,7 +128,7 @@ class PasswordService:
             email: Email do usuário
 
         Returns:
-            Tupla (token_raw, token_hash) se email existe, None caso contrário
+            token_raw se email existe, None caso contrário (hash já persistido no banco)
 
         Raises:
             Nunca lança exceções (proteção contra enumeração)
@@ -152,9 +161,10 @@ class PasswordService:
             await self.token_repo.create(reset_token)
             await self.token_repo.commit()
 
-            # Retornar token para o controller enviar
-            return token_raw, token_hash
-        except Exception:
+            # Retornar apenas token_raw — hash já persistido no banco
+            return token_raw
+        except Exception as e:
+            logger.error("forgot_password error: %s", e)
             return None
 
     async def reset_password(
@@ -251,7 +261,7 @@ class PasswordService:
         """
         # Validar senha atual
         if not bcrypt.checkpw(current_password.encode(), user.password.encode()):
-            raise InvalidTokenError("Senha atual incorreta")
+            raise AuthenticationError("Senha atual incorreta")
 
         # Validar que nova não é igual à atual
         if not self.is_different_from_current(new_password, user.password):
