@@ -1,10 +1,13 @@
-from contextlib import asynccontextmanager
+from dotenv import load_dotenv
+load_dotenv()
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config.database import init_db
-from app.routes import user, auth, chat, logbook, goal, invitation
+from app.routes import user, auth, chat, logbook, goal, invitation, webhooks
+from app.routes.pages import router as pages_router
 from app.routes.workout_sheet import router as workout_sheet_router, catalog_router as exercise_catalog_router
 from app.routes.food_catalog import router as food_catalog_router
 from app.routes.diet import custom_food_router, diet_router
@@ -64,4 +67,6 @@ app.include_router(food_catalog_router)
 app.include_router(custom_food_router)
 app.include_router(diet_router)
 app.include_router(diet_logbook_router)
+app.include_router(webhooks.router)
+app.include_router(pages_router)
 
