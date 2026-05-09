@@ -4,11 +4,12 @@ Pipeline RAG — Retrieve-Augment-Generate.
 Orquestra o fluxo completo de resposta do chatbot:
   1. RETRIEVE  — busca vetorial no pgvector (score ≥ 0.7)
   2. AUGMENT   — monta contexto com perfil do aluno e ficha ativa
-  3. GENERATE  — chama o LLM (Gemini) com o prompt enriquecido
+  3. GENERATE  — chama o LLM (Groq Llama 3.3 70B) com o prompt enriquecido
   4. VALIDATE  — valida cobertura e detecta necessidade de escalação
 
 Dependências:
-    langchain-google-genai  → GoogleGenerativeAIEmbeddings + ChatGoogleGenerativeAI
+    langchain-groq          → ChatGroq (Llama 3.3 70B Versatile)
+    langchain-huggingface   → HuggingFaceEmbeddings (all-MiniLM-L6-v2, 384 dims)
     pgvector                → Busca por similaridade coseno no PostgreSQL
 """
 
@@ -132,8 +133,8 @@ class RAGChain:
         Inicializar RAG chain.
 
         Side effects:
-            - Inicializa clients do Gemini (lazy, apenas no primeiro uso)
-            - Prepara embeddings model e LLM para posterior utilização
+            - Prepara embeddings (HuggingFace) e LLM (Groq) para uso lazy
+            - Não realiza chamadas externas até o primeiro uso
         """
         self._embeddings: HuggingFaceEmbeddings | None = None
         self._llm: ChatGroq | None = None
@@ -377,7 +378,7 @@ class RAGChain:
         query: str,
     ) -> tuple[str, int, str]:
         """
-        Chamar o LLM Gemini para gerar a resposta.
+        Chamar o LLM Groq para gerar a resposta.
 
         Args:
             system_prompt: Prompt de sistema com contexto completo.

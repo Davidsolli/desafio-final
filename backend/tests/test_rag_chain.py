@@ -1,8 +1,8 @@
 """
 Testes unitários para o pipeline RAG (app/ai/rag_chain.py).
 
-Todos os testes usam mocks para as chamadas ao Gemini (embeddings + LLM),
-garantindo que nenhuma requisição real seja feita durante a execução.
+Todos os testes usam mocks para as chamadas ao Groq (LLM) e ao HuggingFace
+(embeddings), garantindo que nenhuma requisição real seja feita durante a execução.
 """
 
 from __future__ import annotations
@@ -81,39 +81,6 @@ def user_context() -> dict:
     }
 
 
-# ── Testes: _get_embeddings e _get_llm (lazy init) ────────────────────────────
-
-class TestLazyInit:
-    """Testa inicialização lazy das dependências."""
-
-    @patch("app.ai.rag_chain.GoogleGenerativeAIEmbeddings")
-    @patch("app.ai.rag_chain.settings")
-    def test_get_embeddings_creates_once(self, mock_settings, mock_embed_cls, chain):
-        """_get_embeddings() deve criar instância apenas na primeira chamada."""
-        mock_settings.GOOGLE_API_KEY = "fake-key"
-        mock_embed_cls.return_value = MagicMock()
-
-        emb1 = chain._get_embeddings()
-        emb2 = chain._get_embeddings()
-
-        assert emb1 is emb2
-        mock_embed_cls.assert_called_once()
-
-    @patch("app.ai.rag_chain.ChatGoogleGenerativeAI")
-    @patch("app.ai.rag_chain.settings")
-    def test_get_llm_creates_once(self, mock_settings, mock_llm_cls, chain):
-        """_get_llm() deve criar instância apenas na primeira chamada."""
-        mock_settings.GOOGLE_API_KEY = "fake-key"
-        mock_settings.GEMINI_MODEL = "gemini-1.5-flash"
-        mock_llm_cls.return_value = MagicMock()
-
-        llm1 = chain._get_llm()
-        llm2 = chain._get_llm()
-
-        assert llm1 is llm2
-        mock_llm_cls.assert_called_once()
-
-
 # ── Testes: retrieve() ─────────────────────────────────────────────────────────
 
 class TestRetrieve:
@@ -126,7 +93,7 @@ class TestRetrieve:
 
         # Mock embedding
         mock_embed = AsyncMock()
-        mock_embed.aembed_query = AsyncMock(return_value=[0.1] * 768)
+        mock_embed.aembed_query = AsyncMock(return_value=[0.1] * 384)
         chain._embeddings = mock_embed
 
         # Mock resultado do banco — dois docs, scores 0.85 e 0.50
@@ -160,7 +127,7 @@ class TestRetrieve:
     async def test_retrieve_returns_empty_when_no_match(self, chain, mock_session):
         """Deve retornar lista vazia quando nenhum doc atinge score mínimo (RN-07)."""
         mock_embed = AsyncMock()
-        mock_embed.aembed_query = AsyncMock(return_value=[0.1] * 768)
+        mock_embed.aembed_query = AsyncMock(return_value=[0.1] * 384)
         chain._embeddings = mock_embed
 
         row_low = MagicMock()
@@ -194,7 +161,7 @@ class TestRetrieve:
     async def test_retrieve_handles_db_error(self, chain, mock_session):
         """Deve retornar lista vazia em caso de erro no banco."""
         mock_embed = AsyncMock()
-        mock_embed.aembed_query = AsyncMock(return_value=[0.1] * 768)
+        mock_embed.aembed_query = AsyncMock(return_value=[0.1] * 384)
         chain._embeddings = mock_embed
 
         mock_session.execute = AsyncMock(side_effect=Exception("DB error"))
@@ -207,7 +174,7 @@ class TestRetrieve:
     async def test_retrieve_filters_by_academy_id(self, chain, mock_session):
         """Deve passar academy_id como parâmetro ao banco quando fornecido."""
         mock_embed = AsyncMock()
-        mock_embed.aembed_query = AsyncMock(return_value=[0.1] * 768)
+        mock_embed.aembed_query = AsyncMock(return_value=[0.1] * 384)
         chain._embeddings = mock_embed
 
         mock_result = MagicMock()
@@ -426,7 +393,7 @@ class TestRunPipeline:
         chain.generate = AsyncMock(return_value=(
             "O supino reto deve ser executado com as escápulas retraídas...",
             120,
-            "gemini-1.5-flash",
+            "llama-3.3-70b-versatile",
         ))
 
         result = await chain.run(
@@ -439,7 +406,7 @@ class TestRunPipeline:
         assert result.should_escalate is False
         assert "supino" in result.answer.lower()
         assert len(result.retrieved_documents) == 2
-        assert result.model_used == "gemini-1.5-flash"
+        assert result.model_used == "llama-3.3-70b-versatile"
         assert result.tokens_used == 120
         assert result.latency_ms >= 0
         assert result.confidence_score > 0
@@ -448,7 +415,7 @@ class TestRunPipeline:
     async def test_run_escalates_when_no_docs(self, chain, mock_session):
         """Deve escalar imediatamente quando retrieve retorna lista vazia e a IA não sabe responder."""
         chain.retrieve = AsyncMock(return_value=[])
-        chain.generate = AsyncMock(return_value=("Não sei informar", 10, "gemini"))
+        chain.generate = AsyncMock(return_value=("Não sei informar", 10, "llama-3.3-70b-versatile"))
 
         result = await chain.run(
             query="pergunta sem match na base",
@@ -506,7 +473,7 @@ class TestRunPipeline:
         """confidence_score deve ser a média dos scores dos documentos recuperados."""
         chain.retrieve = AsyncMock(return_value=sample_docs)
         chain.generate = AsyncMock(return_value=(
-            "Resposta adequada sobre o exercício solicitado...", 80, "gemini-1.5-flash"
+            "Resposta adequada sobre o exercício solicitado...", 80, "llama-3.3-70b-versatile"
         ))
 
         result = await chain.run("Como faço supino?", mock_session, user_context=user_context)

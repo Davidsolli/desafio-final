@@ -2,7 +2,7 @@
 Testes de integração para o ChatService (app/services/chat_service.py).
 
 Usa SQLite in-memory + mocks do pipeline RAG para isolar a lógica de negócio
-sem chamadas reais à API do Gemini.
+sem chamadas reais à API do Groq ou ao modelo de embeddings HuggingFace.
 """
 
 from __future__ import annotations
@@ -105,7 +105,7 @@ def rag_success_result() -> RAGResult:
         ],
         should_escalate=False,
         escalation_reason="",
-        model_used="gemini-1.5-flash",
+        model_used="llama-3.3-70b-versatile",
         tokens_used=110,
         latency_ms=850,
         confidence_score=0.91,
@@ -654,7 +654,7 @@ class TestKnowledgeBase:
         self, chat_service, db_session, sample_user
     ):
         """Deve criar documento com embedding gerado."""
-        fake_embedding = [0.1] * 768
+        fake_embedding = [0.1] * 384
 
         with patch("app.services.chat_service.rag_chain") as mock_rag_module:
             mock_embeddings = AsyncMock()

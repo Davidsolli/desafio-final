@@ -89,7 +89,7 @@ class TestKnowledgeBaseModel:
             is_active=True,
             views_count=0,
             helpful_count=0,
-            embedding_model="google:text-embedding-004",
+            embedding_model="huggingface:all-MiniLM-L6-v2",
         )
         session.add(doc)
         await session.commit()
@@ -108,7 +108,7 @@ class TestKnowledgeBaseModel:
     @pytest.mark.asyncio
     async def test_knowledge_document_stores_embedding_as_json(self, session: AsyncSession):
         """No SQLite (fallback), embedding deve ser armazenado como JSON/list."""
-        fake_embedding = [0.1] * 768
+        fake_embedding = [0.1] * 384
         doc = KnowledgeBase(
             id=uuid4(),
             title="Doc com Embedding",
@@ -372,7 +372,7 @@ class TestChatMessageModel:
             role="assistant",
             content="O supino reto é executado assim...",
             context_data=context,
-            model_used="gemini-1.5-flash",
+            model_used="llama-3.3-70b-versatile",
             tokens_used=145,
             latency_ms=920,
             channel="app",
@@ -385,7 +385,7 @@ class TestChatMessageModel:
         retrieved = result.scalar_one()
 
         assert retrieved.role == "assistant"
-        assert retrieved.model_used == "gemini-1.5-flash"
+        assert retrieved.model_used == "llama-3.3-70b-versatile"
         assert retrieved.tokens_used == 145
         assert retrieved.latency_ms == 920
         assert retrieved.context_data["retrieved_documents"][0]["title"] == "Doc"
