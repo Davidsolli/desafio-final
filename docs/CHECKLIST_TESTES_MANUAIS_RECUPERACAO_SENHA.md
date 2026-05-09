@@ -17,7 +17,7 @@
   > ⚠️ Sem `--web-port 3000`, o Flutter escolhe uma porta aleatória e o link do email (`localhost:3000/reset-password?token=...`) não carregará o app.
 - [ ] App acessível em http://localhost:3000
 - [ ] `.env` com `RESEND_API_KEY` válida (ou ver seção "Sem email real")
-- [ ] Pelo menos um usuário cadastrado no sistema (ex: `william.s.marques1988@gmail.com` / `AlunoForte123!`)
+- [ ] Pelo menos um usuário cadastrado no sistema (ex: `usuario@exemplo.com` / `SenhaForte123!`)
 
 ---
 
