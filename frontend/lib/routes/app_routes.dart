@@ -11,6 +11,7 @@ import '../screens/student/logbook_screen.dart';
 import '../screens/student/metrics_screen.dart';
 import '../screens/student/goals_screen.dart';
 import '../screens/student/chat_screen.dart';
+import '../screens/student/chat_history_screen.dart';
 import '../screens/student/profile_screen_new.dart';
 import '../screens/notifications_screen.dart';
 import '../screens/trainer/trainer_shell.dart';
@@ -43,6 +44,7 @@ class AppRoutes {
   static const String metrics = '/metrics';
   static const String goals = '/goals';
   static const String chat = '/chat';
+  static const String chatHistory = '/chat/history';
   static const String profile = '/profile';
 
   // Trainer
@@ -120,7 +122,15 @@ class AppRoutes {
           ),
           GoRoute(
             path: chat,
-            builder: (context, state) => const ChatScreen(),
+            builder: (context, state) {
+              final extra = state.extra as Map<String, dynamic>?;
+              final conversationId = extra?['conversationId'] as String?;
+              return ChatScreen(conversationId: conversationId);
+            },
+          ),
+          GoRoute(
+            path: chatHistory,
+            builder: (context, state) => const ChatHistoryScreen(),
           ),
           GoRoute(
             path: profile,

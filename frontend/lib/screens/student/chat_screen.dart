@@ -4,10 +4,14 @@ import 'dart:convert';
 import 'package:animate_do/animate_do.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../../config/api_config.dart';
+import '../../routes/app_routes.dart';
+import '../../services/chat_api_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/theme_colors.dart';
 
@@ -29,11 +33,17 @@ class ChatScreen extends StatefulWidget {
   @visibleForTesting
   final String? jwtToken;
 
+  /// Serviço para carregar histórico ao abrir uma conversa existente.
+  ///
+  /// Se `null`, usa o `ChatApiService` registrado no `Provider`.
+  final ChatApiService? apiService;
+
   const ChatScreen({
     super.key,
     this.conversationId,
     this.channelFactory,
     this.jwtToken,
+    this.apiService,
   });
 
   @override
@@ -79,7 +89,46 @@ class _ChatScreenState extends State<ChatScreen> {
   void initState() {
     super.initState();
     _conversationId = widget.conversationId;
+    if (_conversationId != null) {
+      _loadHistory(_conversationId!);
+    }
     _connectWebSocket();
+  }
+
+  Future<void> _loadHistory(String conversationId) async {
+    final service = widget.apiService ??
+        (_tryReadProvider<ChatApiService>());
+    if (service == null) return;
+
+    try {
+      final detail = await service.getConversation(conversationId);
+      if (!mounted) return;
+      setState(() {
+        for (final m in detail.messages) {
+          _messages.add(_ChatMsg(
+            role: m.role,
+            text: m.content,
+            time: _formatTimeFrom(m.createdAt),
+          ));
+        }
+      });
+      _scrollToBottom();
+    } catch (_) {
+      // Silencioso: a conexão WS continua e o aluno pode prosseguir.
+    }
+  }
+
+  T? _tryReadProvider<T>() {
+    try {
+      return context.read<T>();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String _formatTimeFrom(DateTime dt) {
+    final local = dt.toLocal();
+    return '${local.hour}:${local.minute.toString().padLeft(2, '0')}';
   }
 
   Future<void> _connectWebSocket() async {
@@ -322,6 +371,13 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ],
         ),
+        actions: [
+          IconButton(
+            tooltip: 'Histórico',
+            icon: const Icon(Icons.history),
+            onPressed: () => context.push(AppRoutes.chatHistory),
+          ),
+        ],
       ),
       body: SafeArea(
         child: Column(
