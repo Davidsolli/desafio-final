@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:animate_do/animate_do.dart';
@@ -6,6 +7,15 @@ import '../../theme/app_colors.dart';
 import '../../theme/theme_colors.dart';
 import '../../routes/app_routes.dart';
 import '../../providers/auth_provider.dart';
+
+/// Rotas públicas acessíveis sem autenticação via deep link (ex: link de email).
+const _publicDeepLinks = [
+  AppRoutes.resetPassword,
+  AppRoutes.forgotPassword,
+  AppRoutes.login,
+  AppRoutes.register,
+  AppRoutes.inviteCode,
+];
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({Key? key}) : super(key: key);
@@ -32,6 +42,20 @@ class _SplashScreenState extends State<SplashScreen> {
     ]);
 
     if (!mounted) return;
+
+    // Se o app foi aberto via deep link público (ex: /reset-password?token=... do email),
+    // o GoRouter já navegou para essa rota. Não sobrescrever com redirect para login.
+    if (kIsWeb) {
+      final browserPath = Uri.base.path;
+      if (_publicDeepLinks.any((r) => browserPath.startsWith(r))) {
+        // Garantir que o GoRouter também reflita a rota correta com query params
+        final destination = Uri.base.query.isNotEmpty
+            ? '${Uri.base.path}?${Uri.base.query}'
+            : Uri.base.path;
+        context.go(destination);
+        return;
+      }
+    }
 
     if (authProvider.isAuthenticated && authProvider.user != null) {
       _navigateByRole(authProvider.user!.role);
