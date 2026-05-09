@@ -112,6 +112,24 @@ class _TrainerProfileState extends State<TrainerProfile> {
                       const SizedBox(height: 24),
                       _buildThemeToggle(),
                       const SizedBox(height: 16),
+                      // Botão Alterar Senha
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          onPressed: () => context.push(AppRoutes.changePassword),
+                          icon: const Icon(Icons.lock_outline, color: Colors.white),
+                          label: Text('Alterar Senha',
+                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                  color: Colors.white, fontWeight: FontWeight.w600)),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      // Botão Sair
                       SizedBox(
                         width: double.infinity,
                         child: OutlinedButton(

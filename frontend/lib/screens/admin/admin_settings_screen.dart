@@ -6,6 +6,7 @@ import '../../theme/theme_colors.dart';
 import '../../routes/app_routes.dart';
 import '../../providers/admin_provider.dart';
 import '../../models/admin_models.dart';
+import '../../providers/auth_provider.dart';
 
 class AdminSettingsScreen extends StatefulWidget {
   const AdminSettingsScreen({Key? key}) : super(key: key);
@@ -108,22 +109,50 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                   const SizedBox(height: 32),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: () => _showLogoutDialog(context),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                        child: Text(
-                          'Sair',
-                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
+                    child: Column(
+                      children: [
+                        // Botão Alterar Senha
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () => context.push(AppRoutes.changePassword),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                            icon: const Icon(Icons.lock_outline, color: Colors.white),
+                            label: Text(
+                              'Alterar Senha',
+                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                           ),
                         ),
-                      ),
+                        const SizedBox(height: 12),
+                        // Botão Sair
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: () => _showLogoutDialog(context),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                            child: Text(
+                              'Sair',
+                              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 16),

@@ -113,6 +113,29 @@ class _ProfileSettingsState extends State<ProfileSettings> {
           ),
         ),
         const SizedBox(height: 16),
+        // ── Alterar Senha ─────────────────────────────────────────────────
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: () => context.push(AppRoutes.changePassword),
+            icon: const Icon(Icons.lock_outline, color: Colors.white),
+            label: Text(
+              'Alterar Senha',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
         // ── Logout ────────────────────────────────────────────────────────
         SizedBox(
           width: double.infinity,
