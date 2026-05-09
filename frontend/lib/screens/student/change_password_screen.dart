@@ -5,6 +5,7 @@ import '../../theme/app_colors.dart';
 import '../../theme/theme_colors.dart';
 import '../../routes/app_routes.dart';
 import '../../providers/auth_provider.dart';
+import '../../widgets/password_input_field.dart';
 
 class ChangePasswordScreen extends StatefulWidget {
   const ChangePasswordScreen({Key? key}) : super(key: key);
@@ -18,10 +19,8 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
-  bool _obscureCurrent = true;
-  bool _obscureNew = true;
-  bool _obscureConfirm = true;
   bool _isLoading = false;
+  PasswordStrength _newPasswordStrength = PasswordStrength.empty;
 
   @override
   void dispose() {
@@ -42,7 +41,8 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     }
 
     if (newPass != confirm) {
-      _showError('As novas senhas não conferem');
+      _clearNewPasswordFields();
+      _showError('As novas senhas não conferem. Os campos foram limpos.');
       return;
     }
 
@@ -85,6 +85,11 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  void _clearNewPasswordFields() {
+    _newPasswordController.clear();
+    _confirmPasswordController.clear();
   }
 
   bool _isPasswordStrong(String password) {
@@ -146,13 +151,25 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Informação
+                // Ícone
+                Container(
+                  width: double.infinity,
+                  alignment: Alignment.center,
+                  child: Icon(
+                    Icons.lock_outline,
+                    size: 80,
+                    color: colors.primaryColor,
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // Informação importante
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: Colors.blue.withOpacity(0.1),
                     border: Border.all(color: Colors.blue.withOpacity(0.3)),
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
                     children: [
@@ -164,62 +181,75 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          'Após alterar sua senha, você será desconectado em todos os dispositivos.',
+                          'Por segurança, você será desconectado em todos os dispositivos.',
                           style: TextStyle(
                             color: Colors.blue.shade700,
-                            fontSize: 14,
+                            fontSize: 13,
+                            height: 1.5,
                           ),
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 32),
 
                 // Senha atual
-                _buildPasswordField(
+                PasswordInputField(
                   controller: _currentPasswordController,
                   label: 'Senha Atual',
-                  hint: 'Sua senha atual',
-                  obscure: _obscureCurrent,
-                  onToggle: () {
-                    setState(() => _obscureCurrent = !_obscureCurrent);
-                  },
-                ),
-                const SizedBox(height: 20),
-
-                // Nova senha
-                _buildPasswordField(
-                  controller: _newPasswordController,
-                  label: 'Nova Senha',
-                  hint: 'Sua nova senha',
-                  obscure: _obscureNew,
-                  onToggle: () {
-                    setState(() => _obscureNew = !_obscureNew);
-                  },
-                ),
-                const SizedBox(height: 8),
-
-                // Indicador de força
-                if (_newPasswordController.text.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: _buildPasswordStrengthIndicator(),
-                  ),
-
-                // Confirmar nova senha
-                _buildPasswordField(
-                  controller: _confirmPasswordController,
-                  label: 'Confirmar Nova Senha',
-                  hint: 'Confirme sua nova senha',
-                  obscure: _obscureConfirm,
-                  onToggle: () {
-                    setState(() => _obscureConfirm = !_obscureConfirm);
-                  },
+                  hintText: 'Digite sua senha atual',
+                  prefixIcon: Icons.lock_outline,
+                  enabled: !_isLoading,
+                  primaryColor: colors.primaryColor,
+                  backgroundColor: colors.backgroundColor,
+                  textSecondaryColor: colors.textSecondary,
                 ),
                 const SizedBox(height: 24),
 
-                // Botão confirmar
+                // Nova senha
+                PasswordInputField(
+                  controller: _newPasswordController,
+                  label: 'Nova Senha',
+                  hintText: 'Digite sua nova senha (mín. 8 caracteres)',
+                  prefixIcon: Icons.lock_outline,
+                  enabled: !_isLoading,
+                  showStrengthIndicator: true,
+                  strengthDescription: '• Mínimo 8 caracteres\n• Maiúscula e minúscula\n• Número e caractere especial (@\$!%*?&_-)',
+                  onStrengthChanged: (strength) {
+                    setState(() => _newPasswordStrength = strength);
+                  },
+                  primaryColor: colors.primaryColor,
+                  backgroundColor: colors.backgroundColor,
+                  textSecondaryColor: colors.textSecondary,
+                ),
+                const SizedBox(height: 24),
+
+                // Confirmar nova senha
+                PasswordInputField(
+                  controller: _confirmPasswordController,
+                  label: 'Confirmar Nova Senha',
+                  hintText: 'Confirme sua nova senha',
+                  prefixIcon: Icons.lock_outline,
+                  enabled: !_isLoading,
+                  isConfirmation: true,
+                  primaryColor: colors.primaryColor,
+                  backgroundColor: colors.backgroundColor,
+                  textSecondaryColor: colors.textSecondary,
+                ),
+                const SizedBox(height: 12),
+
+                // Validação de confirmação em tempo real
+                if (_newPasswordController.text.isNotEmpty &&
+                    _confirmPasswordController.text.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: _buildConfirmationStatus(),
+                  ),
+
+                const SizedBox(height: 16),
+
+                // Botão alterar
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
@@ -227,7 +257,8 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       backgroundColor: colors.primaryColor,
-                      disabledBackgroundColor: colors.primaryColor.withOpacity(0.5),
+                      disabledBackgroundColor:
+                          colors.primaryColor.withOpacity(0.5),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -239,17 +270,22 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
                               valueColor: AlwaysStoppedAnimation<Color>(
-                                theme.brightness == Brightness.dark ? Colors.white : Colors.white,
+                                theme.brightness == Brightness.dark
+                                    ? Colors.white
+                                    : Colors.white,
                               ),
                             ),
                           )
                         : const Text(
                             'Alterar Senha',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
 
                 // Botão cancelar
                 SizedBox(
@@ -262,7 +298,10 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child: const Text('Cancelar'),
+                    child: const Text(
+                      'Cancelar',
+                      style: TextStyle(fontSize: 16),
+                    ),
                   ),
                 ),
               ],
@@ -273,65 +312,33 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     );
   }
 
-  Widget _buildPasswordField({
-    required TextEditingController controller,
-    required String label,
-    required String hint,
-    required bool obscure,
-    required VoidCallback onToggle,
-  }) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final colors = isDark ? ThemeColors.dark : ThemeColors.light;
+  Widget _buildConfirmationStatus() {
+    final match = _newPasswordController.text == _confirmPasswordController.text;
+    final color = match ? Colors.green : Colors.red;
+    final icon = match ? Icons.check_circle : Icons.cancel;
+    final text = match ? 'Senhas conferem' : 'Senhas não conferem';
 
-    return TextField(
-      controller: controller,
-      enabled: !_isLoading,
-      obscureText: obscure,
-      onChanged: (_) => setState(() {}),
-      decoration: InputDecoration(
-        hintText: hint,
-        labelText: label,
-        prefixIcon: const Icon(Icons.lock_outline),
-        suffixIcon: IconButton(
-          icon: Icon(
-            obscure ? Icons.visibility_off : Icons.visibility,
-          ),
-          onPressed: onToggle,
-        ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-        filled: true,
-        fillColor: colors.backgroundColor,
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.3)),
       ),
-    );
-  }
-
-  Widget _buildPasswordStrengthIndicator() {
-    final password = _newPasswordController.text;
-    final isStrong = _isPasswordStrong(password);
-
-    return Row(
-      children: [
-        Expanded(
-          child: LinearProgressIndicator(
-            value: isStrong ? 1.0 : 0.3,
-            backgroundColor: Colors.grey.shade300,
-            valueColor: AlwaysStoppedAnimation<Color>(
-              isStrong ? Colors.green : Colors.red,
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 18),
+          const SizedBox(width: 8),
+          Text(
+            text,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
             ),
           ),
-        ),
-        const SizedBox(width: 12),
-        Text(
-          isStrong ? '✓ Forte' : '✗ Fraca',
-          style: TextStyle(
-            color: isStrong ? Colors.green : Colors.red,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
