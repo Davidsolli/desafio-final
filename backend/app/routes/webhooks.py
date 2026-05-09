@@ -10,8 +10,8 @@ import hashlib
 import json
 import logging
 import os
-from fastapi import APIRouter, HTTPException, status, Request, Query
-from fastapi.responses import PlainTextResponse
+from fastapi import APIRouter, HTTPException, status, Request
+from fastapi.responses import Response
 
 logger = logging.getLogger(__name__)
 
@@ -36,19 +36,18 @@ def _verify_signature(payload: bytes, signature_header: str) -> bool:
     "/whatsapp",
     status_code=status.HTTP_200_OK,
     summary="Validar webhook do WhatsApp (handshake)",
-    response_class=PlainTextResponse,
 )
-async def verify_whatsapp_webhook(
-    hub_mode: str = Query(None, alias="hub.mode"),
-    hub_challenge: str = Query(None, alias="hub.challenge"),
-    hub_verify_token: str = Query(None, alias="hub.verify_token"),
-):
+async def verify_whatsapp_webhook(request: Request):
     """
     Validar webhook do WhatsApp.
 
     O Meta envia uma requisição GET para verificar que você é o dono do webhook.
     Retorna o hub.challenge como plain text para confirmar.
     """
+    hub_mode = request.query_params.get("hub.mode")
+    hub_challenge = request.query_params.get("hub.challenge")
+    hub_verify_token = request.query_params.get("hub.verify_token")
+
     verify_token = os.getenv("WHATSAPP_VERIFY_TOKEN")
 
     if hub_mode != "subscribe":
@@ -58,8 +57,11 @@ async def verify_whatsapp_webhook(
         logger.warning("❌ Token de verificação inválido recebido no handshake")
         raise HTTPException(status_code=403, detail="Token inválido")
 
+    if not hub_challenge:
+        raise HTTPException(status_code=400, detail="hub.challenge ausente")
+
     logger.info("✅ Webhook validado com sucesso!")
-    return PlainTextResponse(content=hub_challenge)
+    return Response(content=hub_challenge, media_type="text/plain")
 
 
 @router.post(
