@@ -79,7 +79,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final colors = isDark ? ThemeColors.dark : ThemeColors.light;
+    final colors = context.colors;
 
     return Scaffold(
       appBar: AppBar(
@@ -89,7 +89,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         ),
         title: const Text('Recuperar Senha'),
         elevation: 0,
-        backgroundColor: colors.primaryColor,
+        backgroundColor: colors.primary,
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -105,7 +105,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   Widget _buildFormView() {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final colors = isDark ? ThemeColors.dark : ThemeColors.light;
+    final colors = context.colors;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -117,7 +117,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           child: Icon(
             Icons.mail_outline,
             size: 80,
-            color: colors.primaryColor,
+            color: colors.primary,
           ),
         ),
         const SizedBox(height: 32),
@@ -153,7 +153,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               borderRadius: BorderRadius.circular(12),
             ),
             filled: true,
-            fillColor: colors.backgroundColor,
+            fillColor: colors.background,
           ),
         ),
         const SizedBox(height: 24),
@@ -165,8 +165,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             onPressed: _isLoading ? null : _handleForgotPassword,
             style: ElevatedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 16),
-              backgroundColor: colors.primaryColor,
-              disabledBackgroundColor: colors.primaryColor.withOpacity(0.5),
+              backgroundColor: colors.primary,
+              disabledBackgroundColor: colors.primary.withOpacity(0.5),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
@@ -198,7 +198,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             onPressed: () => context.go(AppRoutes.login),
             child: Text(
               'Voltar ao Login',
-              style: TextStyle(color: colors.primaryColor),
+              style: TextStyle(color: colors.primary),
             ),
           ),
         ),
@@ -209,7 +209,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   Widget _buildSuccessView() {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final colors = isDark ? ThemeColors.dark : ThemeColors.light;
+    final colors = context.colors;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -275,7 +275,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             onPressed: () => context.go(AppRoutes.login),
             style: ElevatedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 16),
-              backgroundColor: colors.primaryColor,
+              backgroundColor: colors.primary,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),

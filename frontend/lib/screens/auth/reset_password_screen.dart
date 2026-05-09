@@ -129,7 +129,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final colors = isDark ? ThemeColors.dark : ThemeColors.light;
+    final colors = context.colors;
 
     return Scaffold(
       appBar: AppBar(
@@ -139,7 +139,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
         ),
         title: const Text('Redefinir Senha'),
         elevation: 0,
-        backgroundColor: colors.primaryColor,
+        backgroundColor: colors.primary,
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -155,7 +155,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                   child: Icon(
                     Icons.lock_reset,
                     size: 80,
-                    color: colors.primaryColor,
+                    color: colors.primary,
                   ),
                 ),
                 const SizedBox(height: 32),
@@ -190,8 +190,8 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                   onStrengthChanged: (strength) {
                     setState(() => _passwordStrength = strength);
                   },
-                  primaryColor: colors.primaryColor,
-                  backgroundColor: colors.backgroundColor,
+                  primaryColor: colors.primary,
+                  backgroundColor: colors.background,
                   textSecondaryColor: colors.textSecondary,
                 ),
                 const SizedBox(height: 24),
@@ -204,8 +204,8 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                   prefixIcon: Icons.lock_outline,
                   enabled: !_isLoading,
                   isConfirmation: true,
-                  primaryColor: colors.primaryColor,
-                  backgroundColor: colors.backgroundColor,
+                  primaryColor: colors.primary,
+                  backgroundColor: colors.background,
                   textSecondaryColor: colors.textSecondary,
                 ),
                 const SizedBox(height: 12),
@@ -227,9 +227,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                     onPressed: _isLoading ? null : _handleResetPassword,
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
-                      backgroundColor: colors.primaryColor,
+                      backgroundColor: colors.primary,
                       disabledBackgroundColor:
-                          colors.primaryColor.withOpacity(0.5),
+                          colors.primary.withOpacity(0.5),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -264,7 +264,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                     onPressed: _isLoading ? null : () => context.go(AppRoutes.login),
                     child: Text(
                       'Voltar ao Login',
-                      style: TextStyle(color: colors.primaryColor),
+                      style: TextStyle(color: colors.primary),
                     ),
                   ),
                 ),
