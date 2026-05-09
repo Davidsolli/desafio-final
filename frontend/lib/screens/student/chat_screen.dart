@@ -49,6 +49,7 @@ class _ChatMsg {
 
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
   final List<_ChatMsg> _messages = [];
 
   WebSocketChannel? _channel;
@@ -58,6 +59,21 @@ class _ChatScreenState extends State<ChatScreen> {
   // Indicador de carregamento (Card 18.7)
   bool _isTyping = false;
   String _typingStatus = '';
+
+  /// Rola para o fim da lista após o próximo frame.
+  ///
+  /// Usado depois de `setState` que adiciona ou troca uma mensagem
+  /// para garantir que o usuário sempre veja o conteúdo mais recente.
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scrollController.hasClients) return;
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    });
+  }
 
   @override
   void initState() {
@@ -156,6 +172,7 @@ class _ChatScreenState extends State<ChatScreen> {
             ));
           }
         });
+        _scrollToBottom();
         break;
 
       case 'auth_error':
@@ -168,6 +185,7 @@ class _ChatScreenState extends State<ChatScreen> {
             time: _formatTime(),
           ));
         });
+        _scrollToBottom();
         _channel?.sink.close();
         break;
 
@@ -177,6 +195,7 @@ class _ChatScreenState extends State<ChatScreen> {
           _typingStatus =
               (data['message'] as String?) ?? 'Pensando...';
         });
+        _scrollToBottom();
         break;
 
       case 'response':
@@ -192,6 +211,7 @@ class _ChatScreenState extends State<ChatScreen> {
             time: _formatTime(),
           ));
         });
+        _scrollToBottom();
         break;
 
       case 'error':
@@ -206,6 +226,7 @@ class _ChatScreenState extends State<ChatScreen> {
             time: _formatTime(),
           ));
         });
+        _scrollToBottom();
         if (type == 'timeout') _channel?.sink.close();
         break;
     }
@@ -219,6 +240,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void dispose() {
     _messageController.dispose();
+    _scrollController.dispose();
     _channel?.sink.close();
     super.dispose();
   }
@@ -237,6 +259,7 @@ class _ChatScreenState extends State<ChatScreen> {
       _isTyping = true;
       _typingStatus = 'Analisando sua pergunta...';
     });
+    _scrollToBottom();
 
     if (_isConnected && _channel != null) {
       final payload = <String, dynamic>{'type': 'message', 'content': text};
@@ -255,6 +278,7 @@ class _ChatScreenState extends State<ChatScreen> {
           time: _formatTime(),
         ));
       });
+      _scrollToBottom();
     }
 
     _messageController.clear();
@@ -304,6 +328,7 @@ class _ChatScreenState extends State<ChatScreen> {
           children: [
             Expanded(
               child: ListView.builder(
+                controller: _scrollController,
                 padding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 itemCount: _messages.length + (_isTyping ? 1 : 0),
