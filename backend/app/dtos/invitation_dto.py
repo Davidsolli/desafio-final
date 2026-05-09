@@ -80,6 +80,15 @@ class ValidateInvitationResponseDTO(BaseModel):
     )
 
 
+class WhatsAppPrefillResponseDTO(BaseModel):
+    """Dados do pré-cadastro WhatsApp para preencher o formulário no app."""
+
+    found: bool = Field(description="Se existe um pré-cadastro vinculado a este código")
+    name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+
+
 class ApproveWhatsAppDTO(BaseModel):
     """DTO para aprovar pré-cadastro WhatsApp e enviar código ao usuário."""
 

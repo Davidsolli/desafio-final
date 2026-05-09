@@ -24,6 +24,7 @@ from app.dtos.invitation_dto import (
     ValidateInvitationResponseDTO,
     WhatsAppPendingItemDTO,
     WhatsAppPendingListDTO,
+    WhatsAppPrefillResponseDTO,
 )
 from app.services.invitation_service import InvitationService
 from app.services.whatsapp_service import WhatsAppService
@@ -124,6 +125,42 @@ async def list_invitations(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Erro ao listar convites",
         )
+
+
+@router.get(
+    "/whatsapp-prefill",
+    response_model=WhatsAppPrefillResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Buscar dados do pré-cadastro WhatsApp pelo código de convite (público)",
+)
+async def whatsapp_prefill(
+    code: str,
+    session: AsyncSession = Depends(get_db),
+) -> WhatsAppPrefillResponseDTO:
+    """
+    Retorna nome, email e telefone do pré-cadastro WhatsApp vinculado ao código.
+
+    Chamado pelo app quando o usuário digita o código de convite na tela de cadastro.
+    Se não houver pré-cadastro vinculado, retorna found=false sem erro — o usuário
+    simplesmente preenche os campos manualmente.
+    """
+    result = await session.execute(
+        select(WhatsAppPreRegistration).where(
+            WhatsAppPreRegistration.invitation_code == code.upper(),
+            WhatsAppPreRegistration.state == "approved",
+        )
+    )
+    pre_reg = result.scalar_one_or_none()
+
+    if not pre_reg:
+        return WhatsAppPrefillResponseDTO(found=False)
+
+    return WhatsAppPrefillResponseDTO(
+        found=True,
+        name=pre_reg.name,
+        email=pre_reg.email,
+        phone=pre_reg.phone,
+    )
 
 
 @router.get(
