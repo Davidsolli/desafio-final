@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../../config/api_config.dart';
+import '../../providers/auth_provider.dart';
 import '../../routes/app_routes.dart';
 import '../../services/chat_api_service.dart';
 import '../../theme/app_colors.dart';
@@ -65,10 +66,19 @@ class _ChatScreenState extends State<ChatScreen> {
   WebSocketChannel? _channel;
   bool _isConnected = false;
   String? _conversationId;
+  bool _disposed = false;
+  int _reconnectAttempts = 0;
 
   // Indicador de carregamento (Card 18.7)
   bool _isTyping = false;
   String _typingStatus = '';
+
+  static const List<String> _quickSuggestions = [
+    'Como faço supino corretamente?',
+    'Qual o melhor pré-treino?',
+    'Posso treinar todos os dias?',
+    'Quanto de proteína consumir?',
+  ];
 
   /// Rola para o fim da lista após o próximo frame.
   ///
@@ -128,7 +138,22 @@ class _ChatScreenState extends State<ChatScreen> {
 
   String _formatTimeFrom(DateTime dt) {
     final local = dt.toLocal();
-    return '${local.hour}:${local.minute.toString().padLeft(2, '0')}';
+    final now = DateTime.now();
+    final isToday = local.year == now.year &&
+        local.month == now.month &&
+        local.day == now.day;
+    final yesterday = DateTime(now.year, now.month, now.day - 1);
+    final isYesterday = local.year == yesterday.year &&
+        local.month == yesterday.month &&
+        local.day == yesterday.day;
+
+    final hh = local.hour.toString().padLeft(2, '0');
+    final mm = local.minute.toString().padLeft(2, '0');
+    if (isToday) return 'Hoje $hh:$mm';
+    if (isYesterday) return 'Ontem $hh:$mm';
+    final dd = local.day.toString().padLeft(2, '0');
+    final mo = local.month.toString().padLeft(2, '0');
+    return '$dd/$mo $hh:$mm';
   }
 
   Future<void> _connectWebSocket() async {
@@ -157,6 +182,7 @@ class _ChatScreenState extends State<ChatScreen> {
         onDone: () {
           if (!mounted) return;
           setState(() => _isConnected = false);
+          _scheduleReconnect();
         },
         onError: (error) {
           if (!mounted) return;
@@ -168,6 +194,7 @@ class _ChatScreenState extends State<ChatScreen> {
               time: _formatTime(),
             ));
           });
+          _scheduleReconnect();
         },
       );
 
@@ -210,13 +237,13 @@ class _ChatScreenState extends State<ChatScreen> {
     final type = data['type'] as String?;
     switch (type) {
       case 'auth_success':
+        _reconnectAttempts = 0;
         setState(() {
           _isConnected = true;
           if (_messages.isEmpty) {
             _messages.add(_ChatMsg(
               role: 'assistant',
-              text:
-                  'Olá! 👋 Sou seu assistente fitness conectado. Como posso te ajudar hoje?',
+              text: _welcomeText(),
               time: _formatTime(),
             ));
           }
@@ -281,17 +308,42 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  String _formatTime() {
-    final now = DateTime.now();
-    return '${now.hour}:${now.minute.toString().padLeft(2, '0')}';
+  String _formatTime() => _formatTimeFrom(DateTime.now());
+
+  String _welcomeText() {
+    final auth = _tryReadProvider<AuthProvider>();
+    final firstName = auth?.user?.name.split(' ').first;
+    if (firstName == null || firstName.isEmpty) {
+      return 'Olá! 👋 Sou seu assistente fitness. Como posso te ajudar hoje?';
+    }
+    return 'Olá, $firstName! 👋 Sou seu assistente fitness. Como posso te '
+        'ajudar hoje?';
+  }
+
+  void _scheduleReconnect() {
+    if (_disposed) return;
+    // Reconexão só em produção (com factory padrão); evita loops em testes.
+    if (widget.channelFactory != null) return;
+    _reconnectAttempts++;
+    final delaySeconds = _reconnectAttempts.clamp(1, 30);
+    Future<void>.delayed(Duration(seconds: delaySeconds), () {
+      if (_disposed || _isConnected) return;
+      _connectWebSocket();
+    });
   }
 
   @override
   void dispose() {
+    _disposed = true;
     _messageController.dispose();
     _scrollController.dispose();
     _channel?.sink.close();
     super.dispose();
+  }
+
+  void _sendSuggestion(String suggestion) {
+    _messageController.text = suggestion;
+    _sendMessage();
   }
 
   void _sendMessage() {
@@ -459,6 +511,11 @@ class _ChatScreenState extends State<ChatScreen> {
                 },
               ),
             ),
+            if (_isConnected && _messages.length <= 1 && !_isTyping)
+              _SuggestionChips(
+                suggestions: _quickSuggestions,
+                onTap: _sendSuggestion,
+              ),
             Container(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
               decoration: BoxDecoration(
@@ -509,6 +566,36 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Chips com perguntas frequentes — visíveis enquanto a conversa
+/// não começou (Card 18.7, melhoria de UX).
+class _SuggestionChips extends StatelessWidget {
+  final List<String> suggestions;
+  final ValueChanged<String> onTap;
+
+  const _SuggestionChips({required this.suggestions, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 4,
+        children: suggestions
+            .map(
+              (s) => ActionChip(
+                label: Text(s, style: const TextStyle(fontSize: 12)),
+                backgroundColor: context.colors.surfaceLight,
+                side: BorderSide(color: context.colors.border),
+                onPressed: () => onTap(s),
+              ),
+            )
+            .toList(),
       ),
     );
   }
