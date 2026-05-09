@@ -10,8 +10,12 @@ import hashlib
 import json
 import logging
 import os
-from fastapi import APIRouter, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.responses import Response
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.config.database import get_db
+from app.services.whatsapp_service import WhatsAppService
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +73,10 @@ async def verify_whatsapp_webhook(request: Request):
     status_code=status.HTTP_200_OK,
     summary="Receber mensagens do WhatsApp",
 )
-async def receive_whatsapp_message(request: Request):
+async def receive_whatsapp_message(
+    request: Request,
+    session: AsyncSession = Depends(get_db),
+):
     """
     Receber mensagens do WhatsApp em tempo real.
 
@@ -87,8 +94,6 @@ async def receive_whatsapp_message(request: Request):
 
     data = json.loads(payload)
 
-    logger.info(f"📩 WEBHOOK RECEBIDO:\n{data}")
-
     try:
         entry = data.get("entry", [])
         if not entry:
@@ -104,24 +109,21 @@ async def receive_whatsapp_message(request: Request):
         if not messages:
             return {"status": "ok"}
 
+        service = WhatsAppService(session)
+
         for message in messages:
             user_phone = message.get("from")
-            message_id = message.get("id")
             message_type = message.get("type", "text")
-            message_text = ""
 
-            if message_type == "text":
-                message_text = message.get("text", {}).get("body", "")
+            if message_type != "text":
+                logger.info(f"📱 Mensagem do tipo {message_type!r} ignorada (apenas texto suportado)")
+                continue
 
-            logger.info(
-                f"📱 Mensagem recebida:\n"
-                f"  De: {user_phone}\n"
-                f"  Tipo: {message_type}\n"
-                f"  Texto: {message_text}\n"
-                f"  ID: {message_id}"
-            )
+            message_text = message.get("text", {}).get("body", "")
 
-            # TODO: Implementar lógica de pré-cadastro
+            logger.info(f"📱 Mensagem recebida de {user_phone}: {message_text!r}")
+
+            await service.handle_message(phone=user_phone, text=message_text)
 
     except Exception as e:
         logger.error(f"❌ Erro ao processar webhook: {str(e)}")

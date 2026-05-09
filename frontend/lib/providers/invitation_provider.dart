@@ -104,6 +104,15 @@ class InvitationProvider extends ChangeNotifier {
     }
   }
 
+  /// Busca dados do pré-cadastro WhatsApp para preencher o formulário
+  Future<WhatsAppPrefillResponse?> fetchPrefill(String code) async {
+    try {
+      return await _invitationService.fetchPrefill(code: code);
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Limpa o código validado
   void clearValidatedCode() {
     _validatedCode = null;

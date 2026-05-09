@@ -81,6 +81,30 @@ class ListInvitationsResponse {
   }
 }
 
+/// Dados do pré-cadastro WhatsApp vinculados ao código de convite
+class WhatsAppPrefillResponse {
+  final bool found;
+  final String? name;
+  final String? email;
+  final String? phone;
+
+  WhatsAppPrefillResponse({
+    required this.found,
+    this.name,
+    this.email,
+    this.phone,
+  });
+
+  factory WhatsAppPrefillResponse.fromJson(Map<String, dynamic> json) {
+    return WhatsAppPrefillResponse(
+      found: json['found'] as bool,
+      name: json['name'] as String?,
+      email: json['email'] as String?,
+      phone: json['phone'] as String?,
+    );
+  }
+}
+
 /// Serviço de convites
 ///
 /// Responsável por:
@@ -140,6 +164,22 @@ class InvitationService {
       return response;
     } catch (e) {
       rethrow;
+    }
+  }
+
+  /// Busca dados do pré-cadastro WhatsApp vinculados a um código de convite
+  ///
+  /// Público — não requer autenticação.
+  /// Retorna found=false sem lançar exceção quando não há pré-cadastro.
+  Future<WhatsAppPrefillResponse> fetchPrefill({required String code}) async {
+    try {
+      return await _apiClient.get<WhatsAppPrefillResponse>(
+        '/invitations/whatsapp-prefill?code=$code',
+        fromJson: (data) =>
+            WhatsAppPrefillResponse.fromJson(data as Map<String, dynamic>),
+      );
+    } catch (_) {
+      return WhatsAppPrefillResponse(found: false);
     }
   }
 
