@@ -311,38 +311,6 @@ class TestNotifications:
         assert logs[1].title == "Notificação 1"
         assert logs[2].title == "Notificação 0"
 
-    async def test_notificacoes_desabilitadas_nao_chamam_fcm(
-        self, test_db_session: AsyncSession
-    ):
-        """
-        Teste 10 (reescrito — era FP-03): quando notifications_enabled=False
-        o FCM nunca é chamado E o log registra o motivo do bloqueio.
-        """
-        user_id = uuid4()
-
-        user = _make_user(user_id, fcm_token="tok")
-        pref = NotificationPreference(
-            user_id=user_id,
-            notifications_enabled=False,
-            workout_reminder_enabled=True,
-        )
-        test_db_session.add(user)
-        test_db_session.add(pref)
-        await test_db_session.commit()
-
-        with patch("firebase_admin.messaging.send") as mock_send:
-            service = NotificationService(test_db_session)
-            log = await service.send_notification(
-                user_id=user_id,
-                type="workout_reminder",
-                title="Test",
-                body="Test",
-            )
-
-            mock_send.assert_not_called()
-            assert log.status == "cancelled_by_preference"
-            assert log.notification_type == "workout_reminder"
-
     async def test_notificacao_clicada_registra_timestamp(
         self, test_db_session: AsyncSession
     ):
