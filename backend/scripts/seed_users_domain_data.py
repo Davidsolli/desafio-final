@@ -381,7 +381,7 @@ async def seed(force: bool = False) -> None:
                 session.add(entry)
 
         for index, student in enumerate(students):
-            trainer = trainers["camila"] if index < 2 else trainers["rafael"]
+            trainer = trainers["camila"] if student.trainer_id == trainers["camila"].id else trainers["rafael"]
             sheet_name = f"Treino Base {student.name.split()[0]}"
             existing_sheet_result = await session.execute(
                 select(WorkoutSheet).where(
@@ -597,6 +597,8 @@ async def seed(force: bool = False) -> None:
         print("[seed_domain] Seed de usuarios e dados de dominio concluido com sucesso.")
         print(f"[seed_domain] Admin: {admin.email}")
         print(f"[seed_domain] Personais: {len(trainers)} | Alunos: {len(students)}")
+        for s in students:
+            print(f"[seed_domain]   - {s.name} ({s.email})")
 
 
 if __name__ == "__main__":
