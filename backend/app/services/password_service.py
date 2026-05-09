@@ -112,8 +112,8 @@ class PasswordService:
         IMPORTANTE: Sempre retorna sucesso (HTTP 200) sem indicar se email existe.
         Isso previne enumeração de emails.
 
-        IDEMPOTÊNCIA: Se há token ativo para este usuário, reutilizar em vez de gerar novo.
-        Múltiplas chamadas com mesmo email retornam o mesmo token dentro do período de validade.
+        Se houver token ativo, ele é invalidado e um novo é gerado para garantir
+        que o token_raw sempre esteja disponível para envio no email.
 
         Args:
             email: Email do usuário
@@ -129,13 +129,15 @@ class PasswordService:
             if not user:
                 return None
 
-            # IDEMPOTÊNCIA: Verificar se há token válido (não usado, não expirado)
+            # Invalidar token ativo anterior, se existir, antes de gerar novo.
+            # Não é possível reutilizá-lo pois o token_raw (enviado ao usuário)
+            # não é armazenado no banco — apenas o hash SHA256.
             existing_token = await self.token_repo.get_active_by_user(user.id)
             if existing_token:
-                # Token já existe e é válido, reutilizar (não gerar novo)
-                return None, existing_token.token_hash
+                await self.token_repo.invalidate_all_user_tokens(user.id)
+                await self.token_repo.commit()
 
-            # Gerar novo token apenas se não houver ativo
+            # Gerar novo token
             token_raw, token_hash = self.generate_token()
             expires_at = datetime.now(timezone.utc) + timedelta(
                 minutes=settings.PASSWORD_RESET_TOKEN_EXPIRE_MINUTES
