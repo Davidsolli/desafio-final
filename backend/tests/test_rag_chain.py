@@ -81,6 +81,41 @@ def user_context() -> dict:
     }
 
 
+# ── Testes: Lazy Init (Groq + HuggingFace) ────────────────────────────────────
+
+
+class TestLazyInit:
+    """Inicialização lazy dos clients Groq e HuggingFace."""
+
+    @patch("app.ai.rag_chain.HuggingFaceEmbeddings")
+    def test_get_embeddings_creates_once(self, mock_embed_cls, chain):
+        """_get_embeddings() deve criar instância apenas na primeira chamada."""
+        mock_embed_cls.return_value = MagicMock()
+
+        emb1 = chain._get_embeddings()
+        emb2 = chain._get_embeddings()
+
+        assert emb1 is emb2
+        mock_embed_cls.assert_called_once()
+        # Verifica que usa o modelo correto da HuggingFace
+        kwargs = mock_embed_cls.call_args.kwargs
+        assert "all-MiniLM-L6-v2" in kwargs.get("model_name", "")
+
+    @patch("app.ai.rag_chain.ChatGroq")
+    @patch("app.ai.rag_chain.settings")
+    def test_get_llm_creates_once(self, mock_settings, mock_llm_cls, chain):
+        """_get_llm() deve criar instância apenas na primeira chamada usando ChatGroq."""
+        mock_settings.GROQ_API_KEY = "fake-key"
+        mock_settings.GROQ_MODEL = "llama-3.3-70b-versatile"
+        mock_llm_cls.return_value = MagicMock()
+
+        llm1 = chain._get_llm()
+        llm2 = chain._get_llm()
+
+        assert llm1 is llm2
+        mock_llm_cls.assert_called_once()
+
+
 # ── Testes: retrieve() ─────────────────────────────────────────────────────────
 
 class TestRetrieve:
