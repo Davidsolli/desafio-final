@@ -29,6 +29,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.settings import settings
+from app.services.faq_service import faq_service
 
 logger = logging.getLogger(__name__)
 
@@ -548,29 +549,18 @@ class RAGChain:
                 confidence_score=0.0,
             )
 
-        # ── 1.5. FAST-PATH FAQ (Fallback e Otimização) ─────────────────────
-        query_lower = query.lower()
-        faq_rules = [
-            (["horário", "horas", "aberta", "fecha", "funcionamento"], "A OmniConnect funciona de segunda a sexta, das 06:00 às 23:00, e aos sábados das 08:00 às 18:00. Domingos e feriados não abrimos."),
-            (["toalha"], "Sim, fornecemos toalhas na recepção. O uso de toalha nos equipamentos é obrigatório por questões de higiene."),
-            (["avaliação física", "agendar avaliação","com quem agendo minha avaliação","agendar minha avaliação", "quem é meu personal", "quem é o personal"], "Para agendar sua avaliação física, você pode acessar a aba 'Avaliações' aqui mesmo no aplicativo e escolher um horário disponível com o seu Personal, ou solicitar diretamente na recepção."),
-            (["onde verifico","onde vejo","onde encontro", "lista de treinos", "meu treino", "treino de hoje", "treinos para hoje", "qual meu treino"], "Você pode verificar a sua lista de treinos de hoje e da semana acessando a aba 'Meus Treinos' na tela inicial do aplicativo. Lá seu Personal deixa tudo prescrito!"),
-            (["mensalidade", "pagamento", "pagar", "plano"], "Para detalhes sobre sua assinatura, mensalidade ou planos, acesse a seção 'Assinatura' no menu do seu perfil ou procure a recepção."),
-            (["wi-fi", "wifi", "internet", "senha da internet"], "A rede Wi-Fi para alunos é 'OmniConnect_Alunos' e a senha é: TreinoFocado100"),
-            (["cancelar", "cancelamento", "trancar"], "Para cancelar ou trancar sua matrícula, por favor, entre em contato com a recepção presencialmente. Não é possível fazer isso pelo app no momento.")
-        ]
-
-        for keywords, response in faq_rules:
-            if any(kw in query_lower for kw in keywords):
-                latency_ms = int((time.monotonic() - start_time) * 1000)
-                return RAGResult(
-                    answer=response,
-                    retrieved_documents=[],
-                    should_escalate=False,
-                    latency_ms=latency_ms,
-                    confidence_score=1.0,
-                    model_used="faq_fallback"
-                )
+        # ── 1.5. FAST-PATH FAQ (delegado ao FAQService dedicado) ───────────
+        faq_response = faq_service.match(query)
+        if faq_response is not None:
+            latency_ms = int((time.monotonic() - start_time) * 1000)
+            return RAGResult(
+                answer=faq_response,
+                retrieved_documents=[],
+                should_escalate=False,
+                latency_ms=latency_ms,
+                confidence_score=1.0,
+                model_used="faq_fallback",
+            )
 
         # ── 2. AUGMENT ─────────────────────────────────────────────────────
         system_prompt = self.augment(
