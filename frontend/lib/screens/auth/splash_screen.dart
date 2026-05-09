@@ -47,7 +47,7 @@ class _SplashScreenState extends State<SplashScreen> {
     // o GoRouter já navegou para essa rota. Não sobrescrever com redirect para login.
     if (kIsWeb) {
       final browserPath = Uri.base.path;
-      if (_publicDeepLinks.any((r) => browserPath.startsWith(r))) {
+      if (_publicDeepLinks.any((r) => browserPath == r || browserPath.startsWith('$r/'))) {
         // Garantir que o GoRouter também reflita a rota correta com query params
         final destination = Uri.base.query.isNotEmpty
             ? '${Uri.base.path}?${Uri.base.query}'
