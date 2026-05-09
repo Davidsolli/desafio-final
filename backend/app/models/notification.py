@@ -40,8 +40,8 @@ class NotificationPreference(Base):
     # Silent days (0=Monday, 1=Tuesday, ..., 6=Sunday)
     silent_days = Column(JSON, nullable=True)
 
-    created_at = Column(DateTime, nullable=False, default=utc_now)
-    updated_at = Column(DateTime, nullable=False, default=utc_now, onupdate=utc_now)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
 
 
 class NotificationLog(Base):
@@ -57,14 +57,14 @@ class NotificationLog(Base):
     body = Column(String(1000), nullable=False)
     data = Column(JSON, nullable=True) # Dados adicionais (ex: workout_sheet_id)
     
-    sent_at = Column(DateTime, nullable=True)
-    read_at = Column(DateTime, nullable=True)
-    clicked_at = Column(DateTime, nullable=True)
-    
+    sent_at = Column(DateTime(timezone=True), nullable=True)
+    read_at = Column(DateTime(timezone=True), nullable=True)
+    clicked_at = Column(DateTime(timezone=True), nullable=True)
+
     status = Column(String(50), nullable=False, default="pending")
     error = Column(String(1000), nullable=True)
 
-    created_at = Column(DateTime, nullable=False, default=utc_now)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
 
 
 class WorkoutReminderSchedule(Base):
@@ -82,7 +82,7 @@ class WorkoutReminderSchedule(Base):
     
     # Status
     sent = Column(Boolean, default=False, nullable=False)
-    sent_at = Column(DateTime, nullable=True)
+    sent_at = Column(DateTime(timezone=True), nullable=True)
     delivery_status = Column(String(50), nullable=False, default="pending")
 
-    created_at = Column(DateTime, nullable=False, default=utc_now)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
