@@ -441,10 +441,10 @@ class ChatService:
         await self.session.flush()
 
         await emit("searching", "Buscando na base de conhecimento...")
+        await emit("generating", "Preparando sua resposta...")
 
         # 6. Pipeline RAG
         start = time.monotonic()
-        await emit("generating", "Preparando sua resposta...")
         rag_result: RAGResult = await rag_chain.run(
             query=clean_message,
             session=self.session,

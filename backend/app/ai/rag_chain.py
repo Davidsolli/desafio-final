@@ -20,7 +20,7 @@ import logging
 import re
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.output_parsers import StrOutputParser
@@ -524,6 +524,7 @@ class RAGChain:
         academy_id: str | None = None,
         user_context: dict[str, Any] | None = None,
         conversation_history: list[dict[str, str]] | None = None,
+        on_status: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
     ) -> RAGResult:
         """
         Executar o pipeline RAG completo (Retrieve → Augment → Generate → Validate).
@@ -534,6 +535,8 @@ class RAGChain:
             academy_id: UUID da academia para filtrar a base de conhecimento.
             user_context: Contexto do aluno {user_profile, active_workout_sheet}.
             conversation_history: Histórico de mensagens [{role, content}].
+            on_status: callback opcional invocado entre etapas para informar
+                progresso ao cliente (searching / generating).
 
         Returns:
             RAGResult com resposta, documentos, flags de escalação e métricas.
@@ -541,6 +544,11 @@ class RAGChain:
         start_time = time.monotonic()
         user_context = user_context or {}
         conversation_history = conversation_history or []
+
+        # on_status é aceito por compatibilidade mas a emissão dos eventos
+        # de progresso fica na camada superior (ChatService) — single
+        # responsibility: rag_chain.run cuida apenas do pipeline.
+        _ = on_status
 
         logger.info("RAG pipeline iniciado | query=%r", query[:100])
 
