@@ -637,7 +637,11 @@ class RAGChain:
             )
 
         # ── 4. VALIDATE ────────────────────────────────────────────────────
-        is_valid, needs_review = self.validate(answer, retrieved_docs)
+        # Regra única e previsível: se a resposta gerada não passa na
+        # validação (vazia/curta demais), substituímos por mensagem segura
+        # de fallback e escalamos. Caso contrário, preservamos o estado de
+        # escalação já calculado em _should_escalate.
+        is_valid, _needs_review = self.validate(answer, retrieved_docs)
         if not is_valid:
             answer = (
                 "Não encontrei informações suficientes na base de conhecimento "
@@ -645,13 +649,6 @@ class RAGChain:
             )
             should_escalate = True
             escalation_reason = "validation_failed"
-        elif not retrieved_docs and not should_escalate:
-             # Nao precisa fazer nada
-             pass
-        elif not retrieved_docs and should_escalate:
-            # Respondeu com sucesso (usando FAQ), então podemos cancelar a escalação
-            should_escalate = False
-            escalation_reason = ""
 
         # Calcular confidence como média dos scores recuperados
         confidence = (
