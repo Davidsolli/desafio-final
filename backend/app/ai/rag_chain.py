@@ -15,6 +15,7 @@ Dependências:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 import time
@@ -161,6 +162,28 @@ class RAGChain:
                 max_tokens=LLM_MAX_TOKENS,
             )
         return self._llm
+
+    # ── Warm-up (chamado no startup da aplicação) ─────────────────────────
+
+    async def warm_up(self) -> None:
+        """
+        Pré-aquece o modelo de embeddings local para reduzir latência da
+        primeira requisição.
+
+        O HuggingFace baixa e carrega o modelo no primeiro `aembed_query`,
+        o que pode adicionar segundos a um cold start. Chamar warm_up() no
+        lifespan da FastAPI evita que o primeiro usuário pague essa conta.
+
+        Falhas de inicialização são logadas mas não derrubam a aplicação —
+        o lazy init original cobrirá quando vier a primeira request real.
+        """
+        try:
+            embeddings = self._get_embeddings()
+            # Embedding curto é suficiente para forçar o download/load do modelo
+            await embeddings.aembed_query("warmup")
+            logger.info("RAGChain.warm_up: embeddings prontos para uso")
+        except Exception as exc:
+            logger.warning("RAGChain.warm_up falhou (lazy init cobrirá): %s", exc)
 
     # ── Etapa 1: RETRIEVE ─────────────────────────────────────────────────
 
@@ -568,8 +591,30 @@ class RAGChain:
         )
 
         # ── 3. GENERATE ────────────────────────────────────────────────────
+        # Aplica timeout duro: se o LLM exceder CHAT_MAX_RESPONSE_LATENCY_MS,
+        # cancelamos e devolvemos fallback amigável + escalação.
+        timeout_seconds = settings.CHAT_MAX_RESPONSE_LATENCY_MS / 1000
         try:
-            answer, tokens_used, model_name = await self.generate(system_prompt, query)
+            answer, tokens_used, model_name = await asyncio.wait_for(
+                self.generate(system_prompt, query),
+                timeout=timeout_seconds,
+            )
+        except asyncio.TimeoutError:
+            logger.warning(
+                "Geração excedeu %d ms — abortando com fallback",
+                settings.CHAT_MAX_RESPONSE_LATENCY_MS,
+            )
+            latency_ms = int((time.monotonic() - start_time) * 1000)
+            return RAGResult(
+                answer=(
+                    "Desculpe, sua dúvida está demorando mais que o esperado. "
+                    "Estou encaminhando para o seu Personal Trainer para garantir "
+                    "uma resposta atenciosa."
+                ),
+                should_escalate=True,
+                escalation_reason="timeout",
+                latency_ms=latency_ms,
+            )
         except Exception as exc:
             logger.error("Falha na geração: %s", exc)
             latency_ms = int((time.monotonic() - start_time) * 1000)
