@@ -6,6 +6,7 @@ templates HTML, e integração com Resend SDK.
 """
 
 import asyncio
+import html as html_lib
 from datetime import datetime
 
 import resend
@@ -85,6 +86,8 @@ class EmailService:
             HTML do email
         """
         current_year = datetime.now().year
+        safe_name = html_lib.escape(user_name)
+        safe_link = html_lib.escape(reset_link)
         return f"""
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -193,18 +196,18 @@ class EmailService:
         </div>
 
         <div class="content">
-            <div class="greeting">Olá, <strong>{user_name}</strong>!</div>
+            <div class="greeting">Olá, <strong>{safe_name}</strong>!</div>
 
             <div class="message">
                 <p>Você solicitou para recuperar sua senha. Para redefinir sua senha e acessar sua conta, clique no botão abaixo:</p>
             </div>
 
             <div class="button-container">
-                <a href="{reset_link}" class="reset-button">Redefinir Minha Senha</a>
+                <a href="{safe_link}" class="reset-button">Redefinir Minha Senha</a>
             </div>
 
             <p style="color: #999; font-size: 14px; text-align: center;">Ou copie este link:</p>
-            <div class="link-text">{reset_link}</div>
+            <div class="link-text">{safe_link}</div>
 
             <div class="expiration">
                 ⏰ <strong>Atenção!</strong> Este link expira em <strong>60 minutos</strong>. Se não usar neste período, solicite um novo link de recuperação.
