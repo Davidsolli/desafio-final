@@ -7,17 +7,24 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:omniconnect_fitness/theme/app_theme.dart';
+import 'package:omniconnect_fitness/shared/widgets/omni_app_bar.dart';
 
 void main() {
-  testWidgets('Widget básico renderiza sem erros', (WidgetTester tester) async {
+  testWidgets('Tema e componentes base da aplicação renderizam corretamente',
+      (WidgetTester tester) async {
     await tester.pumpWidget(
-      const MaterialApp(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
         home: Scaffold(
-          body: Center(child: Text('OmniConnect')),
+          appBar: OmniAppBar(title: 'OmniConnect Fitness'),
+          body: const Center(child: Text('Bem-vindo')),
         ),
       ),
     );
 
-    expect(find.text('OmniConnect'), findsOneWidget);
+    expect(find.text('OmniConnect Fitness'), findsOneWidget);
+    expect(find.text('Bem-vindo'), findsOneWidget);
+    expect(find.byType(OmniAppBar), findsOneWidget);
   });
 }

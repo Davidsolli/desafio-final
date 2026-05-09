@@ -1,15 +1,17 @@
 """Webhooks para integrações externas (WhatsApp, etc).
 
 Endpoints:
-- POST /api/v1/webhooks/whatsapp → Receber mensagens do WhatsApp
 - GET /api/v1/webhooks/whatsapp → Validar webhook (handshake Meta)
+- POST /api/v1/webhooks/whatsapp → Receber mensagens do WhatsApp
 """
 
 import hmac
 import hashlib
+import json
 import logging
 import os
 from fastapi import APIRouter, HTTPException, status, Request, Query
+from fastapi.responses import PlainTextResponse
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +36,7 @@ def _verify_signature(payload: bytes, signature_header: str) -> bool:
     "/whatsapp",
     status_code=status.HTTP_200_OK,
     summary="Validar webhook do WhatsApp (handshake)",
+    response_class=PlainTextResponse,
 )
 async def verify_whatsapp_webhook(
     hub_mode: str = Query(None, alias="hub.mode"),
@@ -44,7 +47,7 @@ async def verify_whatsapp_webhook(
     Validar webhook do WhatsApp.
 
     O Meta envia uma requisição GET para verificar que você é o dono do webhook.
-    Você precisa retornar o hub.challenge para confirmar.
+    Retorna o hub.challenge como plain text para confirmar.
     """
     verify_token = os.getenv("WHATSAPP_VERIFY_TOKEN")
 
@@ -52,11 +55,11 @@ async def verify_whatsapp_webhook(
         raise HTTPException(status_code=403, detail="Modo inválido")
 
     if hub_verify_token != verify_token:
-        logger.warning(f"❌ Token de verificação inválido: {hub_verify_token}")
+        logger.warning("❌ Token de verificação inválido recebido no handshake")
         raise HTTPException(status_code=403, detail="Token inválido")
 
     logger.info("✅ Webhook validado com sucesso!")
-    return {"hub.challenge": hub_challenge}
+    return PlainTextResponse(content=hub_challenge)
 
 
 @router.post(
@@ -69,16 +72,18 @@ async def receive_whatsapp_message(request: Request):
     Receber mensagens do WhatsApp em tempo real.
 
     O WhatsApp envia um JSON com a mensagem do usuário.
-    Aqui você pode processar e responder.
     """
     payload = await request.body()
     signature = request.headers.get("X-Hub-Signature-256", "")
 
-    if os.getenv("WHATSAPP_APP_SECRET") and not _verify_signature(payload, signature):
+    app_secret = os.getenv("WHATSAPP_APP_SECRET")
+    if not app_secret:
+        logger.warning("⚠️ WHATSAPP_APP_SECRET não configurado — validação de assinatura desativada")
+    elif not _verify_signature(payload, signature):
         logger.warning("❌ Assinatura inválida no webhook POST")
         raise HTTPException(status_code=403, detail="Assinatura inválida")
 
-    data = await request.json()
+    data = json.loads(payload)
 
     logger.info(f"📩 WEBHOOK RECEBIDO:\n{data}")
 
@@ -97,26 +102,24 @@ async def receive_whatsapp_message(request: Request):
         if not messages:
             return {"status": "ok"}
 
-        message = messages[0]
-        user_phone = message.get("from")
-        message_id = message.get("id")
-        timestamp = message.get("timestamp")
+        for message in messages:
+            user_phone = message.get("from")
+            message_id = message.get("id")
+            message_type = message.get("type", "text")
+            message_text = ""
 
-        message_type = message.get("type", "text")
-        message_text = ""
+            if message_type == "text":
+                message_text = message.get("text", {}).get("body", "")
 
-        if message_type == "text":
-            message_text = message.get("text", {}).get("body", "")
+            logger.info(
+                f"📱 Mensagem recebida:\n"
+                f"  De: {user_phone}\n"
+                f"  Tipo: {message_type}\n"
+                f"  Texto: {message_text}\n"
+                f"  ID: {message_id}"
+            )
 
-        logger.info(
-            f"📱 Mensagem recebida:\n"
-            f"  De: {user_phone}\n"
-            f"  Tipo: {message_type}\n"
-            f"  Texto: {message_text}\n"
-            f"  ID: {message_id}"
-        )
-
-        # TODO: Implementar lógica de pré-cadastro
+            # TODO: Implementar lógica de pré-cadastro
 
     except Exception as e:
         logger.error(f"❌ Erro ao processar webhook: {str(e)}")

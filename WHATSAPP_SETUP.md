@@ -59,7 +59,7 @@ Se receber `200 OK`, está funcionando!
 **Opção B: Send a Test Message (Recomendado)**
 
 1. Va em **WhatsApp** → **Manage Phone Number**
-2. Selecione seu número (1158927947299601)
+2. Selecione seu número (<SEU_PHONE_NUMBER_ID>)
 3. Procure por **Test Message** ou **Send Test Message**
 4. Envie uma mensagem de teste
 
