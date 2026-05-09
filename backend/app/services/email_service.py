@@ -5,12 +5,12 @@ Responsável por ferramentas de comunicação por email,
 templates HTML, e integração com Resend SDK.
 """
 
-from app.config.settings import settings
+import asyncio
+from datetime import datetime
 
-try:
-    from resend import Resend
-except ImportError:
-    Resend = None
+import resend
+
+from app.config.settings import settings
 
 
 class EmailSendError(Exception):
@@ -29,12 +29,7 @@ class EmailService:
                 "RESEND_API_KEY não configurada nas variáveis de ambiente"
             )
 
-        if Resend is None:
-            raise EmailSendError(
-                "Biblioteca 'resend' não está instalada. Instale com: pip install resend"
-            )
-
-        self.client = Resend(api_key=settings.RESEND_API_KEY)
+        resend.api_key = settings.RESEND_API_KEY
         self.from_email = settings.RESEND_FROM_EMAIL
         self.from_name = settings.RESEND_FROM_NAME
 
@@ -63,13 +58,16 @@ class EmailService:
         html_body = self._render_password_reset_template(user_name, reset_link)
 
         try:
-            self.client.emails.send(
+            # O SDK Resend é síncrono; executar em thread separada para não
+            # bloquear o event loop assíncrono do FastAPI.
+            await asyncio.to_thread(
+                resend.Emails.send,
                 {
                     "from": f"{self.from_name} <{self.from_email}>",
                     "to": to_email,
                     "subject": "Recupere sua senha — OmniConnect Fitness",
                     "html": html_body,
-                }
+                },
             )
         except Exception as e:
             raise EmailSendError(f"Falha ao enviar email: {str(e)}")
@@ -86,6 +84,7 @@ class EmailService:
         Returns:
             HTML do email
         """
+        current_year = datetime.now().year
         return f"""
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -222,7 +221,7 @@ class EmailService:
         </div>
 
         <div class="footer">
-            <p>© {{year}} OmniConnect Fitness. Todos os direitos reservados.</p>
+            <p>© {current_year} OmniConnect Fitness. Todos os direitos reservados.</p>
             <p>Este é um email automático. Por favor, não responda.</p>
         </div>
     </div>
