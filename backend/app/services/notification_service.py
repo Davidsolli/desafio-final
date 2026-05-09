@@ -21,6 +21,8 @@ _TYPE_TO_PREF_FIELD: Dict[str, str] = {
     "workout_reminder": "workout_reminder_enabled",
     "meal_reminder": "meal_reminder_enabled",
     "new_workout_sheet": "new_workout_sheet_enabled",
+    "achievement": "achievement_enabled",
+    "performance_report": "performance_report_enabled",
 }
 
 
