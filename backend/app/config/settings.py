@@ -43,6 +43,14 @@ class Settings(BaseSettings):
     CHAT_MAX_MESSAGE_LENGTH: int = 500          # RN segurança: máximo de caracteres
     CHAT_INACTIVITY_CLOSE_HOURS: int = 24       # RN-02: fechar conversa após 24h inativa
 
+    # ── Recuperação de Senha ───────────────────────────────────────────────
+    PASSWORD_RESET_TOKEN_EXPIRE_MINUTES: int = 60
+    RESEND_API_KEY: str = ""
+    RESEND_FROM_EMAIL: str = "onboarding@resend.dev"
+    RESEND_FROM_NAME: str = "OmniConnect Fitness"
+    FRONTEND_URL: str = "http://localhost:3000"
+    FRONTEND_RESET_PASSWORD_ROUTE: str = "/reset-password"
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
