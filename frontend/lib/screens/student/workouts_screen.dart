@@ -554,12 +554,24 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
         );
       }
 
+      // Mapeia o emoji selecionado no app para o valor aceito pelo backend (great, good, normal, bad, terrible)
+      String backendMood = 'good';
+      if (mood == '😢') {
+        backendMood = 'bad';
+      } else if (mood == '😐') {
+        backendMood = 'normal';
+      } else if (mood == '🙂') {
+        backendMood = 'good';
+      } else if (mood == '🔥') {
+        backendMood = 'great';
+      }
+
       // 2. Finalizar e salvar os metadados da sessão (RPE, mood, etc)
       await logbookProvider.completeActiveSession(
         sessionId: _activeSessionId!,
         notes: notes,
         difficultyLevel: rpe,
-        mood: mood,
+        mood: backendMood,
       );
 
       // Configura o overlay de sucesso premium!
@@ -1224,43 +1236,52 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
 
               return Padding(
                 padding: const EdgeInsets.only(right: 8),
-                child: ChoiceChip(
-                  showCheckmark: false, // Desativa o checkmark nativo instável que causa o overflow
-                  label: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (isSelected) ...[
-                        const Icon(Icons.check, size: 14, color: AppColors.primary),
-                        const SizedBox(width: 4),
-                      ],
-                      Text(prog.name, style: const TextStyle(fontSize: 12)),
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: isOfficial ? Colors.amber[800] : Colors.blue[800],
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          isOfficial ? 'Oficial 🛡️' : 'Personalizado 👤',
-                          style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ],
-                  ),
-                  selected: isSelected,
-                  selectedColor: AppColors.primary.withOpacity(0.15),
-                  backgroundColor: context.colors.surface,
-                  side: BorderSide(
-                    color: isSelected ? AppColors.primary : context.colors.border,
-                    width: isSelected ? 1.5 : 1,
-                  ),
-                  onSelected: (selected) async {
-                    if (selected) {
-                      provider.selectProgram(prog);
-                      await provider.loadSheets(workoutProgramId: prog.id);
-                    }
+                child: GestureDetector(
+                  onTap: () async {
+                    provider.selectProgram(prog);
+                    await provider.loadSheets(workoutProgramId: prog.id);
                   },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: isSelected ? AppColors.primary.withOpacity(0.12) : context.colors.surface,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: isSelected ? AppColors.primary : context.colors.border,
+                        width: isSelected ? 1.5 : 1,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (isSelected) ...[
+                          const Icon(Icons.check, size: 14, color: AppColors.primary),
+                          const SizedBox(width: 4),
+                        ],
+                        Text(
+                          prog.name, 
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                            color: isSelected ? AppColors.primary : context.colors.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: isOfficial ? Colors.amber[800] : Colors.blue[800],
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            isOfficial ? 'Oficial 🛡️' : 'Personalizado 👤',
+                            style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               );
             }).toList(),
