@@ -385,6 +385,49 @@ class WorkoutSheetProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Seleciona o programa ativo no estado
+  void selectProgram(WorkoutProgramResponse? program) {
+    _selectedProgram = program;
+    _selectedSheet = null; // Limpa a ficha selecionada ao mudar de programa
+    _sheets = []; // Limpa a listagem de fichas temporariamente
+    notifyListeners();
+  }
+
+  /// Seleciona a ficha ativa no estado
+  void selectSheet(WorkoutSheetResponse? sheet) {
+    _selectedSheet = sheet;
+    notifyListeners();
+  }
+
+  /// Deleta um programa de treino (soft delete)
+  Future<void> deleteProgram(String programId) async {
+    try {
+      _setLoading(true);
+      _error = null;
+
+      await _service.deleteWorkoutProgram(programId);
+      _programs.removeWhere((p) => p.id == programId);
+      if (_selectedProgram?.id == programId) {
+        _selectedProgram = null;
+      }
+      notifyListeners();
+    } on NetworkException catch (e) {
+      _error = 'Erro de conexão: ${e.message}';
+      notifyListeners();
+      rethrow;
+    } on ApiException catch (e) {
+      _error = e.message;
+      notifyListeners();
+      rethrow;
+    } catch (e) {
+      _error = 'Erro ao deletar programa: ${e.toString()}';
+      notifyListeners();
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
   /// Limpa todos os dados.
   void clearAll() {
     _programs = [];
