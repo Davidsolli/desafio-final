@@ -178,6 +178,47 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  /// Solicita link de recuperação de senha por email
+  Future<void> requestPasswordReset({required String email}) async {
+    try {
+      _setLoading(true);
+      _error = null;
+      await _authService.requestPasswordReset(email: email);
+    } on ApiException catch (e) {
+      _error = e.message;
+      notifyListeners();
+      rethrow;
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  /// Redefine a senha usando o token recebido por email
+  Future<void> resetPassword({
+    required String token,
+    required String newPassword,
+  }) async {
+    try {
+      _setLoading(true);
+      _error = null;
+      await _authService.resetPassword(token: token, newPassword: newPassword);
+    } on ApiException catch (e) {
+      _error = e.message;
+      notifyListeners();
+      rethrow;
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
   /// Faz logout do usuário
   Future<void> logout() async {
     try {

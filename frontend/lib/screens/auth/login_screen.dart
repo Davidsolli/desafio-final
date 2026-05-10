@@ -150,7 +150,21 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 8),
+                    // Esqueceu a senha
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () => context.go(AppRoutes.forgotPassword),
+                        child: Text(
+                          'Esqueceu sua senha?',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: AppColors.primary,
+                              ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
                     // Botão Login
                     SizedBox(
                       width: double.infinity,

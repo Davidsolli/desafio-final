@@ -26,6 +26,8 @@ import '../screens/admin/admin_pt_form_screen.dart';
 import '../screens/admin/admin_pt_details_screen.dart';
 import '../screens/admin/admin_settings_screen.dart';
 import '../screens/admin/admin_student_form_screen.dart';
+import '../screens/auth/forgot_password_screen.dart';
+import '../screens/auth/reset_password_screen.dart';
 
 class AppRoutes {
   // Auth
@@ -33,6 +35,8 @@ class AppRoutes {
   static const String login = '/login';
   static const String register = '/register';
   static const String inviteCode = '/invite-code';
+  static const String forgotPassword = '/forgot-password';
+  static const String resetPassword = '/reset-password';
   static const String generateInvite = '/trainer/generate-invite';
 
   // Student
@@ -86,6 +90,16 @@ class AppRoutes {
       GoRoute(
         path: inviteCode,
         builder: (context, state) => const InviteCodeScreen(),
+      ),
+      GoRoute(
+        path: forgotPassword,
+        builder: (context, state) => const ForgotPasswordScreen(),
+      ),
+      GoRoute(
+        path: resetPassword,
+        builder: (context, state) => ResetPasswordScreen(
+          token: state.uri.queryParameters['token'],
+        ),
       ),
       GoRoute(
         path: generateInvite,
