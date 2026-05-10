@@ -7,6 +7,7 @@ import '../../../providers/nutrition_provider.dart';
 import '../../../models/diet_models.dart';
 import '../../../services/nutrition_service.dart';
 import '../../../services/api_client.dart'; // To get ApiClient, or we can get service from context
+import 'create_custom_food_dialog.dart';
 
 class FoodSearchModal extends StatefulWidget {
   const FoodSearchModal({super.key});
@@ -124,6 +125,29 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
     });
   }
 
+  Future<void> _openCreateCustomFoodDialog() async {
+    final newFood = await showDialog<CustomFood?>(
+      context: context,
+      builder: (context) => const CreateCustomFoodDialog(),
+    );
+
+    if (newFood != null && mounted) {
+      setState(() {
+        _selectedFood = FoodCatalogItem(
+          id: newFood.id,
+          name: newFood.name,
+          category: newFood.category,
+          energyKcal: newFood.energyKcal,
+          proteinG: newFood.proteinG,
+          carbohydrateG: newFood.carbohydrateG,
+          lipidG: newFood.lipidG,
+          fiberG: newFood.fiberG,
+          source: 'custom',
+        );
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return DraggableScrollableSheet(
@@ -191,6 +215,23 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
               ),
             ),
           ),
+          // Botão de criação rápida sempre visível abaixo da busca
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton.icon(
+                  icon: const Icon(Icons.add_circle_outline, size: 16, color: AppColors.primary),
+                  label: const Text(
+                    'Criar Alimento Personalizado',
+                    style: TextStyle(color: AppColors.primary, fontSize: 13, fontWeight: FontWeight.bold),
+                  ),
+                  onPressed: _openCreateCustomFoodDialog,
+                ),
+              ],
+            ),
+          ),
           if (_isLoading)
             const Padding(
               padding: EdgeInsets.all(24.0),
@@ -202,9 +243,26 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
               child: Text(_error!, style: const TextStyle(color: AppColors.accentError)),
             )
           else if (_searchController.text.isNotEmpty && _searchResults.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(24.0),
-              child: Text('Nenhum alimento encontrado. Tente outra busca.'),
+            Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Nenhum alimento encontrado. Tente outra busca.'),
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    onPressed: _openCreateCustomFoodDialog,
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Criar Alimento Personalizado'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ],
+              ),
             )
           else
             Expanded(

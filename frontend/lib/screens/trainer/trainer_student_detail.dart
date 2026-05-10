@@ -13,6 +13,7 @@ import '../../services/workout_sheet_service.dart';
 import '../../shared/widgets/index.dart';
 import 'widgets/create_workout_sheet_dialog.dart';
 import 'widgets/edit_workout_sheet_dialog.dart';
+import '../student/widgets/create_custom_food_dialog.dart';
 
 class TrainerStudentDetail extends StatefulWidget {
   final String studentId;
@@ -31,7 +32,8 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
 
   // Estado local para fichas do aluno (carregadas via API)
   List<WorkoutSheetListItem> _studentSheets = [];
-  bool _sheetsLoading = false;
+  WorkoutProgramResponse? _activeProgram;
+  bool _sheetsLoading = true;
   String? _sheetsError;
   List<Diet> _studentDiets = [];
   bool _nutritionLoading = false;
@@ -113,12 +115,26 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
     });
     try {
       final provider = context.read<WorkoutSheetProvider>();
-      await provider.loadSheets(userId: widget.studentId);
-      if (mounted) {
-        setState(() {
-          _studentSheets = provider.sheets;
-          _sheetsLoading = false;
-        });
+      await provider.loadPrograms(userId: widget.studentId);
+      
+      if (provider.programs.isNotEmpty) {
+        final active = provider.programs.firstWhere((p) => p.isActive, orElse: () => provider.programs.first);
+        await provider.loadSheets(workoutProgramId: active.id);
+        if (mounted) {
+          setState(() {
+            _activeProgram = active;
+            _studentSheets = provider.sheets;
+            _sheetsLoading = false;
+          });
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _activeProgram = null;
+            _studentSheets = [];
+            _sheetsLoading = false;
+          });
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -405,7 +421,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
     try {
       final dto = DuplicateWorkoutSheetDTO(
         name: '${sheet.name} (Cópia)',
-        userId: widget.studentId,
+        workoutProgramId: _activeProgram!.id,
       );
       await context.read<WorkoutSheetProvider>().duplicateSheet(sheet.id, dto);
       await _loadStudentSheets();
@@ -632,10 +648,30 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
   }
 
   Future<void> _showCreateWorkoutDialog() async {
+    if (_activeProgram == null) {
+      // Cria um programa padrão automaticamente se não existir
+      try {
+        final provider = context.read<WorkoutSheetProvider>();
+        final newProgram = await provider.createProgram(CreateWorkoutProgramDTO(
+          userId: widget.studentId,
+          name: 'Programa Padrão',
+          goal: 'Geral',
+        ));
+        setState(() => _activeProgram = newProgram);
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Erro ao criar programa inicial.'), backgroundColor: AppColors.accentError),
+          );
+        }
+        return;
+      }
+    }
+
     final result = await showDialog<bool>(
       context: context,
       builder: (_) => CreateWorkoutSheetDialog(
-        targetUserId: widget.studentId,
+        workoutProgramId: _activeProgram!.id,
       ),
     );
     if (result == true && mounted) {
@@ -727,6 +763,37 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                       ),
                     ),
                   ),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: TextButton.icon(
+                        icon: const Icon(Icons.add_circle_outline, size: 14, color: AppColors.primary),
+                        label: const Text(
+                          'Criar Alimento Personalizado',
+                          style: TextStyle(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: () async {
+                          final newFood = await showDialog<CustomFood?>(
+                            context: context,
+                            builder: (ctx) => const CreateCustomFoodDialog(),
+                          );
+                          if (newFood != null) {
+                            setModalState(() {
+                              editableItems.add(
+                                _EditableDietItem(
+                                  foodId: null,
+                                  customFoodId: newFood.id,
+                                  foodName: newFood.name,
+                                  quantityG: 100,
+                                ),
+                              );
+                            });
+                          }
+                        },
+                      ),
+                    ),
+                  ),
                   if (searching)
                     const Padding(
                       padding: EdgeInsets.all(8.0),
@@ -742,8 +809,8 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                         setModalState(() {
                           editableItems.add(
                             _EditableDietItem(
-                              foodId: int.tryParse(food.id),
-                              customFoodId: null,
+                              foodId: food.source == 'taco' ? int.tryParse(food.id) : null,
+                              customFoodId: food.source == 'custom' ? food.id : null,
                               foodName: food.name,
                               quantityG: 100,
                             ),
