@@ -44,14 +44,56 @@ LLM_MAX_TOKENS = settings.RAG_LLM_MAX_TOKENS
 LLM_TEMPERATURE = settings.RAG_LLM_TEMPERATURE
 HISTORY_MAX_TOKENS = settings.RAG_HISTORY_MAX_TOKENS
 
-# Palavras-chave que forçam escalação imediata (RN-12)
-ESCALATION_KEYWORDS = [
+# Palavras-chave que indicam pedido EXPLÍCITO de humano (RN-12)
+EXPLICIT_REQUEST_KEYWORDS = [
     "falar com personal", "chamar personal", "quero personal",
+    "personal trainer", "me ajuda pessoalmente", "suporte humano",
+    "falar com profissional", "humano", "atendente",
     "não entendi", "nao entendi", "ainda com dúvida", "ainda com duvida",
-    "me ajuda pessoalmente", "suporte humano", "personal trainer",
-    "lesão", "lesao", "dor no peito", "dor forte",
-    "médico", "medico", "emergência", "emergencia", "dor",
 ]
+
+# Palavras-chave que sinalizam RISCO À SAÚDE (RN-17) — prioridade máxima
+HEALTH_RISK_KEYWORDS = [
+    "dor no peito", "dor forte", "dor", "lesão", "lesao",
+    "fratura", "tontura", "desmaio", "passar mal",
+    "médico", "medico", "emergência", "emergencia",
+]
+
+# Mantido como alias para retrocompatibilidade (alguns testes externos consultam)
+ESCALATION_KEYWORDS = HEALTH_RISK_KEYWORDS + EXPLICIT_REQUEST_KEYWORDS
+
+# Mensagens contextualizadas por motivo de escalação (Card 19.10)
+ESCALATION_MESSAGES: dict[str, str] = {
+    "user_requested": (
+        "Entendi! Vou encaminhar sua dúvida para o seu Personal Trainer. "
+        "Ele receberá uma notificação e poderá te responder em breve! 🎯"
+    ),
+    "health_risk": (
+        "⚠️ Por segurança, como sua mensagem pode envolver risco à saúde, "
+        "recomendo consultar um profissional. Já notifiquei seu Personal "
+        "Trainer para que ele possa orientar você adequadamente."
+    ),
+    "low_confidence": (
+        "Essa é uma ótima pergunta! Para garantir a melhor resposta, "
+        "estou encaminhando para o seu Personal Trainer. 💪"
+    ),
+    "too_complex": (
+        "Essa dúvida requer atenção especializada. Seu Personal Trainer "
+        "será notificado para te ajudar pessoalmente! 📋"
+    ),
+    "validation_failed": (
+        "Não encontrei informações suficientes na base para responder com "
+        "segurança. Seu Personal poderá te ajudar melhor! 🤝"
+    ),
+    "timeout": (
+        "Estamos com lentidão na resposta. Encaminhei sua pergunta ao seu "
+        "Personal para garantir uma resposta correta! ⏳"
+    ),
+    "generation_error": (
+        "Tive um problema técnico ao gerar a resposta. Seu Personal foi "
+        "notificado e te ajudará em breve! 🛠️"
+    ),
+}
 
 # System prompt base do chatbot
 SYSTEM_PROMPT_TEMPLATE = """\
@@ -411,25 +453,32 @@ class RAGChain:
         """
         Verificar se a pergunta deve ser escalada para Personal.
 
-        Critérios:
-        - RN-07: Nenhum documento com score ≥ ESCALATE_THRESHOLD
-        - RN-12: Usuário menciona palavras de escalação explícita
-        - RN-17: Menção a riscos de saúde (dor no peito, etc.)
+        Ordem de prioridade dos motivos (mais grave primeiro):
+            1. health_risk     — RN-17: menção a risco de saúde
+            2. user_requested  — RN-12: pedido explícito por humano
+            3. low_confidence  — RN-07: nenhum documento recuperado
+            4. too_complex     — best score < ESCALATE_THRESHOLD
 
         Returns:
             Tuple (should_escalate: bool, reason: str)
         """
         query_lower = query.lower()
 
-        # RN-12 / RN-17: palavras-chave de escalação
-        for keyword in ESCALATION_KEYWORDS:
+        # 1. Risco à saúde tem precedência: nem chega a tentar gerar resposta
+        for keyword in HEALTH_RISK_KEYWORDS:
+            if keyword in query_lower:
+                return True, "health_risk"
+
+        # 2. Pedido explícito do usuário por atendimento humano
+        for keyword in EXPLICIT_REQUEST_KEYWORDS:
             if keyword in query_lower:
                 return True, "user_requested"
 
-        # RN-07: score insuficiente na base
+        # 3. RAG vazio
         if not retrieved_docs:
             return True, "low_confidence"
 
+        # 4. Score insuficiente
         best_score = max(doc.relevance_score for doc in retrieved_docs)
         if best_score < ESCALATE_THRESHOLD:
             return True, "too_complex"
@@ -566,8 +615,8 @@ class RAGChain:
             query, retrieved_docs
         )
 
-        if should_escalate and escalation_reason == "user_requested":
-            # Palavra-chave de risco ou pedido explícito → escalar imediatamente
+        if should_escalate and escalation_reason in {"user_requested", "health_risk"}:
+            # Pedido explícito ou risco de saúde → escalar antes de chamar o LLM
             latency_ms = int((time.monotonic() - start_time) * 1000)
             logger.warning(
                 "RAG: escalando conversa | reason=%s | latency_ms=%d",
@@ -575,10 +624,7 @@ class RAGChain:
                 latency_ms,
             )
             return RAGResult(
-                answer=(
-                    "Sua dúvida é muito específica e precisa da atenção do seu "
-                    "Personal Trainer. Estou escalando para ele agora! 🎯"
-                ),
+                answer=ESCALATION_MESSAGES[escalation_reason],
                 retrieved_documents=[],
                 should_escalate=True,
                 escalation_reason=escalation_reason,
@@ -620,11 +666,7 @@ class RAGChain:
             )
             latency_ms = int((time.monotonic() - start_time) * 1000)
             return RAGResult(
-                answer=(
-                    "Desculpe, sua dúvida está demorando mais que o esperado. "
-                    "Estou encaminhando para o seu Personal Trainer para garantir "
-                    "uma resposta atenciosa."
-                ),
+                answer=ESCALATION_MESSAGES["timeout"],
                 should_escalate=True,
                 escalation_reason="timeout",
                 latency_ms=latency_ms,
@@ -633,10 +675,7 @@ class RAGChain:
             logger.error("Falha na geração: %s", exc)
             latency_ms = int((time.monotonic() - start_time) * 1000)
             return RAGResult(
-                answer=(
-                    "Desculpe, não consegui processar sua dúvida agora. "
-                    "Tente novamente em instantes."
-                ),
+                answer=ESCALATION_MESSAGES["generation_error"],
                 should_escalate=True,
                 escalation_reason="generation_error",
                 latency_ms=latency_ms,
@@ -649,10 +688,7 @@ class RAGChain:
         # escalação já calculado em _should_escalate.
         is_valid, _needs_review = self.validate(answer, retrieved_docs)
         if not is_valid:
-            answer = (
-                "Não encontrei informações suficientes na base de conhecimento "
-                "para responder com segurança. Seu Personal Trainer pode ajudar melhor!"
-            )
+            answer = ESCALATION_MESSAGES["validation_failed"]
             should_escalate = True
             escalation_reason = "validation_failed"
 

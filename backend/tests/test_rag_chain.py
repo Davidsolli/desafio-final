@@ -301,10 +301,10 @@ class TestShouldEscalate:
         assert reason == "user_requested"
 
     def test_escalate_on_health_risk(self, chain, sample_docs):
-        """Deve escalar em menção a risco de saúde (RN-17)."""
+        """Deve escalar em menção a risco de saúde com reason='health_risk' (RN-17, Etapa 3)."""
         should, reason = chain._should_escalate("estou com dor no peito", sample_docs)
         assert should is True
-        assert reason == "user_requested"
+        assert reason == "health_risk"
 
     def test_escalate_on_no_docs(self, chain):
         """Deve escalar quando não há documentos relevantes (RN-07)."""
@@ -501,7 +501,8 @@ class TestRunPipeline:
 
         assert result.should_escalate is True
         assert result.escalation_reason == "generation_error"
-        assert "Desculpe" in result.answer or "instantes" in result.answer
+        # Nova mensagem contextualizada por reason (Etapa 3, ESCALATION_MESSAGES)
+        assert "Personal" in result.answer or "técnico" in result.answer
 
     @pytest.mark.asyncio
     async def test_run_calculates_confidence_score(self, chain, mock_session, user_context, sample_docs):
