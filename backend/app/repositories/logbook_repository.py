@@ -250,6 +250,42 @@ class LogbookRepository:
         Returns:
             Lista de tuplas (period_start_datetime, count)
         """
+        if self.session.bind.dialect.name == "sqlite":
+            from collections import defaultdict
+            from datetime import timedelta
+
+            stmt = (
+                select(WorkoutSession.session_date)
+                .where(
+                    WorkoutSession.user_id == user_id,
+                    WorkoutSession.status == "completed",
+                )
+                .order_by(WorkoutSession.session_date.asc())
+            )
+            if start_date is not None:
+                stmt = stmt.where(WorkoutSession.session_date >= start_date)
+            if end_date is not None:
+                stmt = stmt.where(WorkoutSession.session_date <= end_date)
+
+            result = await self.session.execute(stmt)
+            session_dates = [row[0] for row in result.all()]
+
+            counts = defaultdict(int)
+            for dt in session_dates:
+                if isinstance(dt, str):
+                    dt = datetime.fromisoformat(dt)
+                if period == "week":
+                    truncated = dt - timedelta(days=dt.weekday())
+                elif period == "month":
+                    truncated = datetime(dt.year, dt.month, 1)
+                else:
+                    raise ValueError("period deve ser 'week' ou 'month'")
+
+                truncated = truncated.replace(hour=0, minute=0, second=0, microsecond=0)
+                counts[truncated] += 1
+
+            return [(dt, count) for dt, count in sorted(counts.items())]
+
         if period == "week":
             date_trunc_expr = func.date_trunc("week", WorkoutSession.session_date)
         elif period == "month":
@@ -281,6 +317,50 @@ class LogbookRepository:
         return [(row[0], row[1]) for row in rows]
 
     # ------------------------------------------------------------------
+    # Foco Muscular (Novo)
+    # ------------------------------------------------------------------
+
+    async def get_muscle_group_distribution(
+        self,
+        user_id: UUID,
+        start_date: datetime,
+        end_date: datetime,
+    ) -> List[Tuple[str, int]]:
+        """
+        Retorna a contagem de exercícios executados em sessões completadas,
+        agrupados por grupo muscular.
+        """
+        from app.models.workout_sheet import Exercise
+
+        stmt = (
+            select(
+                Exercise.muscle_group,
+                func.count(SessionExercise.id).label("count"),
+            )
+            .join(
+                WorkoutSession,
+                SessionExercise.session_id == WorkoutSession.id,
+            )
+            .join(
+                Exercise,
+                SessionExercise.exercise_id == Exercise.id,
+            )
+            .where(
+                WorkoutSession.user_id == user_id,
+                WorkoutSession.status == "completed",
+                WorkoutSession.session_date >= start_date,
+                WorkoutSession.session_date <= end_date,
+            )
+            .group_by(Exercise.muscle_group)
+            .order_by(func.count(SessionExercise.id).desc())
+        )
+
+        result = await self.session.execute(stmt)
+        rows = result.all()
+
+        return [(row[0], row[1]) for row in rows]
+
+    # ------------------------------------------------------------------
     # Transação
     # ------------------------------------------------------------------
 
@@ -291,3 +371,4 @@ class LogbookRepository:
     async def rollback(self) -> None:
         """Rollback da transação atual."""
         await self.session.rollback()
+

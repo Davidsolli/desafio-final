@@ -282,3 +282,24 @@ class FrequencyResponseDTO(BaseModel):
     user_id: UUID
     period: str  # "weekly" ou "monthly"
     data_points: List[FrequencyDataPointDTO]
+
+
+# ---------------------------------------------------------------------------
+# DTOs de Foco Muscular (Muscle Group Distribution)
+# ---------------------------------------------------------------------------
+
+
+class MuscleGroupDistributionItemDTO(BaseModel):
+    """Item de distribuição de treinos por grupo muscular."""
+
+    muscle_group: str
+    count: int
+
+
+class MuscleGroupDistributionResponseDTO(BaseModel):
+    """Resposta de distribuição de treinos por grupo muscular."""
+
+    user_id: UUID
+    days: int
+    distribution: List[MuscleGroupDistributionItemDTO]
+
