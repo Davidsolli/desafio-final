@@ -493,6 +493,21 @@ class ChatService:
             conversation.status = "escalated"
             conversation.escalation_reason = rag_result.escalation_reason
             conversation.escalated_at = datetime.utcnow()
+            conversation.escalation_data = {
+                "original_question": clean_message,
+                "reason": rag_result.escalation_reason,
+                "rag_best_score": (
+                    max(
+                        (d.relevance_score for d in rag_result.retrieved_documents),
+                        default=0.0,
+                    )
+                ),
+                "retrieved_count": len(rag_result.retrieved_documents),
+                "user_profile_summary": {
+                    "name": user_context.get("user_profile", {}).get("name"),
+                    "objective": user_context.get("user_profile", {}).get("objective"),
+                },
+            }
             self.session.add(conversation)
 
         await self.session.commit()
@@ -751,6 +766,7 @@ class ChatService:
                         else None
                     ),
                     "message_count": len(conv.messages),
+                    "escalation_data": conv.escalation_data,
                 }
             )
 

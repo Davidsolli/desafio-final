@@ -99,6 +99,20 @@ async def init_db() -> None:
                 logger.warning("Erro ao executar ALTER TABLE: %s", exc)
         logger.info("✓ Colunas de dados corporais verificadas/adicionadas em users")
 
+        # Migração manual: contexto da escalação na conversa de chat (Etapa 3)
+        try:
+            await conn.execute(
+                text(
+                    "ALTER TABLE chat_conversations "
+                    "ADD COLUMN IF NOT EXISTS escalation_data JSON"
+                )
+            )
+            logger.info("✓ Coluna escalation_data verificada/adicionada em chat_conversations")
+        except Exception as exc:
+            logger.warning(
+                "Erro ao adicionar escalation_data em chat_conversations: %s", exc
+            )
+
     # 4. Migração manual: Adicionar food_name ao logbook entries se não existir
     # (feita APÓS criar as tabelas, em transação separada)
     # COMENTADO TEMPORARIAMENTE - será aplicado depois
