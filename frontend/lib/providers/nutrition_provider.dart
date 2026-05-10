@@ -9,6 +9,8 @@ class NutritionProvider extends ChangeNotifier {
 
   DietLogbook? _currentLogbook;
   Diet? _activeDiet;
+  int? _userTmb;
+  DateTime _currentDate = DateTime.now();
 
   bool _isLoading = false;
   String? _error;
@@ -19,6 +21,7 @@ class NutritionProvider extends ChangeNotifier {
   // Getters
   DietLogbook? get currentLogbook => _currentLogbook;
   Diet? get activeDiet => _activeDiet;
+  DateTime get currentDate => _currentDate;
   bool get isLoading => _isLoading;
   String? get error => _error;
 
@@ -39,7 +42,7 @@ class NutritionProvider extends ChangeNotifier {
   /// Calcula a meta calórica e macros com base na dieta ativa.
   /// Se não tiver dieta, retorna uma meta genérica de 2000kcal.
   Map<String, double> get dailyTargets {
-    if (_activeDiet != null) {
+    if (_activeDiet != null && _activeDiet!.totalKcal > 0) {
       return {
         'calories': _activeDiet!.totalKcal,
         'protein': _activeDiet!.totalProtein,
@@ -47,11 +50,15 @@ class NutritionProvider extends ChangeNotifier {
         'fat': _activeDiet!.totalFats,
       };
     }
+    
+    // Usa o gasto calórico diário estimado (TDEE = TMB * 1.5) como meta padrão
+    final targetKcal = _userTmb != null ? (_userTmb! * 1.5) : 2000.0;
+    
     return {
-      'calories': 2000.0,
-      'protein': 150.0,
-      'carbs': 200.0,
-      'fat': 66.0,
+      'calories': targetKcal,
+      'protein': targetKcal * 0.25 / 4, // Exemplo genérico
+      'carbs': targetKcal * 0.50 / 4,
+      'fat': targetKcal * 0.25 / 9,
     };
   }
 
@@ -61,10 +68,11 @@ class NutritionProvider extends ChangeNotifier {
       _setLoading(true);
       _error = null;
 
-      // Chama as duas requisições em paralelo
+      // Chama as requisições em paralelo
       final results = await Future.wait([
-        _nutritionService.getLogbookByDate(DateTime.now()).then((v) => v as DietLogbook?).catchError((_) => null as DietLogbook?),
+        _nutritionService.getLogbookByDate(_currentDate).then((v) => v as DietLogbook?).catchError((_) => null as DietLogbook?),
         _nutritionService.getMyDiets().then((v) => v as List<Diet>?).catchError((_) => <Diet>[]),
+        _nutritionService.getUserTmb().catchError((_) => null as int?),
       ]);
 
       _currentLogbook = results[0] as DietLogbook?;
@@ -76,6 +84,8 @@ class NutritionProvider extends ChangeNotifier {
       } else {
         _activeDiet = null;
       }
+      
+      _userTmb = results[2] as int?;
 
       notifyListeners();
     } on NetworkException catch (e) {
@@ -147,9 +157,54 @@ class NutritionProvider extends ChangeNotifier {
     }
   }
 
+  /// Cria um novo alimento personalizado no servidor
+  Future<CustomFood> createCustomFood({
+    required String name,
+    String? category,
+    required double energyKcal,
+    required double proteinG,
+    required double carbohydrateG,
+    required double lipidG,
+    double fiberG = 0.0,
+  }) async {
+    try {
+      _setLoading(true);
+      _error = null;
+      final food = await _nutritionService.createCustomFood(
+        name: name,
+        category: category,
+        energyKcal: energyKcal,
+        proteinG: proteinG,
+        carbohydrateG: carbohydrateG,
+        lipidG: lipidG,
+        fiberG: fiberG,
+      );
+      return food;
+    } on NetworkException catch (e) {
+      _error = 'Erro de conexão: ${e.message}';
+      notifyListeners();
+      rethrow;
+    } on ApiException catch (e) {
+      _error = e.message;
+      notifyListeners();
+      rethrow;
+    } catch (e) {
+      _error = 'Erro ao criar alimento: ${e.toString()}';
+      notifyListeners();
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
   void _setLoading(bool loading) {
     _isLoading = loading;
     notifyListeners();
+  }
+
+  void changeDate(DateTime newDate) {
+    _currentDate = newDate;
+    loadTodayData();
   }
 
   void clearError() {

@@ -62,6 +62,51 @@ class PaginatedFoodCatalogDTO {
 }
 
 // ---------------------------------------------------------------------------
+// Alimento Personalizado (Custom Food)
+// ---------------------------------------------------------------------------
+
+class CustomFood {
+  final String id;
+  final String userId;
+  final String name;
+  final String? category;
+  final double energyKcal;
+  final double proteinG;
+  final double carbohydrateG;
+  final double lipidG;
+  final double fiberG;
+  final DateTime createdAt;
+
+  CustomFood({
+    required this.id,
+    required this.userId,
+    required this.name,
+    this.category,
+    required this.energyKcal,
+    required this.proteinG,
+    required this.carbohydrateG,
+    required this.lipidG,
+    required this.fiberG,
+    required this.createdAt,
+  });
+
+  factory CustomFood.fromJson(Map<String, dynamic> json) {
+    return CustomFood(
+      id: json['id'] as String,
+      userId: json['user_id'] as String,
+      name: json['name'] as String,
+      category: json['category'] as String?,
+      energyKcal: (json['energy_kcal'] as num).toDouble(),
+      proteinG: (json['protein_g'] as num).toDouble(),
+      carbohydrateG: (json['carbohydrate_g'] as num).toDouble(),
+      lipidG: (json['lipid_g'] as num).toDouble(),
+      fiberG: (json['fiber_g'] as num? ?? 0.0).toDouble(),
+      createdAt: DateTime.parse(json['created_at'] as String),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Dieta (Plano Alimentar Prescrito)
 // ---------------------------------------------------------------------------
 

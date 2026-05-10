@@ -147,5 +147,59 @@ class NutritionService {
   Future<List<Diet>> getMyDiets() async {
     return getDiets();
   }
+
+  /// Busca a Taxa Metabólica Basal (TMB) do usuário logado
+  Future<int?> getUserTmb() async {
+    try {
+      final userResponse = await _apiClient.get<Map<String, dynamic>>(
+        '/users/me',
+        fromJson: (data) => data as Map<String, dynamic>,
+      );
+      final weight = (userResponse['weight'] as num?)?.toDouble();
+      final height = (userResponse['height'] as num?)?.toDouble();
+      final age = userResponse['age'] as int?;
+      final gender = userResponse['gender'] as String?;
+      
+      if (weight != null && weight > 0 && height != null && height > 0 && age != null && age > 0) {
+        if (gender == 'male') {
+            return (88.362 + (13.397 * weight) + (4.799 * height) - (5.677 * age)).toInt();
+        }
+        return (447.593 + (9.247 * weight) + (3.098 * height) - (4.330 * age)).toInt();
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Cria um alimento personalizado para o usuário
+  Future<CustomFood> createCustomFood({
+    required String name,
+    String? category,
+    required double energyKcal,
+    required double proteinG,
+    required double carbohydrateG,
+    required double lipidG,
+    double fiberG = 0.0,
+  }) async {
+    try {
+      final response = await _apiClient.post<CustomFood>(
+        '/custom-foods',
+        body: {
+          'name': name,
+          if (category != null && category.trim().isNotEmpty) 'category': category,
+          'energy_kcal': energyKcal,
+          'protein_g': proteinG,
+          'carbohydrate_g': carbohydrateG,
+          'lipid_g': lipidG,
+          'fiber_g': fiberG,
+        },
+        fromJson: (data) => CustomFood.fromJson(data as Map<String, dynamic>),
+      );
+      return response;
+    } catch (e) {
+      rethrow;
+    }
+  }
 }
 
