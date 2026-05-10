@@ -48,7 +48,13 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
     }
 
     try {
-      await context.read<WorkoutSheetProvider>().loadSheets(userId: userId);
+      final provider = context.read<WorkoutSheetProvider>();
+      await provider.loadPrograms(userId: userId);
+      
+      if (provider.programs.isNotEmpty) {
+        final active = provider.programs.firstWhere((p) => p.isActive, orElse: () => provider.programs.first);
+        await provider.loadSheets(workoutProgramId: active.id);
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

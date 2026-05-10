@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/theme_colors.dart';
 import '../../../models/workout_sheet_model.dart';
-import '../../../providers/auth_provider.dart';
+
 import '../../../providers/workout_sheet_provider.dart';
 import '../../../services/workout_sheet_service.dart';
 import 'exercise_catalog_picker.dart';
@@ -18,9 +18,9 @@ import 'exercise_catalog_picker.dart';
 /// [targetUserId] - Se fornecido, a ficha será criada para este aluno.
 ///                  Se null, usa o ID do usuário logado (trainer/admin).
 class CreateWorkoutSheetDialog extends StatefulWidget {
-  final String? targetUserId;
+  final String? workoutProgramId;
 
-  const CreateWorkoutSheetDialog({super.key, this.targetUserId});
+  const CreateWorkoutSheetDialog({super.key, this.workoutProgramId});
 
   @override
   State<CreateWorkoutSheetDialog> createState() =>
@@ -93,12 +93,12 @@ class _CreateWorkoutSheetDialogState extends State<CreateWorkoutSheetDialog> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final userId = widget.targetUserId ?? context.read<AuthProvider>().user?.id;
-    if (userId == null) {
+    final programId = widget.workoutProgramId;
+    if (programId == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Erro: ID do aluno não encontrado'),
+            content: Text('Erro: ID do programa não fornecido.'),
             backgroundColor: AppColors.accentError,
           ),
         );
@@ -123,12 +123,13 @@ class _CreateWorkoutSheetDialogState extends State<CreateWorkoutSheetDialog> {
     }).toList();
 
     final dto = CreateWorkoutSheetDTO(
-      userId: userId,
+      workoutProgramId: programId,
       name: _nameController.text.trim(),
       description: _descriptionController.text.isEmpty
           ? null
           : _descriptionController.text.trim(),
       dayOfWeek: _selectedDayOfWeek,
+      order: 1, // Default order para novas fichas
       exercises: exerciseDTOs,
     );
 

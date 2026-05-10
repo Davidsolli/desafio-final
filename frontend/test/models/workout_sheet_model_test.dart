@@ -68,11 +68,11 @@ void main() {
     test('fromJson deve criar instância com exercícios', () {
       final json = {
         'id': '550e8400-e29b-41d4-a716-446655440010',
-        'user_id': '550e8400-e29b-41d4-a716-446655440020',
-        'personal_trainer_id': '550e8400-e29b-41d4-a716-446655440030',
+        'workout_program_id': '550e8400-e29b-41d4-a716-446655440020',
         'name': 'Treino A - Peito + Tríceps',
         'description': 'Treino de hipertrofia',
         'day_of_week': 0,
+        'order': 1,
         'is_active': true,
         'created_at': '2026-05-01T10:00:00',
         'updated_at': '2026-05-01T10:00:00',
@@ -96,8 +96,7 @@ void main() {
       final sheet = WorkoutSheetResponse.fromJson(json);
 
       expect(sheet.id, '550e8400-e29b-41d4-a716-446655440010');
-      expect(sheet.userId, '550e8400-e29b-41d4-a716-446655440020');
-      expect(sheet.personalTrainerId, '550e8400-e29b-41d4-a716-446655440030');
+      expect(sheet.workoutProgramId, '550e8400-e29b-41d4-a716-446655440020');
       expect(sheet.name, 'Treino A - Peito + Tríceps');
       expect(sheet.description, 'Treino de hipertrofia');
       expect(sheet.dayOfWeek, 0);
@@ -109,9 +108,10 @@ void main() {
     test('dayOfWeekLabel retorna o label correto', () {
       final json = {
         'id': 'test-id',
-        'user_id': 'user-id',
+        'workout_program_id': 'program-id',
         'name': 'Treino B',
         'day_of_week': 1,
+        'order': 2,
         'is_active': true,
         'created_at': '2026-05-01T10:00:00',
         'updated_at': '2026-05-01T10:00:00',
@@ -127,9 +127,10 @@ void main() {
       for (int i = 0; i <= 6; i++) {
         final json = {
           'id': 'test-id-$i',
-          'user_id': 'user-id',
+          'workout_program_id': 'program-id',
           'name': 'Treino $i',
           'day_of_week': i,
+          'order': i,
           'is_active': true,
           'created_at': '2026-05-01T10:00:00',
           'updated_at': '2026-05-01T10:00:00',
@@ -143,9 +144,10 @@ void main() {
     test('fromJson sem exercícios retorna lista vazia', () {
       final json = {
         'id': 'test-id',
-        'user_id': 'user-id',
+        'workout_program_id': 'program-id',
         'name': 'Treino Vazio',
         'day_of_week': 4,
+        'order': 1,
         'is_active': true,
         'created_at': '2026-05-01T10:00:00',
         'updated_at': '2026-05-01T10:00:00',
@@ -160,10 +162,10 @@ void main() {
     test('fromJson deve criar instância correta', () {
       final json = {
         'id': 'list-item-id',
-        'user_id': 'user-id',
-        'personal_trainer_id': null,
+        'workout_program_id': 'program-id',
         'name': 'Treino C',
         'day_of_week': 2,
+        'order': 1,
         'is_active': true,
         'exercise_count': 5,
         'created_at': '2026-05-01T10:00:00',
@@ -181,9 +183,10 @@ void main() {
     test('exerciseCount default é 0', () {
       final json = {
         'id': 'item-id',
-        'user_id': 'user-id',
+        'workout_program_id': 'program-id',
         'name': 'Treino D',
         'day_of_week': 3,
+        'order': 1,
         'is_active': true,
         'created_at': '2026-05-01T10:00:00',
       };
@@ -202,18 +205,20 @@ void main() {
         'data': [
           {
             'id': 'sheet-1',
-            'user_id': 'user-1',
+            'workout_program_id': 'program-id',
             'name': 'Treino A',
             'day_of_week': 0,
+            'order': 1,
             'is_active': true,
             'exercise_count': 5,
             'created_at': '2026-05-01T10:00:00',
           },
           {
             'id': 'sheet-2',
-            'user_id': 'user-1',
+            'workout_program_id': 'program-id',
             'name': 'Treino B',
             'day_of_week': 1,
+            'order': 2,
             'is_active': true,
             'exercise_count': 4,
             'created_at': '2026-05-01T10:00:00',
@@ -286,10 +291,11 @@ void main() {
   group('CreateWorkoutSheetDTO', () {
     test('toJson deve serializar corretamente', () {
       final dto = CreateWorkoutSheetDTO(
-        userId: 'user-123',
+        workoutProgramId: 'program-123',
         name: 'Treino A',
         description: 'Peito + Tríceps',
         dayOfWeek: 0,
+        order: 1,
         exercises: [
           ExerciseCreateDTO(
             name: 'Supino Reto',
@@ -305,7 +311,7 @@ void main() {
 
       final json = dto.toJson();
 
-      expect(json['user_id'], 'user-123');
+      expect(json['workout_program_id'], 'program-123');
       expect(json['name'], 'Treino A');
       expect(json['description'], 'Peito + Tríceps');
       expect(json['day_of_week'], 0);
@@ -315,9 +321,10 @@ void main() {
 
     test('toJson sem exercícios', () {
       final dto = CreateWorkoutSheetDTO(
-        userId: 'user-123',
+        workoutProgramId: 'program-123',
         name: 'Treino Vazio',
         dayOfWeek: 4,
+        order: 1,
       );
 
       final json = dto.toJson();
@@ -347,13 +354,13 @@ void main() {
     test('toJson completo', () {
       final dto = DuplicateWorkoutSheetDTO(
         name: 'Treino A (Cópia)',
-        userId: 'another-user',
+        workoutProgramId: 'another-program',
       );
 
       final json = dto.toJson();
 
       expect(json['name'], 'Treino A (Cópia)');
-      expect(json['user_id'], 'another-user');
+      expect(json['workout_program_id'], 'another-program');
     });
 
     test('toJson vazio', () {

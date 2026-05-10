@@ -24,7 +24,7 @@ class _EditWorkoutSheetDialogState extends State<EditWorkoutSheetDialog> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _descriptionController = TextEditingController();
-  int _selectedDayOfWeek = 0;
+  int? _selectedDayOfWeek;
   final List<_ExerciseEditEntry> _exercises = [];
   bool _isLoading = true;
   bool _isSubmitting = false;
@@ -261,22 +261,28 @@ class _EditWorkoutSheetDialogState extends State<EditWorkoutSheetDialog> {
                                 ),
                                 const SizedBox(height: 12),
 
-                                _buildLabel('Dia da Semana *'),
-                                DropdownButtonFormField<int>(
+                                _buildLabel('Dia da Semana (opcional)'),
+                                DropdownButtonFormField<int?>(
                                   value: _selectedDayOfWeek,
                                   decoration: _inputDecoration(null),
                                   dropdownColor: context.colors.surface,
-                                  items: List.generate(7, (i) {
-                                    return DropdownMenuItem(
-                                      value: i,
-                                      child: Text(
-                                          '${_dayEmoji(i)} ${_dayLabel(i)}',
-                                          style: TextStyle(
-                                              color: context.colors.textPrimary)),
-                                    );
-                                  }),
+                                  items: [
+                                    const DropdownMenuItem<int?>(
+                                      value: null,
+                                      child: Text('Nenhum (Rotina Flutuante)'),
+                                    ),
+                                    ...List.generate(7, (i) {
+                                      return DropdownMenuItem<int?>(
+                                        value: i,
+                                        child: Text(
+                                            '${_dayEmoji(i)} ${_dayLabel(i)}',
+                                            style: TextStyle(
+                                                color: context.colors.textPrimary)),
+                                      );
+                                    })
+                                  ],
                                   onChanged: (v) => setState(
-                                      () => _selectedDayOfWeek = v ?? 0),
+                                      () => _selectedDayOfWeek = v),
                                 ),
                                 const SizedBox(height: 20),
 
