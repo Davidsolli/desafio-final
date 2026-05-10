@@ -27,7 +27,36 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
   FoodCatalogItem? _selectedFood;
   final TextEditingController _quantityController = TextEditingController(text: '100');
   String _selectedMeal = 'Almoço'; // Default
-  
+
+  // Filters State
+  String? _selectedCategory;
+  String? _selectedSource; // null (Todos), 'taco', 'custom'
+  bool _filterHighProtein = false;
+  bool _filterLowCarb = false;
+  bool _filterLowFat = false;
+
+  bool get _hasActiveFilters =>
+      _selectedCategory != null ||
+      _selectedSource != null ||
+      _filterHighProtein ||
+      _filterLowCarb ||
+      _filterLowFat;
+
+  static const Map<String, Map<String, String>> _categories = {
+    'Cereais e derivados': {'label': 'Cereais', 'icon': '🍞'},
+    'Raízes, tubérculos e derivados': {'label': 'Tubérculos', 'icon': '🥔'},
+    'Frutas e sucos naturais': {'label': 'Frutas', 'icon': '🍎'},
+    'Carnes e derivados': {'label': 'Carnes/Aves', 'icon': '🥩'},
+    'Ovos e derivados': {'label': 'Ovos', 'icon': '🥚'},
+    'Leite e produtos lácteos': {'label': 'Laticínios', 'icon': '🥛'},
+    'Hortaliças': {'label': 'Legumes/Verduras', 'icon': '🥦'},
+    'Leguminosas e derivados': {'label': 'Grãos/Feijão', 'icon': '🫘'},
+    'Pescados e frutos do mar': {'label': 'Peixes', 'icon': '🐟'},
+    'Óleos e gorduras': {'label': 'Óleos/Gorduras', 'icon': '🥑'},
+    'Açúcares e doces': {'label': 'Doces', 'icon': '🍬'},
+    'Bebidas não alcoólicas': {'label': 'Bebidas', 'icon': '🥤'},
+  };
+
   final List<String> _mealOptions = [
     'Café da Manhã',
     'Lanche da Manhã',
@@ -56,18 +85,24 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
   void _onSearchChanged(String query) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
     _debounce = Timer(const Duration(milliseconds: 500), () {
-      if (query.trim().length >= 2) {
-        _performSearch(query.trim());
-      } else {
-        setState(() {
-          _searchResults = [];
-          _error = null;
-        });
-      }
+      _performSearch(query.trim());
     });
   }
 
+  void _triggerSearch() {
+    _performSearch(_searchController.text.trim());
+  }
+
   Future<void> _performSearch(String query) async {
+    if (query.isEmpty && !_hasActiveFilters) {
+      setState(() {
+        _searchResults = [];
+        _isLoading = false;
+        _error = null;
+      });
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _error = null;
@@ -77,7 +112,14 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
       final apiClient = context.read<ApiClient>(); 
       final service = NutritionService(apiClient: apiClient);
       
-      final result = await service.searchFoodCatalog(query);
+      final result = await service.searchFoodCatalog(
+        query,
+        category: _selectedCategory,
+        source: _selectedSource,
+        minProtein: _filterHighProtein ? 15.0 : null,
+        maxCarbohydrate: _filterLowCarb ? 5.0 : null,
+        maxLipid: _filterLowFat ? 3.0 : null,
+      );
       setState(() {
         _searchResults = result.items;
         _isLoading = false;
@@ -185,6 +227,163 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
     );
   }
 
+  Widget _buildCategoryFilters() {
+    return SizedBox(
+      height: 38,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(right: 8.0),
+            child: ChoiceChip(
+              label: const Text('Categorias: Todas'),
+              selected: _selectedCategory == null,
+              onSelected: (selected) {
+                if (selected) {
+                  setState(() {
+                    _selectedCategory = null;
+                  });
+                  _triggerSearch();
+                }
+              },
+              selectedColor: AppColors.primary.withOpacity(0.15),
+              labelStyle: TextStyle(
+                color: _selectedCategory == null ? AppColors.primary : context.colors.textPrimary,
+                fontWeight: _selectedCategory == null ? FontWeight.bold : FontWeight.normal,
+                fontSize: 12,
+              ),
+              backgroundColor: context.colors.surface,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              side: BorderSide(color: _selectedCategory == null ? AppColors.primary : context.colors.border),
+            ),
+          ),
+          ..._categories.entries.map((entry) {
+            final dbKey = entry.key;
+            final label = entry.value['label']!;
+            final icon = entry.value['icon']!;
+            final isSelected = _selectedCategory == dbKey;
+            return Padding(
+              padding: const EdgeInsets.only(right: 8.0),
+              child: ChoiceChip(
+                label: Text('$icon $label'),
+                selected: isSelected,
+                onSelected: (selected) {
+                  setState(() {
+                    _selectedCategory = selected ? dbKey : null;
+                  });
+                  _triggerSearch();
+                },
+                selectedColor: AppColors.primary.withOpacity(0.15),
+                labelStyle: TextStyle(
+                  color: isSelected ? AppColors.primary : context.colors.textPrimary,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  fontSize: 12,
+                ),
+                backgroundColor: context.colors.surface,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                side: BorderSide(color: isSelected ? AppColors.primary : context.colors.border),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickFilters() {
+    return SizedBox(
+      height: 36,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        children: [
+          _buildFilterChip(
+            label: 'Base TACO',
+            isSelected: _selectedSource == 'taco',
+            onSelected: (selected) {
+              setState(() {
+                _selectedSource = selected ? 'taco' : null;
+              });
+              _triggerSearch();
+            },
+          ),
+          _buildFilterChip(
+            label: 'Personalizados',
+            isSelected: _selectedSource == 'custom',
+            onSelected: (selected) {
+              setState(() {
+                _selectedSource = selected ? 'custom' : null;
+              });
+              _triggerSearch();
+            },
+          ),
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            width: 1,
+            color: context.colors.border,
+          ),
+          _buildFilterChip(
+            label: '💪 Rico em Proteína',
+            isSelected: _filterHighProtein,
+            onSelected: (selected) {
+              setState(() {
+                _filterHighProtein = selected;
+              });
+              _triggerSearch();
+            },
+          ),
+          _buildFilterChip(
+            label: '🥦 Low Carb',
+            isSelected: _filterLowCarb,
+            onSelected: (selected) {
+              setState(() {
+                _filterLowCarb = selected;
+              });
+              _triggerSearch();
+            },
+          ),
+          _buildFilterChip(
+            label: '🔥 Pouca Gordura',
+            isSelected: _filterLowFat,
+            onSelected: (selected) {
+              setState(() {
+                _filterLowFat = selected;
+              });
+              _triggerSearch();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterChip({
+    required String label,
+    required bool isSelected,
+    required Function(bool) onSelected,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 6.0),
+      child: FilterChip(
+        label: Text(label),
+        selected: isSelected,
+        onSelected: onSelected,
+        selectedColor: AppColors.primary.withOpacity(0.12),
+        labelStyle: TextStyle(
+          color: isSelected ? AppColors.primary : context.colors.textSecondary,
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          fontSize: 11,
+        ),
+        backgroundColor: context.colors.surface,
+        showCheckmark: false,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        side: BorderSide(color: isSelected ? AppColors.primary : context.colors.border.withOpacity(0.5)),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      ),
+    );
+  }
+
   Widget _buildSearchView(ScrollController controller) {
     return Expanded(
       child: Column(
@@ -198,11 +397,18 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
               decoration: InputDecoration(
                 hintText: 'Buscar alimento (ex: Frango)',
                 prefixIcon: const Icon(Icons.search),
-                suffixIcon: _searchController.text.isNotEmpty
+                suffixIcon: _searchController.text.isNotEmpty || _hasActiveFilters
                     ? IconButton(
                         icon: const Icon(Icons.clear),
                         onPressed: () {
                           _searchController.clear();
+                          setState(() {
+                            _selectedCategory = null;
+                            _selectedSource = null;
+                            _filterHighProtein = false;
+                            _filterLowCarb = false;
+                            _filterLowFat = false;
+                          });
                           _onSearchChanged('');
                         },
                       )
@@ -215,7 +421,12 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
               ),
             ),
           ),
-          // Botão de criação rápida sempre visível abaixo da busca
+          
+          _buildCategoryFilters(),
+          const SizedBox(height: 6),
+          _buildQuickFilters(),
+          const SizedBox(height: 4),
+
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
             child: Row(
@@ -233,35 +444,61 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
             ),
           ),
           if (_isLoading)
-            const Padding(
-              padding: EdgeInsets.all(24.0),
-              child: CircularProgressIndicator(),
+            const Expanded(
+              child: Center(
+                child: CircularProgressIndicator(),
+              ),
             )
           else if (_error != null)
-            Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Text(_error!, style: const TextStyle(color: AppColors.accentError)),
+            Expanded(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Text(_error!, style: const TextStyle(color: AppColors.accentError), textAlign: TextAlign.center),
+                ),
+              ),
             )
-          else if (_searchController.text.isNotEmpty && _searchResults.isEmpty)
-            Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('Nenhum alimento encontrado. Tente outra busca.'),
-                  const SizedBox(height: 16),
-                  ElevatedButton.icon(
-                    onPressed: _openCreateCustomFoodDialog,
-                    icon: const Icon(Icons.add, size: 18),
-                    label: const Text('Criar Alimento Personalizado'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
+          else if (_searchResults.isEmpty)
+            Expanded(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        _hasActiveFilters || _searchController.text.isNotEmpty
+                            ? Icons.search_off
+                            : Icons.search,
+                        size: 48,
+                        color: context.colors.textSecondary.withOpacity(0.5),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        _hasActiveFilters || _searchController.text.isNotEmpty
+                            ? 'Nenhum alimento encontrado para os filtros selecionados.'
+                            : 'Digite o nome do alimento ou use as categorias e filtros acima para buscar.',
+                        style: TextStyle(
+                          color: context.colors.textSecondary,
+                          fontSize: 14,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        onPressed: _openCreateCustomFoodDialog,
+                        icon: const Icon(Icons.add, size: 18),
+                        label: const Text('Criar Alimento Personalizado'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             )
           else

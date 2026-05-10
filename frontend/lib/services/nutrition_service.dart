@@ -12,11 +12,27 @@ class NutritionService {
   // ---------------------------------------------------------------------------
 
   /// Busca alimentos na tabela TACO e alimentos personalizados do usuário
-  Future<PaginatedFoodCatalogDTO> searchFoodCatalog(String query) async {
+  Future<PaginatedFoodCatalogDTO> searchFoodCatalog(
+    String query, {
+    String? category,
+    String? source,
+    double? minProtein,
+    double? maxCarbohydrate,
+    double? maxLipid,
+  }) async {
     try {
+      final queryParameters = <String, dynamic>{
+        'search': query,
+        if (category != null) 'category': category,
+        if (source != null) 'source': source,
+        if (minProtein != null) 'min_protein': minProtein.toString(),
+        if (maxCarbohydrate != null) 'max_carbohydrate': maxCarbohydrate.toString(),
+        if (maxLipid != null) 'max_lipid': maxLipid.toString(),
+      };
+      
       final response = await _apiClient.get<PaginatedFoodCatalogDTO>(
         '/food-catalog',
-        queryParameters: {'search': query},
+        queryParameters: queryParameters,
         fromJson: (data) => PaginatedFoodCatalogDTO.fromJson(data as Map<String, dynamic>),
       );
       return response;
