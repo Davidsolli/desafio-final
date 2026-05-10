@@ -82,6 +82,7 @@ class TestAuthServiceLogin:
         mock_user.id = uuid4()
         mock_user.email = "test@example.com"
         mock_user.password = UserService.hash_password("SenhaForte123!")
+        mock_user.token_version = 0
 
         # Mock da sessão e repositório
         mock_session = AsyncMock(spec=AsyncSession)
