@@ -137,3 +137,13 @@ async def init_db() -> None:
         logger.info("✓ Seed de usuários e dados de domínio concluída")
     except Exception as exc:
         logger.warning("Erro ao popular dados de domínio iniciais: %s", exc)
+
+    try:
+        from scripts.seed_knowledge_base import seed as seed_knowledge_base
+        inserted = await seed_knowledge_base(force=False)
+        logger.info(
+            "✓ Verificação/Seed da base de conhecimento concluída (%d novos docs)",
+            inserted,
+        )
+    except Exception as exc:
+        logger.warning("Erro ao popular base de conhecimento: %s", exc)
