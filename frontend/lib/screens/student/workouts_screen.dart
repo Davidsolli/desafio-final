@@ -1920,13 +1920,15 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
     final List<Map<String, String>> availableExercises = [];
     final Set<String> addedIds = {};
 
-    // 1. Coleta exercícios de todas as fichas carregadas do aluno
+    // 1. Coleta exercícios de todas as fichas carregadas nos programas do aluno
     final sheetProvider = context.read<WorkoutSheetProvider>();
-    for (var sheet in sheetProvider.sheets) {
-      for (var ex in sheet.exercises) {
-        if (!addedIds.contains(ex.id)) {
-          addedIds.add(ex.id);
-          availableExercises.add({'id': ex.id, 'name': ex.name});
+    for (var program in sheetProvider.programs) {
+      for (var sheet in program.workoutSheets) {
+        for (var ex in sheet.exercises) {
+          if (!addedIds.contains(ex.id)) {
+            addedIds.add(ex.id);
+            availableExercises.add({'id': ex.id, 'name': ex.name});
+          }
         }
       }
     }

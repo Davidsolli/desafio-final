@@ -277,6 +277,7 @@ class LogbookService {
         durationMinutes: dto.durationMinutes,
         caloriesBurned: dto.caloriesBurned,
         intensity: dto.intensity,
+        status: 'completed',
         exercises: dto.exercises.map((e) => ExerciseLogResponse(
           id: UniqueKey().toString(),
           exerciseId: '',
@@ -309,6 +310,7 @@ class LogbookService {
       durationMinutes: dto.durationMinutes,
       caloriesBurned: dto.caloriesBurned,
       intensity: dto.intensity,
+      status: 'completed',
       exercises: dto.exercises.map((e) => ExerciseLogResponse(
         id: UniqueKey().toString(),
         exerciseId: '',
