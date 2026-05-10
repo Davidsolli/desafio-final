@@ -4,6 +4,7 @@ import 'package:omniconnect_fitness/services/api_client.dart';
 /// Modelo de exercício no logbook
 class ExerciseLogResponse {
   final String id;
+  final String exerciseId;
   final String exerciseName;
   final int sets;
   final int reps;
@@ -13,6 +14,7 @@ class ExerciseLogResponse {
 
   ExerciseLogResponse({
     required this.id,
+    required this.exerciseId,
     required this.exerciseName,
     required this.sets,
     required this.reps,
@@ -23,13 +25,14 @@ class ExerciseLogResponse {
 
   factory ExerciseLogResponse.fromJson(Map<String, dynamic> json) {
     return ExerciseLogResponse(
-      id: json['id'] as String,
-      exerciseName: json['exercise_name'] as String,
-      sets: json['sets'] as int,
-      reps: json['reps'] as int,
-      weight: (json['weight'] as num).toDouble(),
-      restTime: json['rest_time'] as int,
-      notes: json['notes'] as String?,
+      id: json['id'] as String? ?? '',
+      exerciseId: json['exercise_id'] as String? ?? '',
+      exerciseName: json['exercise_name'] as String? ?? json['exercise_notes'] as String? ?? 'Exercício de Força',
+      sets: json['actual_series'] as int? ?? json['sets'] as int? ?? 3,
+      reps: json['actual_repetitions'] as int? ?? json['reps'] as int? ?? 10,
+      weight: (json['actual_load_kg'] as num?)?.toDouble() ?? (json['weight'] as num?)?.toDouble() ?? 0.0,
+      restTime: json['rest_time'] as int? ?? 60,
+      notes: json['exercise_notes'] as String? ?? json['notes'] as String?,
     );
   }
 }
@@ -43,6 +46,7 @@ class LogbookResponse {
   final int durationMinutes;
   final double caloriesBurned;
   final String intensity;
+  final String status;
   final List<ExerciseLogResponse> exercises;
   final String? notes;
   final DateTime createdAt;
@@ -55,6 +59,7 @@ class LogbookResponse {
     required this.durationMinutes,
     required this.caloriesBurned,
     required this.intensity,
+    required this.status,
     required this.exercises,
     this.notes,
     required this.createdAt,
@@ -64,15 +69,16 @@ class LogbookResponse {
     return LogbookResponse(
       id: json['id'] as String,
       userId: json['user_id'] as String,
-      workoutName: json['workout_name'] as String,
+      workoutName: json['workout_name'] as String? ?? 'Sessão de Treino',
       sessionDate: DateTime.parse(json['session_date'] as String),
-      durationMinutes: json['duration_minutes'] as int,
-      caloriesBurned: (json['calories_burned'] as num).toDouble(),
-      intensity: json['intensity'] as String,
-      exercises: (json['exercises'] as List<dynamic>?)
+      durationMinutes: json['duration_minutes'] as int? ?? 45,
+      caloriesBurned: (json['calories_burned'] as num?)?.toDouble() ?? 200.0,
+      intensity: json['intensity'] as String? ?? 'moderada',
+      status: json['status'] as String? ?? 'completed',
+      exercises: (json['session_exercises'] as List<dynamic>? ?? json['exercises'] as List<dynamic>?)
           ?.map((e) => ExerciseLogResponse.fromJson(e as Map<String, dynamic>))
           .toList() ?? [],
-      notes: json['notes'] as String?,
+      notes: json['general_notes'] as String? ?? json['notes'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
     );
   }
@@ -273,6 +279,7 @@ class LogbookService {
         intensity: dto.intensity,
         exercises: dto.exercises.map((e) => ExerciseLogResponse(
           id: UniqueKey().toString(),
+          exerciseId: '',
           exerciseName: e['exercise_name'] ?? 'Exercício',
           sets: e['sets'] ?? 3,
           reps: e['reps'] ?? 10,
@@ -304,6 +311,7 @@ class LogbookService {
       intensity: dto.intensity,
       exercises: dto.exercises.map((e) => ExerciseLogResponse(
         id: UniqueKey().toString(),
+        exerciseId: '',
         exerciseName: e['exercise_name'] ?? 'Exercício',
         sets: e['sets'] ?? 3,
         reps: e['reps'] ?? 10,

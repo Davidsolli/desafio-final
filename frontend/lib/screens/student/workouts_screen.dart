@@ -238,7 +238,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
               await logbookProvider.loadSessions(limit: 1);
               if (logbookProvider.sessions.isNotEmpty) {
                 final lastSess = logbookProvider.sessions.first;
-                if (lastSess.intensity == 'in_progress' || lastSess.exercises.isEmpty) {
+                if (lastSess.status == 'in_progress' || lastSess.exercises.isEmpty) {
                   await logbookProvider.deleteSession(lastSess.id);
                 }
               }
@@ -1920,17 +1920,29 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
     final List<Map<String, String>> availableExercises = [];
     final Set<String> addedIds = {};
 
-    // Como fallback elegante, coletamos também exercícios das sessões anteriores
-    for (var sess in provider.sessions) {
-      for (var ex in sess.exercises) {
+    // 1. Coleta exercícios de todas as fichas carregadas do aluno
+    final sheetProvider = context.read<WorkoutSheetProvider>();
+    for (var sheet in sheetProvider.sheets) {
+      for (var ex in sheet.exercises) {
         if (!addedIds.contains(ex.id)) {
           addedIds.add(ex.id);
-          availableExercises.add({'id': ex.id, 'name': ex.exerciseName});
+          availableExercises.add({'id': ex.id, 'name': ex.name});
         }
       }
     }
 
-    // Se a lista continuar vazia, preenchemos com alguns padrões da base de dados (Taco/Exercícios)
+    // 2. Coleta exercícios de sessões anteriores gravadas no logbook histórico
+    for (var sess in provider.sessions) {
+      for (var ex in sess.exercises) {
+        final exId = ex.exerciseId.isNotEmpty ? ex.exerciseId : ex.id;
+        if (exId.isNotEmpty && !addedIds.contains(exId)) {
+          addedIds.add(exId);
+          availableExercises.add({'id': exId, 'name': ex.exerciseName});
+        }
+      }
+    }
+
+    // Se a lista continuar vazia, preenchemos com alguns padrões da base de dados
     if (availableExercises.isEmpty) {
       availableExercises.addAll([
         {'id': 'e3c0490b-19b8-4c91-9540-cc5b6e206001', 'name': 'Supino Reto'},
@@ -1940,10 +1952,13 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
       ]);
     }
 
-    // Garante que o ID selecionado esteja contido na lista
-    if (_progressionExerciseId == null && availableExercises.isNotEmpty) {
+    // Garante que o ID selecionado esteja contido na lista para evitar falhas do Dropdown
+    final hasSelected = availableExercises.any((ex) => ex['id'] == _progressionExerciseId);
+    if (!hasSelected && availableExercises.isNotEmpty) {
       _progressionExerciseId = availableExercises.first['id'];
       provider.loadExerciseProgression(_progressionExerciseId!, weeks: 8);
+    } else if (availableExercises.isEmpty) {
+      _progressionExerciseId = null;
     }
 
     // Mapeamento para o ProgressionLineChart
