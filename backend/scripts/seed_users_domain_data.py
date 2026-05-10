@@ -29,7 +29,7 @@ from app.models.food_catalog import FoodCatalog
 from app.models.goal import Goal, GoalProgressEntry
 from app.models.logbook import SessionExercise, WorkoutSession
 from app.models.user import User
-from app.models.workout_sheet import Exercise, WorkoutSheet
+from app.models.workout_sheet import Exercise, WorkoutSheet, WorkoutProgram
 
 logger = logging.getLogger(__name__)
 RNG = random.Random(42)
@@ -236,6 +236,7 @@ async def seed(force: bool = False) -> None:
                 Diet,
                 Exercise,
                 WorkoutSheet,
+                WorkoutProgram,
             ):
                 rows = await session.execute(select(model))
                 for row in rows.scalars().all():
@@ -382,22 +383,45 @@ async def seed(force: bool = False) -> None:
 
         for index, student in enumerate(students):
             trainer = trainers["camila"] if index < 2 else trainers["rafael"]
-            sheet_name = f"Treino Base {student.name.split()[0]}"
-            existing_sheet_result = await session.execute(
-                select(WorkoutSheet).where(
-                    WorkoutSheet.user_id == student.id,
-                    WorkoutSheet.name == sheet_name,
+            
+            program_name = f"Programa Base {student.name.split()[0]}"
+            existing_program_result = await session.execute(
+                select(WorkoutProgram).where(
+                    WorkoutProgram.user_id == student.id,
+                    WorkoutProgram.name == program_name,
                 )
             )
-            sheet = existing_sheet_result.scalars().first()
+            program = existing_program_result.scalars().first()
 
-            if not sheet:
-                sheet = WorkoutSheet(
+            if not program:
+                program = WorkoutProgram(
                     user_id=student.id,
                     personal_trainer_id=trainer.id,
+                    name=program_name,
+                    description="Programa inicial para ciclo de 4 semanas",
+                    goal="Hipertrofia" if student.goal_type == "gain_mass" else "Emagrecimento",
+                    is_active=True,
+                )
+                session.add(program)
+                await session.flush()
+
+            # Garante que sempre temos fichas associadas ao programa
+            sheets_result = await session.execute(
+                select(WorkoutSheet).where(
+                    WorkoutSheet.workout_program_id == program.id,
+                    WorkoutSheet.is_active.is_(True),
+                )
+            )
+            sheets_list = sheets_result.scalars().all()
+
+            if not sheets_list:
+                sheet_name = f"Treino A"
+                sheet = WorkoutSheet(
+                    workout_program_id=program.id,
                     name=sheet_name,
-                    description="Ficha inicial para ciclo de 4 semanas",
+                    description="Ficha base adaptacao",
                     day_of_week=index % 5,
+                    order=1,
                     is_active=True,
                 )
                 session.add(sheet)
@@ -418,6 +442,8 @@ async def seed(force: bool = False) -> None:
                     )
                     session.add(ex)
                 await session.flush()
+            else:
+                sheet = sheets_list[0]
 
             existing_session_result = await session.execute(
                 select(WorkoutSession).where(
