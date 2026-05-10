@@ -61,6 +61,36 @@ flutter clean         # Limpar cache
 flutter pub get       # Instalar dependências
 ```
 
+## 🌐 Ambientes de Execução
+
+O app suporta dois ambientes configurados via `--dart-define`:
+
+### Mobile apontando para o servidor (recomendado para testes reais)
+
+```bash
+flutter run --dart-define=API_BASE_URL=https://lab.alphaedtech.org.br/server02
+```
+
+### Mobile apontando para o backend local
+
+```bash
+# Suba o backend antes:
+# docker compose up  (ou pm2 start)
+
+flutter run
+# Padrão: http://localhost:8000
+```
+
+### VS Code
+
+Abra a pasta `frontend/` no VS Code, selecione o device na barra inferior
+e escolha a configuração no seletor de run:
+
+- **Mobile (servidor)** → aponta para `lab.alphaedtech.org.br`
+- **Mobile (local)** → aponta para `localhost:8000`
+
+> As configurações ficam em `.vscode/launch.json` (não versionado).
+
 ---
 
 *Alpha EdTech · Turma Aurora · OmniConnect Fitness*

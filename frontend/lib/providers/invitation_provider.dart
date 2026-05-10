@@ -104,6 +104,51 @@ class InvitationProvider extends ChangeNotifier {
     }
   }
 
+  // ── Estado de pré-cadastros WhatsApp pendentes ──────────────────────────
+  WhatsAppPendingList? _whatsappPending;
+  bool _isLoadingWhatsapp = false;
+  String? _whatsappError;
+
+  WhatsAppPendingList? get whatsappPending => _whatsappPending;
+  bool get isLoadingWhatsapp => _isLoadingWhatsapp;
+  String? get whatsappError => _whatsappError;
+
+  /// Carrega a lista de pré-cadastros WhatsApp pendentes (admin)
+  Future<void> loadWhatsAppPending() async {
+    _isLoadingWhatsapp = true;
+    _whatsappError = null;
+    notifyListeners();
+    try {
+      _whatsappPending = await _invitationService.fetchWhatsAppPending();
+    } catch (e) {
+      _whatsappError = e.toString();
+    } finally {
+      _isLoadingWhatsapp = false;
+      notifyListeners();
+    }
+  }
+
+  /// Aprova um pré-cadastro WhatsApp (admin)
+  Future<bool> approveWhatsApp(String phone) async {
+    try {
+      await _invitationService.approveWhatsApp(phone: phone);
+      // Remove da lista local imediatamente
+      if (_whatsappPending != null) {
+        final updated = _whatsappPending!.items
+            .where((i) => i.phone != phone)
+            .toList();
+        _whatsappPending = WhatsAppPendingList(
+          total: updated.length,
+          items: updated,
+        );
+        notifyListeners();
+      }
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   /// Busca dados do pré-cadastro WhatsApp para preencher o formulário
   Future<WhatsAppPrefillResponse?> fetchPrefill(String code) async {
     try {
