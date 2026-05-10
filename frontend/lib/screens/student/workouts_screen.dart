@@ -49,6 +49,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
 
   // Estado para Confetes / Tela de Sucesso
   bool _showSuccessOverlay = false;
+  bool _isSaving = false;
   int _lastWorkoutDuration = 0;
   double _lastWorkoutTotalLoad = 0;
 
@@ -512,11 +513,9 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
     final logbookProvider = context.read<LogbookProvider>();
 
     try {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => const Center(child: CircularProgressIndicator()),
-      );
+      setState(() {
+        _isSaving = true;
+      });
 
       // 1. Logar cada um dos exercícios concluídos com suas respectivas séries
       for (var exercise in _activeSheet!.exercises) {
@@ -563,11 +562,9 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
         mood: mood,
       );
 
-      // Fecha o loader de progresso
-      if (mounted) Navigator.pop(context);
-
       // Configura o overlay de sucesso premium!
       setState(() {
+        _isSaving = false;
         _lastWorkoutDuration = _elapsedSeconds ~/ 60;
         if (_lastWorkoutDuration == 0) _lastWorkoutDuration = 1;
         _lastWorkoutTotalLoad = totalLoad;
@@ -583,7 +580,9 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
       _loadInitialData();
 
     } catch (e) {
-      if (mounted) Navigator.pop(context); // fecha loader
+      setState(() {
+        _isSaving = false;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Erro ao salvar treino: $e'), backgroundColor: AppColors.accentError),
       );
@@ -1043,6 +1042,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
             child: _activeSheet != null ? _buildActiveSessionView() : _buildMainLayout(),
           ),
           if (_showSuccessOverlay) _buildPremiumSuccessOverlay(),
+          if (_isSaving) _buildSavingOverlay(),
         ],
       ),
     );
@@ -1225,9 +1225,14 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
               return Padding(
                 padding: const EdgeInsets.only(right: 8),
                 child: ChoiceChip(
+                  showCheckmark: false, // Desativa o checkmark nativo instável que causa o overflow
                   label: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      if (isSelected) ...[
+                        const Icon(Icons.check, size: 14, color: AppColors.primary),
+                        const SizedBox(width: 4),
+                      ],
                       Text(prog.name, style: const TextStyle(fontSize: 12)),
                       const SizedBox(width: 6),
                       Container(
@@ -2117,6 +2122,33 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
                     },
                     child: const Text('Excelente!', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                   ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSavingOverlay() {
+    return Positioned.fill(
+      child: Container(
+        color: Colors.black.withOpacity(0.6),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Salvando treino...',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
                 ),
               ),
             ],
