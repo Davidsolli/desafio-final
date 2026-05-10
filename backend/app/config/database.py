@@ -98,6 +98,23 @@ async def init_db() -> None:
                 logger.warning("Erro ao executar ALTER TABLE: %s", exc)
         logger.info("✓ Colunas de dados corporais verificadas/adicionadas em users")
 
+        # 4. Migração: Adaptar WorkoutSheets para usar WorkoutProgram
+        alters_workout = [
+            "ALTER TABLE workout_sheets ADD COLUMN IF NOT EXISTS workout_program_id UUID",
+            "ALTER TABLE workout_sheets ADD COLUMN IF NOT EXISTS \"order\" INTEGER DEFAULT 1",
+            "ALTER TABLE workout_sheets ALTER COLUMN day_of_week DROP NOT NULL",
+            "ALTER TABLE workout_sheets ALTER COLUMN user_id DROP NOT NULL",
+            "ALTER TABLE workout_sheets ALTER COLUMN personal_trainer_id DROP NOT NULL",
+            # Nós mantemos as colunas user_id e personal_trainer_id ou podemos apagá-las.
+            # Como sqlalchemy pode reclamar se a coluna não existir no model mas existir no DB? Não, SQLAlchemy não reclama do DB ter mais colunas.
+        ]
+        for alter in alters_workout:
+            try:
+                await conn.execute(text(alter))
+            except Exception as exc:
+                logger.warning("Erro ao executar ALTER TABLE workout_sheets: %s", exc)
+        logger.info("✓ Colunas atualizadas em workout_sheets para suportar WorkoutProgram")
+
     # 4. Migração manual: Adicionar food_name ao logbook entries se não existir
     # (feita APÓS criar as tabelas, em transação separada)
     # COMENTADO TEMPORARIAMENTE - será aplicado depois
