@@ -125,6 +125,113 @@ class LogbookProvider extends ChangeNotifier {
     }
   }
 
+  /// Inicia uma nova sessão ativa de treino (Estilo Hevy)
+  Future<Map<String, dynamic>> startActiveSession(String workoutSheetId) async {
+    try {
+      _setLoading(true);
+      _error = null;
+      final sessionData = await _logbookService.startActiveSession(workoutSheetId);
+      return sessionData;
+    } on NetworkException catch (e) {
+      _error = 'Erro de conexão: ${e.message}';
+      notifyListeners();
+      rethrow;
+    } on ApiException catch (e) {
+      _error = e.message;
+      notifyListeners();
+      rethrow;
+    } catch (e) {
+      _error = 'Erro ao iniciar treino ativo: ${e.toString()}';
+      notifyListeners();
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  /// Registra progresso de um exercício na sessão ativa
+  Future<void> logSessionExercise({
+    required String sessionId,
+    required String exerciseId,
+    required int actualSeries,
+    required int actualRepetitions,
+    required double actualLoadKg,
+    required List<Map<String, dynamic>> seriesDetails,
+    String? exerciseNotes,
+    bool painOrDiscomfort = false,
+    String? painDescription,
+    String? modification,
+    String status = 'completed',
+  }) async {
+    try {
+      _error = null;
+      await _logbookService.logSessionExercise(
+        sessionId: sessionId,
+        exerciseId: exerciseId,
+        actualSeries: actualSeries,
+        actualRepetitions: actualRepetitions,
+        actualLoadKg: actualLoadKg,
+        seriesDetails: seriesDetails,
+        exerciseNotes: exerciseNotes,
+        painOrDiscomfort: painOrDiscomfort,
+        painDescription: painDescription,
+        modification: modification,
+        status: status,
+      );
+    } on NetworkException catch (e) {
+      _error = 'Erro de conexão: ${e.message}';
+      notifyListeners();
+      rethrow;
+    } on ApiException catch (e) {
+      _error = e.message;
+      notifyListeners();
+      rethrow;
+    } catch (e) {
+      _error = 'Erro ao registrar exercício: ${e.toString()}';
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  /// Finaliza e fecha a sessão de treino ativa
+  Future<void> completeActiveSession({
+    required String sessionId,
+    String? notes,
+    int? difficultyLevel,
+    String? mood,
+    String status = 'completed',
+  }) async {
+    try {
+      _setLoading(true);
+      _error = null;
+      await _logbookService.completeActiveSession(
+        sessionId: sessionId,
+        notes: notes,
+        difficultyLevel: difficultyLevel,
+        mood: mood,
+        status: status,
+      );
+      // Recarregar sessões para atualizar a listagem e os gráficos
+      await loadSessions();
+      await loadFrequency('weekly', limit: 12);
+      await loadMuscleGroupDistribution(days: 30);
+    } on NetworkException catch (e) {
+      _error = 'Erro de conexão: ${e.message}';
+      notifyListeners();
+      rethrow;
+    } on ApiException catch (e) {
+      _error = e.message;
+      notifyListeners();
+      rethrow;
+    } catch (e) {
+      _error = 'Erro ao finalizar treino: ${e.toString()}';
+      notifyListeners();
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
   /// Define o estado de carregamento
   void _setLoading(bool loading) {
     _isLoading = loading;
