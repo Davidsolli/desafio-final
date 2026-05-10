@@ -365,7 +365,7 @@ async def update_user(
 
     **NÃO é possível atualizar:**
     - email (requer verificação de propriedade)
-    - password (endpoint separado no futuro)
+    - password (use PUT /{user_id}/password)
     - created_at (imutável)
     """
     is_owner = user_id == current_user.id
@@ -479,10 +479,13 @@ async def change_password(
             detail="Você só pode alterar sua própria senha",
         )
 
+    # Admin alterando a senha de outro usuário não precisa da senha atual
+    skip_current_check = is_admin and not is_owner
+
     controller = UserController(session)
 
     try:
-        return await controller.change_password(user_id, dto)
+        return await controller.change_password(user_id, dto, skip_current_check=skip_current_check)
     except InvalidCredentialsError as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

@@ -238,13 +238,20 @@ class UserService:
             await self.repository.rollback()
             raise Exception(f"Erro ao atualizar usuário: {str(e)}")
 
-    async def change_password(self, user_id: UUID, dto: ChangePasswordDTO) -> UserResponseDTO:
+    async def change_password(
+        self,
+        user_id: UUID,
+        dto: ChangePasswordDTO,
+        skip_current_check: bool = False,
+    ) -> UserResponseDTO:
         """
         Trocar senha do usuário.
 
         Args:
             user_id: UUID do usuário
             dto: ChangePasswordDTO com senha atual e nova senha
+            skip_current_check: Se True, não verifica a senha atual (uso exclusivo de admin
+                alterando a senha de outro usuário)
 
         Returns:
             UserResponseDTO: Usuário com senha atualizada
@@ -257,7 +264,7 @@ class UserService:
         if not user:
             raise UserNotFoundError(f"Usuário com ID {user_id} não encontrado")
 
-        if not self.verify_password(dto.current_password, user.password):
+        if not skip_current_check and not self.verify_password(dto.current_password, user.password):
             raise InvalidCredentialsError("Senha atual incorreta")
 
         user.password = self.hash_password(dto.new_password)

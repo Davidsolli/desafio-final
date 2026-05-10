@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/theme_colors.dart';
+import '../../services/api_client.dart';
 
 /// Dialog reutilizável para troca de senha.
 /// [onSubmit] recebe (currentPassword, newPassword, confirmPassword) e deve lançar exceção em caso de erro.
@@ -37,9 +38,9 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
   }
 
   Future<void> _handleSubmit() async {
-    final current = _currentController.text.trim();
-    final newPass = _newController.text.trim();
-    final confirm = _confirmController.text.trim();
+    final current = _currentController.text;
+    final newPass = _newController.text;
+    final confirm = _confirmController.text;
 
     if (current.isEmpty || newPass.isEmpty || confirm.isEmpty) {
       setState(() => _error = 'Preencha todos os campos');
@@ -71,17 +72,25 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
       if (mounted) {
         setState(() {
           _isLoading = false;
-          _error = _extractErrorMessage(e.toString());
+          _error = _extractErrorMessage(e);
         });
       }
     }
   }
 
-  String _extractErrorMessage(String raw) {
-    if (raw.contains('Senha atual incorreta')) return 'Senha atual incorreta';
-    if (raw.contains('não correspondem')) return 'A nova senha e a confirmação não correspondem';
-    if (raw.contains('401')) return 'Senha atual incorreta';
-    if (raw.contains('400')) return 'Nova senha inválida. Verifique os requisitos';
+  String _extractErrorMessage(dynamic e) {
+    if (e is UnauthorizedException || (e is ApiException && e.statusCode == 401)) {
+      return 'Senha atual incorreta';
+    }
+    if (e is ApiException && e.statusCode == 422) {
+      return 'Nova senha inválida. Verifique os requisitos de complexidade';
+    }
+    if (e is ApiException && e.statusCode == 400) {
+      return e.message.isNotEmpty ? e.message : 'Nova senha inválida. Verifique os requisitos';
+    }
+    if (e is NetworkException) {
+      return 'Sem conexão. Verifique sua internet e tente novamente';
+    }
     return 'Erro ao alterar senha. Tente novamente';
   }
 

@@ -111,9 +111,14 @@ class UserController:
         """
         return await self.service.update(user_id, dto)
 
-    async def change_password(self, user_id: UUID, dto: ChangePasswordDTO) -> UserResponseDTO:
+    async def change_password(
+        self,
+        user_id: UUID,
+        dto: ChangePasswordDTO,
+        skip_current_check: bool = False,
+    ) -> UserResponseDTO:
         """Trocar senha do usuário."""
-        return await self.service.change_password(user_id, dto)
+        return await self.service.change_password(user_id, dto, skip_current_check=skip_current_check)
 
     async def delete_user(self, user_id: UUID) -> bool:
         """

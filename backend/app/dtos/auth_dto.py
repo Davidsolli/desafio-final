@@ -3,7 +3,8 @@
 import re
 from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator, model_validator
 
-PASSWORD_REGEX = r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@!#$%^&*])[a-zA-Z0-9@!#$%^&*]{8,}$"
+# Aceita letras, números e qualquer caractere especial imprimível (exceto espaço)
+PASSWORD_REGEX = r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^a-zA-Z0-9]).{8,}$"
 
 
 class LoginDTO(BaseModel):
@@ -42,7 +43,7 @@ class ChangePasswordDTO(BaseModel):
         if not re.match(PASSWORD_REGEX, v):
             raise ValueError(
                 "Senha deve ter mínimo 8 caracteres, "
-                "uma maiúscula, uma minúscula, um número e um caractere especial (@!#$%^&*)"
+                "uma maiúscula, uma minúscula, um número e um caractere especial"
             )
         return v
 
