@@ -47,30 +47,26 @@ class ProgressionLineChart extends StatelessWidget {
     final chartData = _prepareChartData();
     final interval = (maxLoad - minLoad) < 1.0 ? 1.0 : (maxLoad - minLoad) / 5;
 
-    return Padding(
-      padding: EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Evolução de Carga',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
-          SizedBox(height: 16),
-          SizedBox(
-            height: 300,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.only(right: 16, top: 8, bottom: 8),
             child: LineChart(
               LineChartData(
                 lineBarsData: [
                   LineChartBarData(
                     spots: chartData,
                     isCurved: true,
-                    color: Color(0xFF2196F3),
-                    dotData: FlDotData(show: true),
+                    color: const Color(0xFF2196F3),
+                    dotData: const FlDotData(show: true),
                     belowBarData: BarAreaData(show: false),
                   ),
                 ],
                 titlesData: FlTitlesData(
+                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                   bottomTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
@@ -87,10 +83,11 @@ class ProgressionLineChart extends StatelessWidget {
                   leftTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
+                      reservedSize: 40,
                       getTitlesWidget: (value, meta) {
                         return Text(
                           '${value.toInt()} kg',
-                          style: TextStyle(fontSize: 10),
+                          style: const TextStyle(fontSize: 10),
                         );
                       },
                     ),
@@ -99,15 +96,16 @@ class ProgressionLineChart extends StatelessWidget {
                 gridData: FlGridData(
                   show: true,
                   horizontalInterval: interval,
+                  drawVerticalLine: false,
                 ),
-                borderData: FlBorderData(show: true),
+                borderData: FlBorderData(show: false),
               ),
             ),
           ),
-          SizedBox(height: 16),
-          _buildStatisticsWithValues(maxLoad, minLoad),
-        ],
-      ),
+        ),
+        const SizedBox(height: 12),
+        _buildStatisticsWithValues(context, maxLoad, minLoad),
+      ],
     );
   }
 
@@ -145,7 +143,7 @@ class ProgressionLineChart extends StatelessWidget {
         .reduce((a, b) => a < b ? a : b);
   }
 
-  Widget _buildStatisticsWithValues(double maxLoad, double minLoad) {
+  Widget _buildStatisticsWithValues(BuildContext context, double maxLoad, double minLoad) {
     final avgLoad = dataPoints.isNotEmpty
         ? dataPoints
                 .map((p) => (p['actual_load_kg'] as num?)?.toDouble() ?? 0.0)
@@ -154,10 +152,11 @@ class ProgressionLineChart extends StatelessWidget {
         : 0.0;
 
     return Container(
-      padding: EdgeInsets.all(12),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Color(0xFFF5F5F5),
+        color: Theme.of(context).cardColor.withOpacity(0.5),
         borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Theme.of(context).dividerColor.withOpacity(0.05)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,

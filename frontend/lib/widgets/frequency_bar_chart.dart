@@ -47,55 +47,46 @@ class FrequencyBarChart extends StatelessWidget {
     final chartData = _prepareChartData();
 
     return Padding(
-      padding: EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            period == "weekly" ? "Frequência Semanal" : "Frequência Mensal",
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
-          SizedBox(height: 16),
-          SizedBox(
-            height: 300,
-            child: BarChart(
-              BarChartData(
-                barGroups: chartData,
-                titlesData: FlTitlesData(
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 28,
-                      getTitlesWidget: (value, meta) {
-                        final label = _formatPeriodLabel(value.toInt());
-                        return Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Text(label, style: const TextStyle(fontSize: 9)),
-                        );
-                      },
-                    ),
-                  ),
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      getTitlesWidget: (value, meta) {
-                        return Text(
-                          '${value.toInt()}',
-                          style: TextStyle(fontSize: 10),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                gridData: FlGridData(
-                  show: true,
-                  horizontalInterval: 1,
-                ),
-                borderData: FlBorderData(show: false),
+      padding: const EdgeInsets.only(top: 8, bottom: 8, right: 8),
+      child: BarChart(
+        BarChartData(
+          barGroups: chartData,
+          titlesData: FlTitlesData(
+            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            bottomTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                reservedSize: 28,
+                getTitlesWidget: (value, meta) {
+                  final label = _formatPeriodLabel(value.toInt());
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(label, style: const TextStyle(fontSize: 9)),
+                  );
+                },
+              ),
+            ),
+            leftTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                reservedSize: 28,
+                getTitlesWidget: (value, meta) {
+                  return Text(
+                    '${value.toInt()}',
+                    style: const TextStyle(fontSize: 10),
+                  );
+                },
               ),
             ),
           ),
-        ],
+          gridData: const FlGridData(
+            show: true,
+            horizontalInterval: 1,
+            drawVerticalLine: false,
+          ),
+          borderData: FlBorderData(show: false),
+        ),
       ),
     );
   }
