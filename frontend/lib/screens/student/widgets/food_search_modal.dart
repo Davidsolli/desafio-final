@@ -6,7 +6,7 @@ import '../../../theme/theme_colors.dart';
 import '../../../providers/nutrition_provider.dart';
 import '../../../models/diet_models.dart';
 import '../../../services/nutrition_service.dart';
-import '../../../services/api_client.dart'; // To get ApiClient, or we can get service from context
+import '../../../services/api_client.dart';
 import 'create_custom_food_dialog.dart';
 
 class FoodSearchModal extends StatefulWidget {
@@ -28,6 +28,11 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
   final TextEditingController _quantityController = TextEditingController(text: '100');
   String _selectedMeal = 'Almoço'; // Default
 
+  // Initial State Cache (for when search and filters are empty)
+  List<FoodCatalogItem> _recentCustomFoods = [];
+  List<FoodCatalogItem> _allAvailableFoods = [];
+  bool _isInitialLoading = false;
+
   // Filters State
   String? _selectedCategory;
   String? _selectedSource; // null (Todos), 'taco', 'custom'
@@ -42,19 +47,23 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
       _filterLowCarb ||
       _filterLowFat;
 
+  // Exact categories present in the TACO.json database
   static const Map<String, Map<String, String>> _categories = {
     'Cereais e derivados': {'label': 'Cereais', 'icon': '🍞'},
-    'Raízes, tubérculos e derivados': {'label': 'Tubérculos', 'icon': '🥔'},
-    'Frutas e sucos naturais': {'label': 'Frutas', 'icon': '🍎'},
+    'Verduras, hortaliças e derivados': {'label': 'Vegetais & Hortaliças', 'icon': '🥦'},
+    'Frutas e derivados': {'label': 'Frutas', 'icon': '🍎'},
     'Carnes e derivados': {'label': 'Carnes/Aves', 'icon': '🥩'},
     'Ovos e derivados': {'label': 'Ovos', 'icon': '🥚'},
-    'Leite e produtos lácteos': {'label': 'Laticínios', 'icon': '🥛'},
-    'Hortaliças': {'label': 'Legumes/Verduras', 'icon': '🥦'},
+    'Leite e derivados': {'label': 'Laticínios', 'icon': '🥛'},
     'Leguminosas e derivados': {'label': 'Grãos/Feijão', 'icon': '🫘'},
-    'Pescados e frutos do mar': {'label': 'Peixes', 'icon': '🐟'},
-    'Óleos e gorduras': {'label': 'Óleos/Gorduras', 'icon': '🥑'},
-    'Açúcares e doces': {'label': 'Doces', 'icon': '🍬'},
-    'Bebidas não alcoólicas': {'label': 'Bebidas', 'icon': '🥤'},
+    'Pescados e frutos do mar': {'label': 'Pescados', 'icon': '🐟'},
+    'Gorduras e óleos': {'label': 'Gorduras & Óleos', 'icon': '🥑'},
+    'Produtos açucarados': {'label': 'Doces', 'icon': '🍬'},
+    'Bebidas (alcoólicas e não alcoólicas)': {'label': 'Bebidas', 'icon': '🥤'},
+    'Nozes e sementes': {'label': 'Nozes & Sementes', 'icon': '🌰'},
+    'Alimentos preparados': {'label': 'Pratos Prontos', 'icon': '🍛'},
+    'Outros alimentos industrializados': {'label': 'Industrializados', 'icon': '🥫'},
+    'Miscelâneas': {'label': 'Miscelâneas', 'icon': '🧂'},
   };
 
   final List<String> _mealOptions = [
@@ -72,6 +81,7 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
     _quantityController.addListener(() {
       setState(() {}); // Rebuild to update real-time macro calculation
     });
+    _loadInitialFoods();
   }
 
   @override
@@ -91,6 +101,35 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
 
   void _triggerSearch() {
     _performSearch(_searchController.text.trim());
+  }
+
+  Future<void> _loadInitialFoods() async {
+    setState(() {
+      _isInitialLoading = true;
+      _error = null;
+    });
+
+    try {
+      final apiClient = context.read<ApiClient>(); 
+      final service = NutritionService(apiClient: apiClient);
+      
+      // Busca alimentos personalizados do usuário (para "Adicionados Recentemente")
+      final customResult = await service.searchFoodCatalog('', source: 'custom');
+      
+      // Busca todos os alimentos disponíveis (TACO + Custom)
+      final allResult = await service.searchFoodCatalog('');
+      
+      setState(() {
+        _recentCustomFoods = customResult.items;
+        _allAvailableFoods = allResult.items;
+        _isInitialLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = 'Erro ao carregar alimentos iniciais: $e';
+        _isInitialLoading = false;
+      });
+    }
   }
 
   Future<void> _performSearch(String query) async {
@@ -174,6 +213,8 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
     );
 
     if (newFood != null && mounted) {
+      _loadInitialFoods(); // Atualiza a lista inicial para incluir o recém-adicionado
+      
       setState(() {
         _selectedFood = FoodCatalogItem(
           id: newFood.id,
@@ -385,6 +426,8 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
   }
 
   Widget _buildSearchView(ScrollController controller) {
+    final showInitialState = _searchController.text.isEmpty && !_hasActiveFilters;
+
     return Expanded(
       child: Column(
         children: [
@@ -393,7 +436,7 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
             child: TextField(
               controller: _searchController,
               onChanged: _onSearchChanged,
-              autofocus: true,
+              autofocus: false,
               decoration: InputDecoration(
                 hintText: 'Buscar alimento (ex: Frango)',
                 prefixIcon: const Icon(Icons.search),
@@ -443,7 +486,7 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
               ],
             ),
           ),
-          if (_isLoading)
+          if (_isLoading || (_isInitialLoading && showInitialState))
             const Expanded(
               child: Center(
                 child: CircularProgressIndicator(),
@@ -458,47 +501,160 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
                 ),
               ),
             )
-          else if (_searchResults.isEmpty)
+          else if (showInitialState)
             Expanded(
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24.0),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        _hasActiveFilters || _searchController.text.isNotEmpty
-                            ? Icons.search_off
-                            : Icons.search,
-                        size: 48,
-                        color: context.colors.textSecondary.withOpacity(0.5),
+              child: ListView(
+                controller: controller,
+                children: [
+                  if (_recentCustomFoods.isNotEmpty) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(left: 16, top: 12, bottom: 8),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.history, size: 18, color: AppColors.primary),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Adicionados Recentemente',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: context.colors.textPrimary,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 12),
-                      Text(
-                        _hasActiveFilters || _searchController.text.isNotEmpty
-                            ? 'Nenhum alimento encontrado para os filtros selecionados.'
-                            : 'Digite o nome do alimento ou use as categorias e filtros acima para buscar.',
-                        style: TextStyle(
-                          color: context.colors.textSecondary,
-                          fontSize: 14,
+                    ),
+                    SizedBox(
+                      height: 105,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        itemCount: _recentCustomFoods.length,
+                        itemBuilder: (context, idx) {
+                          final item = _recentCustomFoods[idx];
+                          return Container(
+                            width: 170,
+                            margin: const EdgeInsets.only(right: 10),
+                            child: Card(
+                              elevation: 0,
+                              color: context.colors.surface,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                side: BorderSide(color: context.colors.border.withOpacity(0.5)),
+                              ),
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(12),
+                                onTap: () {
+                                  setState(() {
+                                    _selectedFood = item;
+                                  });
+                                },
+                                child: Padding(
+                                  padding: const EdgeInsets.all(10.0),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        item.name,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                          color: context.colors.textPrimary,
+                                        ),
+                                      ),
+                                      Text(
+                                        item.category ?? 'Personalizado',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: context.colors.textSecondary,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Row(
+                                        children: [
+                                          _macroMiniBadge('${item.energyKcal.toStringAsFixed(0)} kcal', AppColors.primary),
+                                          const SizedBox(width: 4),
+                                          _macroMiniBadge('${item.proteinG.toStringAsFixed(1)}g P', Colors.orange),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const Divider(height: 24),
+                  ],
+                  Padding(
+                    padding: const EdgeInsets.only(left: 16, top: 4, bottom: 8),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.menu_book, size: 18, color: AppColors.primary),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Catálogo Geral de Alimentos',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: context.colors.textPrimary,
+                          ),
                         ),
+                      ],
+                    ),
+                  ),
+                  if (_allAvailableFoods.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(24.0),
+                      child: Text(
+                        'Nenhum alimento disponível no momento.',
+                        style: TextStyle(color: context.colors.textSecondary),
                         textAlign: TextAlign.center,
                       ),
-                      const SizedBox(height: 16),
-                      ElevatedButton.icon(
-                        onPressed: _openCreateCustomFoodDialog,
-                        icon: const Icon(Icons.add, size: 18),
-                        label: const Text('Criar Alimento Personalizado'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                    )
+                  else
+                    ..._allAvailableFoods.map((item) {
+                      return Column(
+                        children: [
+                          ListTile(
+                            title: Text(item.name),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(item.category ?? "Sem Categoria", style: const TextStyle(fontSize: 12)),
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    _macroInfoItem('Kcal', item.energyKcal, AppColors.primary),
+                                    _macroInfoItem('P', item.proteinG, Colors.orange),
+                                    _macroInfoItem('C', item.carbohydrateG, Colors.blue),
+                                    _macroInfoItem('G', item.lipidG, Colors.red),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            trailing: item.source == 'custom' 
+                                ? const Icon(Icons.person, size: 16, color: AppColors.primary)
+                                : null,
+                            isThreeLine: true,
+                            onTap: () {
+                              setState(() {
+                                _selectedFood = item;
+                              });
+                            },
+                          ),
+                          const Divider(height: 1),
+                        ],
+                      );
+                    }).toList(),
+                ],
               ),
             )
           else
@@ -550,6 +706,20 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
       child: Text(
         '$label: ${value.toStringAsFixed(1)}',
         style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w500),
+      ),
+    );
+  }
+
+  Widget _macroMiniBadge(String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(fontSize: 9, color: color, fontWeight: FontWeight.bold),
       ),
     );
   }
