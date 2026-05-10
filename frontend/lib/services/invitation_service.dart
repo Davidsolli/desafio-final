@@ -81,6 +81,72 @@ class ListInvitationsResponse {
   }
 }
 
+/// Dados do pré-cadastro WhatsApp vinculados ao código de convite
+class WhatsAppPrefillResponse {
+  final bool found;
+  final String? name;
+  final String? email;
+  final String? phone;
+
+  WhatsAppPrefillResponse({
+    required this.found,
+    this.name,
+    this.email,
+    this.phone,
+  });
+
+  factory WhatsAppPrefillResponse.fromJson(Map<String, dynamic> json) {
+    return WhatsAppPrefillResponse(
+      found: json['found'] as bool,
+      name: json['name'] as String?,
+      email: json['email'] as String?,
+      phone: json['phone'] as String?,
+    );
+  }
+}
+
+/// Item de pré-cadastro WhatsApp pendente de aprovação
+class WhatsAppPendingItem {
+  final String phone;
+  final String? name;
+  final String? email;
+  final DateTime createdAt;
+
+  WhatsAppPendingItem({
+    required this.phone,
+    this.name,
+    this.email,
+    required this.createdAt,
+  });
+
+  factory WhatsAppPendingItem.fromJson(Map<String, dynamic> json) {
+    return WhatsAppPendingItem(
+      phone: json['phone'] as String,
+      name: json['name'] as String?,
+      email: json['email'] as String?,
+      createdAt: DateTime.parse(json['created_at'] as String),
+    );
+  }
+}
+
+/// Lista de pré-cadastros WhatsApp pendentes
+class WhatsAppPendingList {
+  final int total;
+  final List<WhatsAppPendingItem> items;
+
+  WhatsAppPendingList({required this.total, required this.items});
+
+  factory WhatsAppPendingList.fromJson(Map<String, dynamic> json) {
+    final list = json['items'] as List<dynamic>? ?? [];
+    return WhatsAppPendingList(
+      total: json['total'] as int,
+      items: list
+          .map((e) => WhatsAppPendingItem.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+}
+
 /// Serviço de convites
 ///
 /// Responsável por:
@@ -141,6 +207,43 @@ class InvitationService {
     } catch (e) {
       rethrow;
     }
+  }
+
+  /// Busca dados do pré-cadastro WhatsApp vinculados a um código de convite
+  ///
+  /// Público — não requer autenticação.
+  /// Retorna found=false sem lançar exceção quando não há pré-cadastro.
+  Future<WhatsAppPrefillResponse> fetchPrefill({required String code}) async {
+    try {
+      return await _apiClient.get<WhatsAppPrefillResponse>(
+        '/invitations/whatsapp-prefill?code=$code',
+        fromJson: (data) =>
+            WhatsAppPrefillResponse.fromJson(data as Map<String, dynamic>),
+      );
+    } catch (_) {
+      return WhatsAppPrefillResponse(found: false);
+    }
+  }
+
+  /// Lista pré-cadastros WhatsApp aguardando aprovação (admin)
+  Future<WhatsAppPendingList> fetchWhatsAppPending() async {
+    return await _apiClient.get<WhatsAppPendingList>(
+      '/invitations/whatsapp-pending',
+      fromJson: (data) =>
+          WhatsAppPendingList.fromJson(data as Map<String, dynamic>),
+    );
+  }
+
+  /// Aprova um pré-cadastro WhatsApp e envia o código ao usuário (admin)
+  Future<GenerateInvitationResponse> approveWhatsApp({
+    required String phone,
+  }) async {
+    return await _apiClient.post<GenerateInvitationResponse>(
+      '/invitations/whatsapp-approve',
+      body: {'phone': phone},
+      fromJson: (data) =>
+          GenerateInvitationResponse.fromJson(data as Map<String, dynamic>),
+    );
   }
 
   /// Lista todos os convites gerados pelo PT autenticado

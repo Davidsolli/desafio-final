@@ -5,6 +5,7 @@ import '../../theme/app_colors.dart';
 import '../../theme/theme_colors.dart';
 import '../../routes/app_routes.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/invitation_provider.dart';
 import '../../shared/widgets/index.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -22,6 +23,7 @@ class RegisterScreen extends StatefulWidget {
 class _RegisterScreenState extends State<RegisterScreen> {
   int _currentStep = 0;
   bool _isLoading = false;
+  bool _prefillLoaded = false;
   late String? _invitationCode;
 
   // Step 1
@@ -33,6 +35,23 @@ class _RegisterScreenState extends State<RegisterScreen> {
   void initState() {
     super.initState();
     _invitationCode = widget.invitationCode;
+    if (_invitationCode != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadPrefill());
+    }
+  }
+
+  Future<void> _loadPrefill() async {
+    final prefill = await context
+        .read<InvitationProvider>()
+        .fetchPrefill(_invitationCode!);
+
+    if (!mounted || prefill == null || !prefill.found) return;
+
+    setState(() {
+      _prefillLoaded = true;
+      if (prefill.name != null) _nameController.text = prefill.name!;
+      if (prefill.email != null) _emailController.text = prefill.email!;
+    });
   }
 
   // Step 2
@@ -205,6 +224,29 @@ class _RegisterScreenState extends State<RegisterScreen> {
         const SizedBox(height: 2),
         const Text('Vamos começar com o básico',
             style: TextStyle(color: AppColors.primary, fontSize: 14)),
+        if (_prefillLoaded) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.green.withValues(alpha: 0.1),
+              border: Border.all(color: Colors.green.withValues(alpha: 0.4)),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Row(
+              children: [
+                Text('✅', style: TextStyle(fontSize: 14)),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Dados preenchidos do seu pré-cadastro via WhatsApp',
+                    style: TextStyle(color: Colors.green, fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
         const SizedBox(height: 16),
         OmniTextField(
           controller: _nameController,
