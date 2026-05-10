@@ -19,6 +19,26 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final extra = GoRouterState.of(context).extra as Map<String, dynamic>?;
+    final successMessage = extra?['successMessage'] as String?;
+    if (successMessage != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(successMessage),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+      });
+    }
+  }
+
+  @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
@@ -134,7 +154,20 @@ class _LoginScreenState extends State<LoginScreen> {
                         obscureText: true,
                         prefixIcon: Icons.lock_outlined,
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: () => context.go(AppRoutes.forgotPassword),
+                          child: Text(
+                            'Esqueci minha senha',
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: context.colors.primary,
+                                ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
                       OmniButton(
                         text: 'Entrar',
                         onPressed: _handleLogin,
