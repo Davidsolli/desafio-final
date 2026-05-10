@@ -16,6 +16,7 @@ class LogbookScreen extends StatefulWidget {
 
 class _LogbookScreenState extends State<LogbookScreen> {
   String _selectedIntensity = 'all';
+  DateTime? _selectedDate;
 
   @override
   void initState() {
@@ -133,27 +134,64 @@ class _LogbookScreenState extends State<LogbookScreen> {
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
-          children: filters.map((filter) {
-            final isSelected = _selectedIntensity == filter.$1;
-            return Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: FilterChip(
-                label: Text(filter.$2),
-                selected: isSelected,
-                backgroundColor: context.colors.surface,
-                selectedColor: AppColors.primary,
-                labelStyle: TextStyle(
-                  color: isSelected ? Colors.white : context.colors.textPrimary,
-                  fontWeight: FontWeight.w600,
-                ),
-                onSelected: (selected) {
-                  if (selected) {
-                    setState(() => _selectedIntensity = filter.$1);
-                  }
-                },
+          children: [
+            // Filtro de Data
+            ActionChip(
+              avatar: Icon(Icons.calendar_month, size: 18, color: _selectedDate != null ? Colors.white : AppColors.primary),
+              label: Text(_selectedDate != null ? _formatDate(_selectedDate!) : 'Por Data'),
+              backgroundColor: _selectedDate != null ? AppColors.primary : context.colors.surface,
+              labelStyle: TextStyle(
+                color: _selectedDate != null ? Colors.white : context.colors.textPrimary,
+                fontWeight: FontWeight.w600,
               ),
-            );
-          }).toList(),
+              onPressed: () async {
+                final date = await showDatePicker(
+                  context: context,
+                  initialDate: _selectedDate ?? DateTime.now(),
+                  firstDate: DateTime(2020),
+                  lastDate: DateTime.now(),
+                );
+                if (date != null) {
+                  setState(() => _selectedDate = date);
+                } else if (_selectedDate != null) {
+                  setState(() => _selectedDate = null);
+                }
+              },
+            ),
+            if (_selectedDate != null)
+              Padding(
+                padding: const EdgeInsets.only(left: 4, right: 8),
+                child: InkWell(
+                  onTap: () => setState(() => _selectedDate = null),
+                  child: Icon(Icons.close, size: 20, color: context.colors.textMuted),
+                ),
+              )
+            else
+              const SizedBox(width: 8),
+            
+            // Filtros de Intensidade
+            ...filters.map((filter) {
+              final isSelected = _selectedIntensity == filter.$1;
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: FilterChip(
+                  label: Text(filter.$2),
+                  selected: isSelected,
+                  backgroundColor: context.colors.surface,
+                  selectedColor: AppColors.primary,
+                  labelStyle: TextStyle(
+                    color: isSelected ? Colors.white : context.colors.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  onSelected: (selected) {
+                    if (selected) {
+                      setState(() => _selectedIntensity = filter.$1);
+                    }
+                  },
+                ),
+              );
+            }).toList(),
+          ],
         ),
       ),
     );
@@ -302,10 +340,23 @@ class _LogbookScreenState extends State<LogbookScreen> {
   }
 
   List<LogbookResponse> _filterSessions(List<LogbookResponse> sessions) {
-    if (_selectedIntensity == 'all') {
-      return sessions;
+    var filtered = sessions;
+    
+    // Filtrar por data
+    if (_selectedDate != null) {
+      filtered = filtered.where((s) {
+        return s.sessionDate.year == _selectedDate!.year &&
+               s.sessionDate.month == _selectedDate!.month &&
+               s.sessionDate.day == _selectedDate!.day;
+      }).toList();
     }
-    return sessions.where((s) => s.intensity.toLowerCase() == _selectedIntensity).toList();
+    
+    // Filtrar por intensidade
+    if (_selectedIntensity != 'all') {
+      filtered = filtered.where((s) => s.intensity.toLowerCase() == _selectedIntensity).toList();
+    }
+    
+    return filtered;
   }
 
   void _showSessionDetails(BuildContext context, LogbookResponse session) {
@@ -680,5 +731,17 @@ class _LogbookScreenState extends State<LogbookScreen> {
       default:
         return 'Desconhecida';
     }
+  }
+
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    if (date.year == now.year && date.month == now.month && date.day == now.day) {
+      return 'Hoje';
+    }
+    final yesterday = now.subtract(const Duration(days: 1));
+    if (date.year == yesterday.year && date.month == yesterday.month && date.day == yesterday.day) {
+      return 'Ontem';
+    }
+    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
   }
 }

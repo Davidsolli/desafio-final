@@ -89,6 +89,64 @@ class _NutritionScreenState extends State<NutritionScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.chevron_left),
+                onPressed: () => provider.changeDate(provider.currentDate.subtract(const Duration(days: 1))),
+              ),
+              GestureDetector(
+                onTap: () async {
+                  final date = await showDatePicker(
+                    context: context,
+                    initialDate: provider.currentDate,
+                    firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                    lastDate: DateTime.now(),
+                    locale: const Locale('pt', 'BR'),
+                    builder: (context, child) {
+                      return Theme(
+                        data: Theme.of(context).copyWith(
+                          colorScheme: ColorScheme.light(
+                            primary: AppColors.primary,
+                            onPrimary: Colors.white,
+                            surface: context.colors.surface,
+                            onSurface: context.colors.textPrimary,
+                          ),
+                        ),
+                        child: child!,
+                      );
+                    },
+                  );
+                  if (date != null) {
+                    provider.changeDate(date);
+                  }
+                },
+                child: Row(
+                  children: [
+                    Icon(Icons.calendar_today, size: 16, color: AppColors.primary),
+                    const SizedBox(width: 8),
+                    Text(
+                      _formatDate(provider.currentDate),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.chevron_right),
+                onPressed: () {
+                  // Opcional: Impedir avanço para dias futuros (se desejado)
+                  if (provider.currentDate.isBefore(DateTime.now().subtract(const Duration(days: 1)))) {
+                     provider.changeDate(provider.currentDate.add(const Duration(days: 1)));
+                  } else {
+                     provider.changeDate(DateTime.now());
+                  }
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
           _buildCalorieCard(
             logbook?.totalKcal ?? 0.0,
             targets['calories'] ?? 2000.0,
@@ -280,15 +338,23 @@ class _NutritionScreenState extends State<NutritionScreen> {
   // ---------------------------------------------------------------------------
 
   Widget _buildCalorieCard(double current, double target, double p, double c, double f, {bool isDietTab = false}) {
-    final percent = target > 0 ? ((current / target) * 100).clamp(0, 100) : 0.0;
+    final percentRaw = target > 0 ? ((current / target) * 100) : 0.0;
+    final percent = percentRaw.clamp(0.0, 100.0);
+    final isOver = percentRaw > 100.0;
+
     final titleLabel = isDietTab ? 'Total Diário' : '${current.toStringAsFixed(0)} kcal';
-    final subtitleLabel = isDietTab ? '${current.toStringAsFixed(0)} kcal prescritas' : '${percent.toStringAsFixed(0)}% da meta diária';
+    final subtitleLabel = isDietTab ? '${current.toStringAsFixed(0)} kcal prescritas' : 'de ${target.toStringAsFixed(0)} kcal (${percentRaw.toStringAsFixed(0)}% da meta diária)';
+    
+    final highlightColor = isOver && !isDietTab ? Colors.red : AppColors.primary;
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: context.colors.surface,
-        border: Border.all(color: context.colors.border, width: 1),
+        color: isOver && !isDietTab ? Colors.red.withOpacity(0.1) : context.colors.surface,
+        border: Border.all(
+          color: isOver && !isDietTab ? Colors.red : context.colors.border, 
+          width: isOver && !isDietTab ? 1.5 : 1
+        ),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -318,8 +384,8 @@ class _NutritionScreenState extends State<NutritionScreen> {
                   decoration: BoxDecoration(shape: BoxShape.circle, color: context.colors.surfaceLight),
                   child: Center(
                     child: Text(
-                      '${percent.toStringAsFixed(0)}%',
-                      style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary),
+                      '${percentRaw.toStringAsFixed(0)}%',
+                      style: TextStyle(fontWeight: FontWeight.bold, color: highlightColor),
                     ),
                   ),
                 ),
@@ -333,7 +399,7 @@ class _NutritionScreenState extends State<NutritionScreen> {
                 value: (percent / 100).clamp(0, 1),
                 minHeight: 8,
                 backgroundColor: context.colors.surfaceLight,
-                valueColor: const AlwaysStoppedAnimation(AppColors.primary),
+                valueColor: AlwaysStoppedAnimation(highlightColor),
               ),
             ),
           ],
@@ -396,11 +462,24 @@ class _NutritionScreenState extends State<NutritionScreen> {
   }
 
   void _deleteLogbookEntry(BuildContext context, String entryId) {
-    final date = context.read<NutritionProvider>().currentLogbook?.date ?? DateTime.now();
-    context.read<NutritionProvider>().deleteLogbookEntry(entryId, date).catchError((e) {
+    final provider = context.read<NutritionProvider>();
+    final date = provider.currentDate;
+    provider.deleteLogbookEntry(entryId, date).catchError((e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro: $e')));
       }
     });
+  }
+
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    if (date.year == now.year && date.month == now.month && date.day == now.day) {
+      return 'Hoje';
+    }
+    final yesterday = now.subtract(const Duration(days: 1));
+    if (date.year == yesterday.year && date.month == yesterday.month && date.day == yesterday.day) {
+      return 'Ontem';
+    }
+    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
   }
 }
