@@ -1226,6 +1226,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
                 padding: const EdgeInsets.only(right: 8),
                 child: ChoiceChip(
                   label: Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(prog.name, style: const TextStyle(fontSize: 12)),
                       const SizedBox(width: 6),
@@ -1958,7 +1959,10 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
     final hasSelected = availableExercises.any((ex) => ex['id'] == _progressionExerciseId);
     if (!hasSelected && availableExercises.isNotEmpty) {
       _progressionExerciseId = availableExercises.first['id'];
-      provider.loadExerciseProgression(_progressionExerciseId!, weeks: 8);
+      final targetId = _progressionExerciseId!;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        provider.loadExerciseProgression(targetId, weeks: 8);
+      });
     } else if (availableExercises.isEmpty) {
       _progressionExerciseId = null;
     }
