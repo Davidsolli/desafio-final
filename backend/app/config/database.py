@@ -99,7 +99,20 @@ async def init_db() -> None:
                 await conn.execute(text(alter))
             except Exception as exc:
                 logger.warning("Erro ao executar ALTER TABLE: %s", exc)
-        logger.info("✓ Colunas de dados corporais verificadas/adicionadas em users")
+        logger.info("✓ Colunas de users verificadas/adicionadas")
+
+        # Migração: converter colunas de password_reset_tokens para TIMESTAMPTZ
+        # Necessário em ambientes onde a tabela foi criada com DateTime (sem timezone)
+        token_col_alters = [
+            "ALTER TABLE password_reset_tokens ALTER COLUMN expires_at TYPE TIMESTAMPTZ USING expires_at AT TIME ZONE 'UTC'",
+            "ALTER TABLE password_reset_tokens ALTER COLUMN used_at TYPE TIMESTAMPTZ USING used_at AT TIME ZONE 'UTC'",
+            "ALTER TABLE password_reset_tokens ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at AT TIME ZONE 'UTC'",
+        ]
+        for alter in token_col_alters:
+            try:
+                await conn.execute(text(alter))
+            except Exception:
+                pass  # tabela ainda não existe ou coluna já é TIMESTAMPTZ
 
     # 4. Migração manual: Adicionar food_name ao logbook entries se não existir
     # (feita APÓS criar as tabelas, em transação separada)

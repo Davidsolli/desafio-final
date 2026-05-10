@@ -1,9 +1,9 @@
 """Modelo SQLAlchemy para tokens de recuperação de senha."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 
 from app.models.user import Base
@@ -14,7 +14,7 @@ class PasswordResetToken(Base):
     Token temporário para recuperação de senha.
 
     O token em texto plano é enviado por email; apenas o hash SHA256
-    é armazenado no banco para evitar exposição em caso de vazamento.
+    (64 chars fixos) é armazenado para evitar exposição em caso de vazamento.
     """
 
     __tablename__ = "password_reset_tokens"
@@ -23,15 +23,21 @@ class PasswordResetToken(Base):
 
     user_id = Column(PG_UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
 
-    token_hash = Column(String(255), nullable=False, unique=True, index=True)
+    # SHA256 sempre produz 64 hex chars
+    token_hash = Column(String(64), nullable=False, unique=True, index=True)
 
-    expires_at = Column(DateTime, nullable=False)
+    # timezone=True → TIMESTAMPTZ no PostgreSQL; datetimes sempre com tzinfo
+    expires_at = Column(DateTime(timezone=True), nullable=False)
 
     used = Column(Boolean, nullable=False, default=False)
 
-    used_at = Column(DateTime, nullable=True)
+    used_at = Column(DateTime(timezone=True), nullable=True)
 
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
 
     def __repr__(self) -> str:
         return f"<PasswordResetToken(id={self.id}, user_id={self.user_id}, used={self.used})>"

@@ -4,7 +4,7 @@ import hashlib
 import logging
 import re
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -46,17 +46,22 @@ class PasswordService:
 
         Nunca revela se o email existe (anti-enumeração — RN01).
         Invalida tokens anteriores e gera um novo (RN04).
+        O commit só acontece após o email ser enviado com sucesso;
+        se o envio falhar, a transação é revertida (sem token órfão no banco).
         """
         user = await self.user_repo.get_by_email(email)
         if not user:
             logger.info("Solicitação de reset para email inexistente: %s", email)
             return
 
+        # Remove tokens expirados antes de criar o novo
+        await self.token_repo.delete_expired()
+
         plain_token, token_hash = self._generate_token()
 
         await self.token_repo.invalidate_previous(user.id)
 
-        expires_at = datetime.utcnow() + timedelta(
+        expires_at = datetime.now(timezone.utc) + timedelta(
             minutes=settings.PASSWORD_RESET_TOKEN_EXPIRE_MINUTES
         )
         reset_token = PasswordResetToken(
@@ -65,7 +70,6 @@ class PasswordService:
             expires_at=expires_at,
         )
         await self.token_repo.create(reset_token)
-        await self.token_repo.commit()
 
         reset_link = (
             f"{settings.FRONTEND_URL}"
@@ -78,9 +82,13 @@ class PasswordService:
                 to_email=user.email,
                 to_name=user.name,
                 reset_link=reset_link,
+                expire_minutes=settings.PASSWORD_RESET_TOKEN_EXPIRE_MINUTES,
             )
+            # Só commita após confirmação de envio — evita token órfão no banco
+            await self.token_repo.commit()
         except Exception:
-            logger.error("Falha ao enviar email de reset para user_id=%s", user.id)
+            logger.error("Falha ao enviar email de reset para user_id=%s; revertendo token", user.id)
+            await self.token_repo.rollback()
 
     async def reset_password(
         self, token: str, new_password: str, confirm_password: str
@@ -111,7 +119,12 @@ class PasswordService:
         if reset_token.used:
             raise InvalidTokenError("Este token já foi utilizado")
 
-        if reset_token.expires_at.replace(tzinfo=None) < datetime.utcnow():
+        # Normaliza para timezone-aware antes de comparar
+        # (SQLite/aiosqlite retorna naive para DateTime(timezone=True))
+        expires_at = reset_token.expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if expires_at < datetime.now(timezone.utc):
             raise InvalidTokenError("Token expirado. Solicite um novo link de recuperação")
 
         user = await self.user_repo.get_by_id(reset_token.user_id)

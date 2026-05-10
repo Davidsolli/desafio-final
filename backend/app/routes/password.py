@@ -6,11 +6,10 @@ Endpoints:
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.database import get_db
+from app.config.limiter import limiter
 from app.controllers.password_controller import PasswordController
 from app.dtos.password_dto import ForgotPasswordDTO, MessageResponseDTO, ResetPasswordDTO
 from app.services.password_service import (
@@ -18,8 +17,6 @@ from app.services.password_service import (
     PasswordMismatchError,
     WeakPasswordError,
 )
-
-limiter = Limiter(key_func=get_remote_address)
 
 router = APIRouter(
     prefix="/api/v1/auth",

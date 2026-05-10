@@ -4,11 +4,11 @@ load_dotenv()
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
 
 from app.config.database import init_db
+from app.config.limiter import limiter
 from app.routes import user, auth, chat, logbook, goal, invitation, webhooks
 from app.routes.pages import router as pages_router
 from app.routes.workout_sheet import router as workout_sheet_router, catalog_router as exercise_catalog_router
@@ -38,8 +38,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Rate limiting global (slowapi)
-limiter = Limiter(key_func=get_remote_address)
+# Rate limiting global (slowapi) — instância compartilhada com os routers
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 

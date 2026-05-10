@@ -10,7 +10,12 @@ from app.config.settings import settings
 logger = logging.getLogger(__name__)
 
 
-async def send_password_reset_email(to_email: str, to_name: str, reset_link: str) -> None:
+async def send_password_reset_email(
+    to_email: str,
+    to_name: str,
+    reset_link: str,
+    expire_minutes: int | None = None,
+) -> None:
     """
     Envia email com link de recuperação de senha.
 
@@ -18,7 +23,11 @@ async def send_password_reset_email(to_email: str, to_name: str, reset_link: str
         to_email: Email do destinatário.
         to_name: Nome do destinatário.
         reset_link: URL completa com o token de reset.
+        expire_minutes: Minutos até o link expirar. Padrão: valor do settings.
     """
+    if expire_minutes is None:
+        expire_minutes = settings.PASSWORD_RESET_TOKEN_EXPIRE_MINUTES
+
     resend.api_key = settings.RESEND_API_KEY
 
     from_address = f"{settings.RESEND_FROM_NAME} <{settings.RESEND_FROM_EMAIL}>"
@@ -55,7 +64,7 @@ async def send_password_reset_email(to_email: str, to_name: str, reset_link: str
           </a>
         </div>
         <p style="color: #555; line-height: 1.6;">
-          Este link expira em <strong>60 minutos</strong>.
+          Este link expira em <strong>{expire_minutes} minutos</strong>.
         </p>
         <p style="color: #555; line-height: 1.6;">
           Se você não solicitou a redefinição, ignore este email — sua senha permanece a mesma.
@@ -86,9 +95,5 @@ async def send_password_reset_email(to_email: str, to_name: str, reset_link: str
         "html": html_body,
     }
 
-    try:
-        await asyncio.to_thread(resend.Emails.send, params)
-        logger.info("Email de recuperação enviado para %s", to_email)
-    except Exception as exc:
-        logger.error("Falha ao enviar email de recuperação para %s: %s", to_email, exc)
-        raise
+    await asyncio.to_thread(resend.Emails.send, params)
+    logger.info("Email de recuperação enviado para %s", to_email)
