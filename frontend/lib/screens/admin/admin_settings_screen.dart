@@ -7,6 +7,7 @@ import '../../theme/theme_provider.dart';
 import '../../routes/app_routes.dart';
 import '../../providers/admin_provider.dart';
 import '../../models/admin_models.dart';
+import '../../shared/widgets/change_password_dialog.dart';
 
 class AdminSettingsScreen extends StatefulWidget {
   const AdminSettingsScreen({Key? key}) : super(key: key);
@@ -150,6 +151,40 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                       ],
                     ),
                   ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.lock_outline),
+                        label: const Text('Alterar Senha'),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          side: BorderSide(color: context.colors.border),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        onPressed: () {
+                          final adminProvider = context.read<AdminProvider>();
+                          final adminId = adminProvider.currentAdmin?.id;
+                          if (adminId == null) return;
+                          showDialog(
+                            context: context,
+                            builder: (_) => ChangePasswordDialog(
+                              onSubmit: (current, newPass, confirm) async {
+                                await adminProvider.changePassword(
+                                  userId: adminId,
+                                  currentPassword: current,
+                                  newPassword: newPass,
+                                  confirmPassword: confirm,
+                                );
+                              },
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: SizedBox(

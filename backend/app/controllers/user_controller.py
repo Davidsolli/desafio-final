@@ -16,10 +16,12 @@ from app.dtos.user_dto import (
     UserResponseDTO,
     PaginatedUsersResponseDTO,
 )
+from app.dtos.auth_dto import ChangePasswordDTO
 from app.services.user_service import (
     UserService,
     UserAlreadyExistsError,
     UserNotFoundError,
+    InvalidCredentialsError,
 )
 
 
@@ -108,6 +110,10 @@ class UserController:
             UserNotFoundError: Se não encontrado
         """
         return await self.service.update(user_id, dto)
+
+    async def change_password(self, user_id: UUID, dto: ChangePasswordDTO) -> UserResponseDTO:
+        """Trocar senha do usuário."""
+        return await self.service.change_password(user_id, dto)
 
     async def delete_user(self, user_id: UUID) -> bool:
         """
