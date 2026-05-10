@@ -44,6 +44,8 @@ RATE_LIMIT_WINDOW_HOURS = settings.CHAT_RATE_LIMIT_WINDOW_HOURS
 MAX_MESSAGE_LENGTH = settings.CHAT_MAX_MESSAGE_LENGTH
 INACTIVITY_CLOSE_HOURS = settings.CHAT_INACTIVITY_CLOSE_HOURS
 
+ALLOWED_CHANNELS: tuple[str, ...] = ("app", "whatsapp")
+
 
 # ── Exceções de Domínio ───────────────────────────────────────────────────────
 
@@ -141,6 +143,7 @@ class ChatService:
         user_id: UUID,
         conversation_id: UUID | None,
         academy_id: UUID | None,
+        channel: str = "app",
     ) -> ChatConversation:
         """
         Obter conversa existente ou criar nova.
@@ -179,7 +182,7 @@ class ChatService:
         conversation = ChatConversation(
             user_id=user_id,
             academy_id=academy_id,
-            channel="app",
+            channel=channel,
             status="active",
             started_at=datetime.utcnow(),
         )
@@ -372,6 +375,7 @@ class ChatService:
         conversation_id: UUID | None = None,
         academy_id: UUID | None = None,
         on_status: StatusCallback | None = None,
+        channel: str = "app",
     ) -> dict[str, Any]:
         """
         Processar mensagem do aluno e retornar resposta do chatbot.
@@ -409,6 +413,9 @@ class ChatService:
             except Exception:
                 logger.debug("Erro ao emitir status %s — ignorando", status_name)
 
+        if channel not in ALLOWED_CHANNELS:
+            raise ValueError(f"channel inválido: {channel!r}")
+
         # 1. Sanitizar e validar
         clean_message = self.sanitize_input(message)
         if len(message) > MAX_MESSAGE_LENGTH:
@@ -423,7 +430,7 @@ class ChatService:
 
         # 3. Obter/criar conversa
         conversation = await self._get_or_create_conversation(
-            user_id, conversation_id, academy_id
+            user_id, conversation_id, academy_id, channel
         )
 
         # 4. Contexto do aluno e histórico
@@ -435,7 +442,7 @@ class ChatService:
             conversation_id=conversation.id,
             role="user",
             content=clean_message,
-            channel="app",
+            channel=channel,
         )
         self.session.add(user_msg)
         await self.session.flush()
@@ -473,7 +480,7 @@ class ChatService:
             role="assistant",
             content=rag_result.answer,
             context_data=context_data,
-            channel="app",
+            channel=channel,
             model_used=rag_result.model_used,
             tokens_used=rag_result.tokens_used,
             latency_ms=rag_result.latency_ms or latency_ms,

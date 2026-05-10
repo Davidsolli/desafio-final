@@ -31,6 +31,7 @@ class ChatController:
         conversation_id: UUID | None = None,
         academy_id: UUID | None = None,
         on_status: Callable[[dict], Awaitable[None]] | None = None,
+        channel: str = "app",
     ) -> dict[str, Any]:
         """Envia mensagem do aluno ao pipeline e devolve a resposta estruturada."""
         return await self.service.send_message(
@@ -39,6 +40,7 @@ class ChatController:
             conversation_id=conversation_id,
             academy_id=academy_id,
             on_status=on_status,
+            channel=channel,
         )
 
     async def list_conversations(
