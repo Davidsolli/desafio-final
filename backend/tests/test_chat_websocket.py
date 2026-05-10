@@ -10,10 +10,18 @@ Testes:
 
 import json
 import pytest
-from typing import AsyncGenerator
 from uuid import uuid4
 from httpx import AsyncClient
-from app.dependencies.auth import create_jwt_token
+
+def create_jwt_token(user_id: str, expires_in_minutes: int = 60) -> str:
+    """Helper para gerar token JWT válido nos testes."""
+    from datetime import datetime, timedelta
+    from jose import jwt
+    from app.config.settings import settings
+    to_encode = {"sub": user_id}
+    expire = datetime.utcnow() + timedelta(minutes=expires_in_minutes)
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
 @pytest.fixture
