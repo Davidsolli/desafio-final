@@ -2,11 +2,19 @@ import 'dart:convert';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:animate_do/animate_do.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/theme_colors.dart';
 import '../../config/api_config.dart';
+import '../../services/api_client.dart';
+import '../../services/chat_service.dart';
+
+/// Chave usada para persistir o id da conversa ativa entre saídas e
+/// retornos à tela de chat. Sem isto, cada visita à tela criava uma
+/// nova conversa no backend e perdia todo o histórico.
+const String _kConversationIdPrefsKey = 'chat_active_conversation_id';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -28,7 +36,53 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
-    _connectWebSocket();
+    _bootstrap();
+  }
+
+  /// Tenta carregar o histórico da última conversa antes de abrir o
+  /// WebSocket. Se não houver conversa salva (ou o id não for mais
+  /// válido — usuário trocou de conta, conversa removida etc.), segue
+  /// para o WebSocket sem mensagens prévias.
+  Future<void> _bootstrap() async {
+    await _loadStoredConversation();
+    if (!mounted) return;
+    await _connectWebSocket();
+  }
+
+  Future<void> _loadStoredConversation() async {
+    // Capturado de forma síncrona antes de qualquer await — não é
+    // seguro tocar em context após gaps assíncronos.
+    final chatService = context.read<ChatService>();
+
+    final prefs = await SharedPreferences.getInstance();
+    final storedId = prefs.getString(_kConversationIdPrefsKey);
+    if (storedId == null || storedId.isEmpty) return;
+
+    try {
+      final detail = await chatService.getConversation(storedId);
+      if (!mounted) return;
+      setState(() {
+        _conversationId = detail.id;
+        _messages.addAll(detail.messages.map((m) => {
+              'role': m.role,
+              'text': m.content,
+              'time': _formatTimeFrom(m.createdAt),
+            }));
+      });
+      _scrollToBottom();
+    } on NotFoundException {
+      // Conversa apagada/expirada no backend — limpar para começar nova
+      await prefs.remove(_kConversationIdPrefsKey);
+    } on UnauthorizedException {
+      await prefs.remove(_kConversationIdPrefsKey);
+    } catch (_) {
+      // Falha de rede etc.: não derruba a tela, só ignora o histórico
+    }
+  }
+
+  Future<void> _persistConversationId(String id) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kConversationIdPrefsKey, id);
   }
 
   Future<void> _connectWebSocket() async {
@@ -67,11 +121,16 @@ class _ChatScreenState extends State<ChatScreen> {
             if (mounted) {
               setState(() {
                 _isConnected = true;
-                _messages.add({
-                  'role': 'assistant',
-                  'text': 'Olá! Sou seu assistente fitness. Como posso te ajudar hoje?',
-                  'time': _formatTime(),
-                });
+                // Só mostra a saudação inicial se não houver histórico
+                // recuperado (caso contrário ela apareceria toda vez
+                // que o usuário voltasse à tela).
+                if (_messages.isEmpty) {
+                  _messages.add({
+                    'role': 'assistant',
+                    'text': 'Olá! Sou seu assistente fitness. Como posso te ajudar hoje?',
+                    'time': _formatTime(),
+                  });
+                }
               });
               _scrollToBottom();
             }
@@ -97,8 +156,11 @@ class _ChatScreenState extends State<ChatScreen> {
               _scrollToBottom();
             }
           } else if (data['type'] == 'response') {
-            if (data['conversation_id'] != null) {
-              _conversationId = data['conversation_id'];
+            final newId = data['conversation_id'] as String?;
+            if (newId != null) {
+              _conversationId = newId;
+              // Persiste para sobreviver entre saídas/retornos da tela
+              unawaited(_persistConversationId(newId));
             }
             if (mounted) {
               setState(() {
@@ -173,9 +235,11 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  String _formatTime() {
-    final now = DateTime.now();
-    return '${now.hour}:${now.minute.toString().padLeft(2, '0')}';
+  String _formatTime() => _formatTimeFrom(DateTime.now());
+
+  String _formatTimeFrom(DateTime dt) {
+    final local = dt.toLocal();
+    return '${local.hour}:${local.minute.toString().padLeft(2, '0')}';
   }
 
   void _scrollToBottom() {
