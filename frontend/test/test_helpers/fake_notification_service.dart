@@ -22,7 +22,9 @@ class FakeNotificationService extends Fake implements NotificationService {
   // ---- captura ----
   final List<Map<String, dynamic>> updateCalls = [];
   final List<String> markReadIds = [];
+  final List<String> updateTimezoneCalls = [];
   int historyCallCount = 0;
+  bool updateTimezoneOk = true;
 
   @override
   Future<void> initialize() async {}
@@ -57,5 +59,11 @@ class FakeNotificationService extends Fake implements NotificationService {
   Future<bool> markAsRead(String notificationId) async {
     markReadIds.add(notificationId);
     return markReadOk;
+  }
+
+  @override
+  Future<bool> updateTimezone(String tz) async {
+    updateTimezoneCalls.add(tz);
+    return updateTimezoneOk;
   }
 }
