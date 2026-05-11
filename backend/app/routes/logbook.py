@@ -453,6 +453,7 @@ async def get_frequency(
 )
 async def get_muscle_group_distribution(
     days: int = Query(30, ge=1, le=365, description="Janela de dias retroativos (máx. 365)"),
+    user_id: Optional[UUID] = Query(None, description="Filtrar por aluno (admin/personal)"),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ) -> MuscleGroupDistributionResponseDTO:
@@ -462,11 +463,13 @@ async def get_muscle_group_distribution(
 
     Parâmetros:
     - `days`: Janela de dias retroativos (padrão 30, máx 365)
+    - `user_id`: Filtrar por aluno específico (apenas admin/personal)
     """
+    effective_user_id = user_id if (current_user.role != "client" and user_id) else current_user.id
     controller = LogbookController(session)
     try:
         return await controller.get_muscle_group_distribution(
-            user_id=current_user.id,
+            user_id=effective_user_id,
             days=days,
         )
     except Exception as e:

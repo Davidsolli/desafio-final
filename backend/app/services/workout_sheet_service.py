@@ -77,7 +77,13 @@ class WorkoutSheetService:
     async def create_workout_program(
         self, requester_id: UUID, role: str, dto: CreateWorkoutProgramDTO
     ) -> WorkoutProgramResponseDTO:
-        self._check_write_permission(role)
+        if role == "client":
+            if dto.user_id != requester_id:
+                raise WorkoutSheetForbiddenError(
+                    "Você só pode criar programas de treino para você mesmo."
+                )
+        else:
+            self._check_write_permission(role)
 
         sheets = []
         for sheet_dto in dto.workout_sheets:
@@ -93,7 +99,7 @@ class WorkoutSheetService:
 
         program = WorkoutProgram(
             user_id=dto.user_id,
-            personal_trainer_id=requester_id,
+            personal_trainer_id=None if role == "client" else requester_id,
             name=dto.name,
             description=dto.description,
             goal=dto.goal,
@@ -132,11 +138,17 @@ class WorkoutSheetService:
     async def update_workout_program(
         self, program_id: UUID, requester_id: UUID, role: str, dto: UpdateWorkoutProgramDTO
     ) -> WorkoutProgramResponseDTO:
-        self._check_write_permission(role)
-
         program = await self.repository.get_workout_program_by_id(program_id)
         if not program:
             raise WorkoutProgramNotFoundError("Programa de treino não encontrado.")
+
+        if role == "client":
+            if program.user_id != requester_id or program.personal_trainer_id is not None:
+                raise WorkoutSheetForbiddenError(
+                    "Você só pode editar seus próprios programas de treino personalizados."
+                )
+        else:
+            self._check_write_permission(role)
 
         if dto.name is not None:
             program.name = dto.name
@@ -152,7 +164,17 @@ class WorkoutSheetService:
         return self._to_program_response(updated)
 
     async def delete_workout_program(self, program_id: UUID, requester_id: UUID, role: str) -> None:
-        self._check_write_permission(role)
+        if role == "client":
+            program = await self.repository.get_workout_program_by_id(program_id)
+            if not program:
+                raise WorkoutProgramNotFoundError("Programa de treino não encontrado.")
+            if program.user_id != requester_id or program.personal_trainer_id is not None:
+                raise WorkoutSheetForbiddenError(
+                    "Você só pode deletar seus próprios programas de treino personalizados."
+                )
+        else:
+            self._check_write_permission(role)
+
         deleted = await self.repository.soft_delete_workout_program(program_id)
         if not deleted:
             raise WorkoutProgramNotFoundError("Programa de treino não encontrado.")

@@ -115,6 +115,17 @@ async def init_db() -> None:
                 logger.warning("Erro ao executar ALTER TABLE workout_sheets: %s", exc)
         logger.info("✓ Colunas atualizadas em workout_sheets para suportar WorkoutProgram")
 
+        # 5. Migração: Adicionar water_target_ml ao diets se não existir
+        alters_diets = [
+            "ALTER TABLE diets ADD COLUMN IF NOT EXISTS water_target_ml INTEGER DEFAULT NULL",
+        ]
+        for alter in alters_diets:
+            try:
+                await conn.execute(text(alter))
+            except Exception as exc:
+                logger.warning("Erro ao executar ALTER TABLE diets: %s", exc)
+        logger.info("✓ Colunas atualizadas em diets para suportar water_target_ml")
+
     # 4. Migração manual: Adicionar food_name ao logbook entries se não existir
     # (feita APÓS criar as tabelas, em transação separada)
     # COMENTADO TEMPORARIAMENTE - será aplicado depois

@@ -213,6 +213,7 @@ class Diet {
   final double totalProtein;
   final double totalCarbs;
   final double totalFats;
+  final int waterTargetMl;
 
   Diet({
     required this.id,
@@ -229,6 +230,7 @@ class Diet {
     required this.totalProtein,
     required this.totalCarbs,
     required this.totalFats,
+    required this.waterTargetMl,
   });
 
   factory Diet.fromJson(Map<String, dynamic> json) {
@@ -250,6 +252,7 @@ class Diet {
       totalProtein: (json['total_protein'] as num?)?.toDouble() ?? 0.0,
       totalCarbs: (json['total_carbs'] as num?)?.toDouble() ?? 0.0,
       totalFats: (json['total_fats'] as num?)?.toDouble() ?? 0.0,
+      waterTargetMl: json['water_target_ml'] as int? ?? 2500,
     );
   }
 }

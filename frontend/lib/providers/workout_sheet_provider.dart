@@ -39,6 +39,7 @@ class WorkoutSheetProvider extends ChangeNotifier {
   String? get error => _error;
   bool get hasPrograms => _programs.isNotEmpty;
   bool get hasSheets => _sheets.isNotEmpty;
+  WorkoutSheetService get service => _service;
 
   // ---------------------------------------------------------------------------
   // Programas de Treino
@@ -60,6 +61,7 @@ class WorkoutSheetProvider extends ChangeNotifier {
       );
 
       _programs = result.data;
+      _sortPrograms();
       _totalPrograms = result.total;
       _currentPage = result.page;
       notifyListeners();
@@ -366,11 +368,21 @@ class WorkoutSheetProvider extends ChangeNotifier {
     try {
       final result = await _service.listWorkoutPrograms(page: _currentPage);
       _programs = result.data;
+      _sortPrograms();
       _totalPrograms = result.total;
       notifyListeners();
     } catch (_) {
       // Falha silenciosa no refresh
     }
+  }
+
+  /// Ordena os programas para que os oficiais (prescritos pelo treinador) apareçam primeiro.
+  void _sortPrograms() {
+    _programs.sort((a, b) {
+      final aOfficial = a.personalTrainerId != null ? 1 : 0;
+      final bOfficial = b.personalTrainerId != null ? 1 : 0;
+      return bOfficial.compareTo(aOfficial); // 1 (Oficial) vem antes de 0 (Customizado)
+    });
   }
 
   /// Define o estado de carregamento.

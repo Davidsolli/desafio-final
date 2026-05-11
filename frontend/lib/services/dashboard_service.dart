@@ -178,11 +178,15 @@ class DashboardService {
   Future<Map<String, dynamic>?> getFrequency({
     required String period,
     int? limit,
+    String? userId,
   }) async {
     try {
       final queryParams = {'period': period};
       if (limit != null) {
         queryParams['limit'] = limit.toString();
+      }
+      if (userId != null) {
+        queryParams['user_id'] = userId;
       }
 
       final response = await _apiClient.get<Map<String, dynamic>>(
@@ -202,6 +206,7 @@ class DashboardService {
     required String exerciseId,
     String? groupBy,
     int? weeks,
+    String? userId,
   }) async {
     try {
       final queryParams = <String, String>{};
@@ -211,9 +216,35 @@ class DashboardService {
       if (weeks != null) {
         queryParams['weeks'] = weeks.toString();
       }
+      if (userId != null) {
+        queryParams['user_id'] = userId;
+      }
 
       final response = await _apiClient.get<Map<String, dynamic>>(
         '/logbook/progression/$exerciseId',
+        queryParameters: queryParams,
+        fromJson: (data) => data as Map<String, dynamic>,
+      );
+
+      return response;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Retorna distribuição muscular dos exercícios completados pelo aluno
+  Future<Map<String, dynamic>?> getMuscleGroupDistribution({
+    int days = 30,
+    String? userId,
+  }) async {
+    try {
+      final queryParams = <String, String>{'days': days.toString()};
+      if (userId != null) {
+        queryParams['user_id'] = userId;
+      }
+
+      final response = await _apiClient.get<Map<String, dynamic>>(
+        '/logbook/muscle-group-distribution',
         queryParameters: queryParams,
         fromJson: (data) => data as Map<String, dynamic>,
       );

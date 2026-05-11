@@ -11,6 +11,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.workout_sheet import Exercise, WorkoutSheet, WorkoutProgram
 from app.models.exercise_catalog import ExerciseCatalog
@@ -29,13 +30,15 @@ class WorkoutSheetRepository:
     async def create_workout_program(self, program: WorkoutProgram) -> WorkoutProgram:
         self.session.add(program)
         await self.session.flush()
-        await self.session.refresh(program)
-        return program
+        # Força o retorno do programa com eager loading completo para evitar erros de lazy loading pós-commit
+        return await self.get_workout_program_by_id(program.id)
 
     async def get_workout_program_by_id(self, program_id: UUID) -> Optional[WorkoutProgram]:
         stmt = select(WorkoutProgram).where(
             WorkoutProgram.id == program_id,
             WorkoutProgram.is_active.is_(True),
+        ).options(
+            selectinload(WorkoutProgram.workout_sheets).selectinload(WorkoutSheet.exercises)
         )
         result = await self.session.execute(stmt)
         return result.scalars().first()

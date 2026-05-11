@@ -10,6 +10,10 @@ import '../../providers/workout_sheet_provider.dart';
 import '../../services/nutrition_service.dart';
 import '../../services/user_service.dart';
 import '../../services/workout_sheet_service.dart';
+import '../../services/dashboard_service.dart';
+import '../../services/api_client.dart';
+import '../../widgets/frequency_bar_chart.dart';
+import '../../widgets/progression_line_chart.dart';
 import '../../shared/widgets/index.dart';
 import 'widgets/create_workout_sheet_dialog.dart';
 import 'widgets/edit_workout_sheet_dialog.dart';
@@ -39,10 +43,21 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
   bool _nutritionLoading = false;
   String? _nutritionError;
 
+  // Estado local para a aba de Evolução
+  bool _evolutionLoading = false;
+  String? _evolutionError;
+  List<Map<String, dynamic>> _frequencyData = [];
+  String _frequencyPeriod = 'weekly';
+  List<Map<String, dynamic>> _progressionData = [];
+  String? _selectedExerciseId;
+  String? _selectedExerciseName;
+  List<Map<String, dynamic>> _muscleGroupData = [];
+  List<ExerciseResponse> _studentExercises = [];
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _tabController.addListener(_handleTabChanged);
 
     // Carrega dados do aluno e fichas via API
@@ -57,6 +72,10 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
     // Garante recarga quando a aba Nutrição for selecionada, inclusive após hot reload.
     if (_tabController.index == 2 && !_nutritionLoading && _studentDiets.isEmpty) {
       _loadStudentNutrition();
+    }
+    // Garante recarga quando a aba de Evolução for selecionada
+    if (_tabController.index == 3 && !_evolutionLoading && _frequencyData.isEmpty) {
+      _loadEvolutionData();
     }
   }
 
@@ -120,20 +139,43 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
       if (provider.programs.isNotEmpty) {
         final active = provider.programs.firstWhere((p) => p.isActive, orElse: () => provider.programs.first);
         await provider.loadSheets(workoutProgramId: active.id);
+        
+        final List<ExerciseResponse> exercises = [];
+        final sheetService = provider.service;
+        for (final s in provider.sheets) {
+          try {
+            final detailedSheet = await sheetService.getWorkoutSheet(s.id);
+            exercises.addAll(detailedSheet.exercises);
+          } catch (_) {}
+        }
+        
+        final uniqueExercises = <String, ExerciseResponse>{};
+        for (final ex in exercises) {
+          uniqueExercises[ex.name] = ex;
+        }
+
         if (mounted) {
           setState(() {
             _activeProgram = active;
             _studentSheets = provider.sheets;
+            _studentExercises = uniqueExercises.values.toList();
+            if (_studentExercises.isNotEmpty && _selectedExerciseId == null) {
+              _selectedExerciseId = _studentExercises.first.id;
+              _selectedExerciseName = _studentExercises.first.name;
+            }
             _sheetsLoading = false;
           });
+          _loadEvolutionData();
         }
       } else {
         if (mounted) {
           setState(() {
             _activeProgram = null;
             _studentSheets = [];
+            _studentExercises = [];
             _sheetsLoading = false;
           });
+          _loadEvolutionData();
         }
       }
     } catch (e) {
@@ -144,6 +186,472 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
         });
       }
     }
+  }
+
+  Future<void> _loadEvolutionData() async {
+    setState(() {
+      _evolutionLoading = true;
+      _evolutionError = null;
+    });
+
+    try {
+      final apiClient = context.read<ApiClient>();
+      final dashboardService = DashboardService(apiClient);
+
+      // 1. Carrega frequência de treino
+      final freqRes = await dashboardService.getFrequency(
+        period: _frequencyPeriod,
+        userId: widget.studentId,
+      );
+      final List<dynamic> freqDataList = freqRes != null && freqRes['data'] != null 
+          ? freqRes['data'] as List<dynamic> 
+          : [];
+
+      // 2. Carrega foco muscular nos últimos 30 dias
+      final muscleRes = await dashboardService.getMuscleGroupDistribution(
+        days: 30,
+        userId: widget.studentId,
+      );
+      final List<dynamic> muscleDataList = muscleRes != null && muscleRes['data'] != null 
+          ? muscleRes['data'] as List<dynamic> 
+          : [];
+
+      // 3. Carrega progressão de carga do exercício selecionado se houver
+      List<dynamic> progressionDataList = [];
+      if (_selectedExerciseId != null) {
+        final progRes = await dashboardService.getExerciseProgression(
+          exerciseId: _selectedExerciseId!,
+          userId: widget.studentId,
+        );
+        progressionDataList = progRes != null && progRes['data'] != null 
+            ? progRes['data'] as List<dynamic> 
+            : [];
+      }
+
+      if (mounted) {
+        setState(() {
+          _frequencyData = freqDataList.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+          _muscleGroupData = muscleDataList.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+          _progressionData = progressionDataList.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+          _evolutionLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _evolutionError = 'Erro ao carregar dados de evolução';
+          _evolutionLoading = false;
+        });
+      }
+    }
+  }
+
+  Widget _buildEvolutionTab() {
+    if (_sheetsLoading || (_evolutionLoading && _frequencyData.isEmpty)) {
+      return const OmniLoader();
+    }
+
+    if (_evolutionError != null) {
+      return OmniErrorState(
+        message: _evolutionError!,
+        onRetry: _loadEvolutionData,
+      );
+    }
+
+    final totalExercisesCount = _muscleGroupData.fold<int>(0, (sum, item) => sum + ((item['count'] as num?)?.toInt() ?? 0));
+
+    int currentWeekWorkoutsCount = 0;
+    if (_frequencyData.isNotEmpty) {
+      currentWeekWorkoutsCount = (_frequencyData.last['count'] as num?)?.toInt() ?? 0;
+    }
+
+    Color badgeColor;
+    String badgeText;
+    IconData badgeIcon;
+    String badgeDesc;
+
+    if (currentWeekWorkoutsCount >= 3) {
+      badgeColor = AppColors.accentSuccess;
+      badgeText = 'Foco Total 🔥';
+      badgeIcon = Icons.local_fire_department_rounded;
+      badgeDesc = 'O aluno está super active e consistente esta semana!';
+    } else if (currentWeekWorkoutsCount > 0) {
+      badgeColor = AppColors.accentWarning;
+      badgeText = 'Consistente 💪';
+      badgeIcon = Icons.trending_up_rounded;
+      badgeDesc = 'Bom ritmo! Falta pouco para atingir a meta semanal ideal.';
+    } else {
+      badgeColor = AppColors.accentError;
+      badgeText = 'Alerta de Inatividade ⚠️';
+      badgeIcon = Icons.warning_amber_rounded;
+      badgeDesc = 'O aluno não registrou treinos nos últimos 7 dias.';
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          FadeInDown(
+            duration: const Duration(milliseconds: 400),
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    badgeColor.withOpacity(0.12),
+                    badgeColor.withOpacity(0.04),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: badgeColor.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: badgeColor.withOpacity(0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(badgeIcon, color: badgeColor, size: 32),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          badgeText,
+                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: badgeColor,
+                              ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          badgeDesc,
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                color: context.colors.textSecondary,
+                              ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Treinos finalizados esta semana: $currentWeekWorkoutsCount',
+                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                color: context.colors.textMuted,
+                                fontWeight: FontWeight.w600,
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          FadeInUp(
+            duration: const Duration(milliseconds: 400),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Frequência de Treinos',
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                    ),
+                    Container(
+                      height: 36,
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        color: context.colors.surface,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: context.colors.border),
+                      ),
+                      child: Row(
+                        children: [
+                          GestureDetector(
+                            onTap: () {
+                              if (_frequencyPeriod != 'weekly') {
+                                setState(() {
+                                  _frequencyPeriod = 'weekly';
+                                });
+                                _loadEvolutionData();
+                              }
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              decoration: BoxDecoration(
+                                color: _frequencyPeriod == 'weekly'
+                                    ? AppColors.primary
+                                    : Colors.transparent,
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                'Semanal',
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: _frequencyPeriod == 'weekly'
+                                          ? Colors.white
+                                          : context.colors.textMuted,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                              ),
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () {
+                              if (_frequencyPeriod != 'monthly') {
+                                setState(() {
+                                  _frequencyPeriod = 'monthly';
+                                });
+                                _loadEvolutionData();
+                              }
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              decoration: BoxDecoration(
+                                color: _frequencyPeriod == 'monthly'
+                                    ? AppColors.primary
+                                    : Colors.transparent,
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                'Mensal',
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: _frequencyPeriod == 'monthly'
+                                          ? Colors.white
+                                          : context.colors.textMuted,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  height: 200,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: context.colors.surface,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: context.colors.border),
+                  ),
+                  child: FrequencyBarChart(
+                    dataPoints: _frequencyData,
+                    period: _frequencyPeriod,
+                    isLoading: _evolutionLoading,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          FadeInUp(
+            duration: const Duration(milliseconds: 400),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Progressão de Carga',
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+                const SizedBox(height: 12),
+                if (_studentExercises.isEmpty) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: context.colors.surface,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: context.colors.border),
+                    ),
+                    child: Column(
+                      children: [
+                        const Icon(Icons.fitness_center, color: Colors.grey, size: 40),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Sem exercícios cadastrados',
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                color: context.colors.textSecondary,
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ] else ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: context.colors.surface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: context.colors.border),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: _selectedExerciseId,
+                        isExpanded: true,
+                        icon: const Icon(Icons.arrow_drop_down, color: AppColors.primary),
+                        dropdownColor: context.colors.surface,
+                        items: _studentExercises.map((ex) {
+                          return DropdownMenuItem<String>(
+                            value: ex.id,
+                            child: Text(
+                              ex.name,
+                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            final selected = _studentExercises.firstWhere((e) => e.id == val);
+                            setState(() {
+                              _selectedExerciseId = val;
+                              _selectedExerciseName = selected.name;
+                            });
+                            _loadEvolutionData();
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    height: 240,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: context.colors.surface,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: context.colors.border),
+                    ),
+                    child: ProgressionLineChart(
+                      dataPoints: _progressionData,
+                      isLoading: _evolutionLoading,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          FadeInUp(
+            duration: const Duration(milliseconds: 400),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Foco Muscular (Últimos 30 dias)',
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+                const SizedBox(height: 16),
+                if (_muscleGroupData.isEmpty) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: context.colors.surface,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: context.colors.border),
+                    ),
+                    child: Column(
+                      children: [
+                        const Icon(Icons.pie_chart_outline_rounded, color: Colors.grey, size: 40),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Ainda sem treinos finalizados neste período',
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                color: context.colors.textSecondary,
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ] else ...[
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: context.colors.surface,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: context.colors.border),
+                    ),
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: _muscleGroupData.length,
+                      separatorBuilder: (context, index) => const SizedBox(height: 14),
+                      itemBuilder: (context, index) {
+                        final item = _muscleGroupData[index];
+                        final muscleName = item['muscle_group'] as String? ?? 'Outros';
+                        final count = (item['count'] as num?)?.toInt() ?? 0;
+                        final percent = totalExercisesCount > 0 ? count / totalExercisesCount : 0.0;
+
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  muscleName.toUpperCase(),
+                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                        fontWeight: FontWeight.bold,
+                                        color: context.colors.textSecondary,
+                                        letterSpacing: 1.1,
+                                      ),
+                                ),
+                                Text(
+                                  '$count séries (${(percent * 100).toStringAsFixed(0)}%)',
+                                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.primary,
+                                      ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: LinearProgressIndicator(
+                                value: percent,
+                                backgroundColor: context.colors.border.withOpacity(0.5),
+                                valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
+                                minHeight: 8,
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 32),
+        ],
+      ),
+    );
   }
 
   @override
@@ -187,6 +695,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                   Tab(icon: Icon(Icons.info_outline), text: 'Info'),
                   Tab(icon: Icon(Icons.fitness_center), text: 'Treinos'),
                   Tab(icon: Icon(Icons.restaurant_outlined), text: 'Nutrição'),
+                  Tab(icon: Icon(Icons.trending_up), text: 'Evolução'),
                 ],
                 labelColor: AppColors.primary,
                 unselectedLabelColor: context.colors.textMuted,
@@ -200,6 +709,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                   _buildInfoTab(),
                   _buildWorkoutsTab(),
                   _buildNutritionTab(),
+                  _buildEvolutionTab(),
                 ],
               ),
             ),
@@ -539,6 +1049,8 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
             ],
           ),
           const SizedBox(height: 12),
+          _buildWaterTargetPrescriberCard(activeDiet),
+          const SizedBox(height: 16),
           ...activeDiet.meals.map((m) {
             return FadeInUp(
               child: Container(
@@ -595,6 +1107,385 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildWaterTargetPrescriberCard(Diet activeDiet) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF0F2027), Color(0xFF203A43), Color(0xFF2C5364)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF16C1F3).withOpacity(0.15),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: const Color(0xFF16C1F3).withOpacity(0.3),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF16C1F3).withOpacity(0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.local_drink_rounded,
+                  color: Color(0xFF26C6DA),
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Meta de Hidratação',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Prescrita individualmente para o aluno',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: Colors.white.withOpacity(0.7),
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+              ElevatedButton.icon(
+                onPressed: () => _showEditWaterTargetDialog(activeDiet),
+                icon: const Icon(Icons.edit, size: 14, color: Colors.white),
+                label: const Text('Prescrever'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF16C1F3).withOpacity(0.4),
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    side: BorderSide(color: const Color(0xFF16C1F3).withOpacity(0.5)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Meta Atual',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: Colors.white.withOpacity(0.6),
+                        ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      Text(
+                        '${activeDiet.waterTargetMl}',
+                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                      ),
+                      const SizedBox(width: 2),
+                      Text(
+                        'ml',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Colors.white.withOpacity(0.7),
+                            ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              Container(
+                height: 40,
+                width: 1,
+                color: Colors.white.withOpacity(0.2),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Fórmula Padrão',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: Colors.white.withOpacity(0.6),
+                        ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      Text(
+                        _student != null && _student!.weight > 0
+                            ? '${(_student!.weight * 35).toInt()}'
+                            : '2500',
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                              color: Colors.white.withOpacity(0.9),
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                      const SizedBox(width: 2),
+                      Text(
+                        'ml',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Colors.white.withOpacity(0.7),
+                            ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              Container(
+                height: 40,
+                width: 1,
+                color: Colors.white.withOpacity(0.2),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Equivale a',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: Colors.white.withOpacity(0.6),
+                        ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      Text(
+                        '${(activeDiet.waterTargetMl / 250).toStringAsFixed(1)}',
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                              color: const Color(0xFF26C6DA),
+                              fontWeight: FontWeight.bold,
+                            ),
+                      ),
+                      const SizedBox(width: 2),
+                      Text(
+                        'copos',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Colors.white.withOpacity(0.7),
+                            ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showEditWaterTargetDialog(Diet activeDiet) async {
+    final controller = TextEditingController(text: '${activeDiet.waterTargetMl}');
+    final formKey = GlobalKey<FormState>();
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+          child: Container(
+            decoration: BoxDecoration(
+              color: context.colors.background,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(20),
+                topRight: Radius.circular(20),
+              ),
+            ),
+            padding: const EdgeInsets.all(20),
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Prescrever Meta de Água',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Defina uma meta diária personalizada de hidratação em mililitros (ml) para o aluno. Caso queira reverter para a fórmula automática de 35ml por kg de peso, defina como zero ou limpe o campo.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: context.colors.textMuted,
+                        ),
+                  ),
+                  const SizedBox(height: 20),
+                  TextFormField(
+                    controller: controller,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: 'Meta Diária de Água (ml)',
+                      hintText: 'Ex: 3000',
+                      suffixText: 'ml',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      prefixIcon: const Icon(Icons.local_drink_rounded),
+                    ),
+                    validator: (value) {
+                      if (value != null && value.isNotEmpty) {
+                        final val = int.tryParse(value);
+                        if (val == null || val < 0) {
+                          return 'Digite um valor inteiro válido';
+                        }
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () {
+                            // Define o valor calculado padrão baseado na fórmula
+                            if (_student != null && _student!.weight > 0) {
+                              controller.text = '${(_student!.weight * 35).toInt()}';
+                            } else {
+                              controller.text = '2500';
+                            }
+                          },
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          child: const Text('Calcular Fórmula (35ml/kg)'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () async {
+                            if (!formKey.currentState!.validate()) return;
+                            
+                            final targetValStr = controller.text.trim();
+                            // Se estiver em branco ou for 0, mandamos 0 para reverter para o padrão do backend
+                            final targetVal = targetValStr.isEmpty ? 0 : int.parse(targetValStr);
+
+                            Navigator.pop(context); // fecha bottom sheet
+                            
+                            setState(() {
+                              _nutritionLoading = true;
+                            });
+
+                            try {
+                              final nutritionService = context.read<NutritionService>();
+                              
+                              // Para atualizar a dieta ativa mantendo todas as suas refeições originais,
+                              // mapeamos as refeições para o formato de input esperado pelo DTO do backend.
+                              final mealsPayload = activeDiet.meals.map((m) {
+                                return {
+                                  'name': m.name,
+                                  'time': m.time,
+                                  'order': m.order,
+                                  'items': m.items.map((it) {
+                                    return {
+                                      'food_id': it.foodId,
+                                      'quantity_g': it.quantityG,
+                                      'observations': it.observations,
+                                    };
+                                  }).toList(),
+                                };
+                              }).toList();
+
+                              await nutritionService.updateDiet(
+                                dietId: activeDiet.id,
+                                meals: mealsPayload,
+                                waterTargetMl: targetVal,
+                              );
+
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Meta de hidratação atualizada com sucesso!'),
+                                  backgroundColor: AppColors.accentSuccess,
+                                ),
+                              );
+
+                              // Recarrega
+                              _loadStudentNutrition();
+                            } catch (e) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Erro ao atualizar meta: ${e.toString()}'),
+                                  backgroundColor: AppColors.accentError,
+                                ),
+                              );
+                              setState(() {
+                                _nutritionLoading = false;
+                              });
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          child: const Text('Salvar Prescrição'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 

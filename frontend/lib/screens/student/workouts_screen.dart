@@ -12,6 +12,7 @@ import 'package:omniconnect_fitness/providers/workout_sheet_provider.dart';
 import 'package:omniconnect_fitness/providers/logbook_provider.dart';
 import 'package:omniconnect_fitness/services/api_client.dart';
 import 'package:omniconnect_fitness/shared/widgets/index.dart';
+import 'package:omniconnect_fitness/screens/trainer/widgets/exercise_catalog_picker.dart';
 import 'package:omniconnect_fitness/widgets/frequency_bar_chart.dart';
 import 'package:omniconnect_fitness/widgets/progression_line_chart.dart';
 
@@ -604,15 +605,16 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
   // --- CRIADOR DE ROTINA / FICHA CUSTOMIZADA ---
   void _openCustomRoutineBuilder() {
     final programNameController = TextEditingController(text: 'Minha Rotina Personalizada');
-    final sheetNameController = TextEditingController(text: 'Ficha Customizada');
-    int selectedDay = 0; // Segunda-feira
+    final programGoalController = TextEditingController(text: 'Hipertrofia');
     
-    // Lista local de exercícios adicionados na ficha customizada
-    final List<Map<String, dynamic>> addedExercises = [];
-
-    // Busca inicial do catálogo para preencher
-    final sheetProvider = context.read<WorkoutSheetProvider>();
-    sheetProvider.searchCatalog(search: '', limit: 15);
+    // Lista local de fichas neste programa
+    final List<Map<String, dynamic>> programSheets = [
+      {
+        'nameController': TextEditingController(text: 'Treino A'),
+        'day_of_week': 0, // Segunda-feira
+        'exercises': <Map<String, dynamic>>[],
+      }
+    ];
 
     showModalBottomSheet(
       context: context,
@@ -621,9 +623,15 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
       builder: (ctx) {
         return StatefulBuilder(
           builder: (context, setStateBuilder) {
+            final double keyboardOffset = MediaQuery.of(context).viewInsets.bottom;
             return Container(
               height: MediaQuery.of(context).size.height * 0.88,
-              padding: const EdgeInsets.all(20),
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: 20 + keyboardOffset,
+              ),
               decoration: BoxDecoration(
                 color: Theme.of(context).scaffoldBackgroundColor,
                 borderRadius: const BorderRadius.only(
@@ -646,7 +654,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        '➕ Criar Rotina Customizada',
+                        '➕ Criar Programa de Treino',
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
                       ),
                       IconButton(
@@ -663,114 +671,231 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           // Nome do Programa
-                          const Text('Nome da Rotina / Foco', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          const Text('Nome do Programa / Foco Geral', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                           const SizedBox(height: 6),
                           TextField(
                             controller: programNameController,
                             decoration: InputDecoration(
-                              hintText: 'Ex: Hipertrofia Pernas, Meu Treino em Casa...',
+                              hintText: 'Ex: Meu Bloco de Força, Foco em Pernas...',
                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                               contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                             ),
                           ),
                           const SizedBox(height: 16),
 
-                          // Nome da Ficha
-                          const Text('Nome do Treino (Ficha)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          // Objetivo
+                          const Text('Objetivo', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                           const SizedBox(height: 6),
                           TextField(
-                            controller: sheetNameController,
+                            controller: programGoalController,
                             decoration: InputDecoration(
-                              hintText: 'Ex: Treino A - Superior, Força...',
+                              hintText: 'Ex: Hipertrofia, Força, Emagrecimento...',
                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                               contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                             ),
                           ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 24),
 
-                          // Dia de agendamento
-                          const Text('Agendar para Dia da Semana', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                          const SizedBox(height: 8),
-                          SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: Row(
-                              children: List.generate(7, (i) {
-                                final isSel = selectedDay == i;
-                                return Padding(
-                                  padding: const EdgeInsets.only(right: 6),
-                                  child: ChoiceChip(
-                                    label: Text(dayOfWeekLabels[i]!),
-                                    selected: isSel,
-                                    selectedColor: AppColors.primary,
-                                    backgroundColor: context.colors.surface,
-                                    labelStyle: TextStyle(color: isSel ? Colors.white : context.colors.textPrimary, fontSize: 11),
-                                    onSelected: (val) {
-                                      if (val) {
-                                        setStateBuilder(() => selectedDay = i);
-                                      }
-                                    },
-                                  ),
-                                );
-                              }),
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-
-                          // Exercícios Adicionados
+                          // Divider e Cabeçalho de Fichas
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text('Exercícios (${addedExercises.length})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                              TextButton.icon(
-                                icon: const Icon(Icons.search, size: 16),
-                                label: const Text('Buscar e Adicionar', style: TextStyle(fontSize: 12)),
+                              Text(
+                                'Fichas de Treino (${programSheets.length})',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.primary),
+                              ),
+                              ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.primary.withOpacity(0.15),
+                                  foregroundColor: AppColors.primary,
+                                  elevation: 0,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                ),
+                                icon: const Icon(Icons.add, size: 16),
+                                label: const Text('Nova Ficha', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                                 onPressed: () {
-                                  _showExerciseSearchCatalogDialog(setStateBuilder, addedExercises);
+                                  setStateBuilder(() {
+                                    final sheetLetter = String.fromCharCode(65 + programSheets.length);
+                                    programSheets.add({
+                                      'nameController': TextEditingController(text: 'Treino $sheetLetter'),
+                                      'day_of_week': programSheets.length % 7,
+                                      'exercises': <Map<String, dynamic>>[],
+                                    });
+                                  });
                                 },
                               ),
                             ],
                           ),
-                          
-                          if (addedExercises.isEmpty)
-                            Container(
-                              padding: const EdgeInsets.symmetric(vertical: 24),
-                              alignment: Alignment.center,
-                              child: Text(
-                                'Nenhum exercício adicionado. Toque em buscar acima para incluir! 🏋️',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(color: context.colors.textMuted, fontSize: 12),
+                          const SizedBox(height: 12),
+
+                          // Listar Fichas
+                          ...programSheets.asMap().entries.map((entry) {
+                            final sheetIndex = entry.key;
+                            final sheet = entry.value;
+                            final List<Map<String, dynamic>> exercises = sheet['exercises'];
+                            final TextEditingController sheetNameCtrl = sheet['nameController'];
+                            final int sheetDay = sheet['day_of_week'];
+
+                            return Card(
+                              margin: const EdgeInsets.only(bottom: 16),
+                              elevation: 2,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                side: BorderSide(color: context.colors.border.withOpacity(0.5)),
                               ),
-                            )
-                          else
-                            ListView.builder(
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              itemCount: addedExercises.length,
-                              itemBuilder: (context, index) {
-                                final ex = addedExercises[index];
-                                final name = ex['name'] as String;
-                                return Card(
-                                  margin: const EdgeInsets.only(bottom: 8),
-                                  child: ListTile(
-                                    dense: true,
-                                    title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                    subtitle: Row(
+                              child: Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // Linha do Título da Ficha e botão deletar
+                                    Row(
                                       children: [
-                                        Text('Séries: ${ex['series']} | Reps: ${ex['repetitions']} | Carga: ${ex['load_kg']}kg'),
+                                        const Icon(Icons.fitness_center, color: AppColors.primary, size: 20),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: TextField(
+                                            controller: sheetNameCtrl,
+                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                            decoration: const InputDecoration(
+                                              hintText: 'Nome da Ficha',
+                                              isDense: true,
+                                              border: InputBorder.none,
+                                              contentPadding: EdgeInsets.zero,
+                                            ),
+                                          ),
+                                        ),
+                                        if (programSheets.length > 1)
+                                          IconButton(
+                                            icon: const Icon(Icons.delete_outline, color: AppColors.accentError, size: 18),
+                                            onPressed: () {
+                                              setStateBuilder(() {
+                                                programSheets.removeAt(sheetIndex);
+                                              });
+                                            },
+                                            padding: EdgeInsets.zero,
+                                            constraints: const BoxConstraints(),
+                                          ),
                                       ],
                                     ),
-                                    trailing: IconButton(
-                                      icon: const Icon(Icons.delete_outline, color: AppColors.accentError, size: 18),
-                                      onPressed: () {
-                                        setStateBuilder(() {
-                                          addedExercises.removeAt(index);
-                                        });
-                                      },
+                                    const SizedBox(height: 8),
+                                    const Divider(height: 1),
+                                    const SizedBox(height: 10),
+
+                                    // Seletor de Dia
+                                    const Text('Dia de agendamento', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
+                                    const SizedBox(height: 6),
+                                    SingleChildScrollView(
+                                      scrollDirection: Axis.horizontal,
+                                      child: Row(
+                                        children: List.generate(7, (i) {
+                                          final isSel = sheetDay == i;
+                                          return Padding(
+                                            padding: const EdgeInsets.only(right: 6),
+                                            child: GestureDetector(
+                                              onTap: () {
+                                                setStateBuilder(() {
+                                                  sheet['day_of_week'] = i;
+                                                });
+                                              },
+                                              child: AnimatedContainer(
+                                                duration: const Duration(milliseconds: 200),
+                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                                decoration: BoxDecoration(
+                                                  color: isSel ? AppColors.primary : context.colors.surface,
+                                                  borderRadius: BorderRadius.circular(8),
+                                                  border: Border.all(color: isSel ? AppColors.primary : context.colors.border),
+                                                ),
+                                                child: Text(
+                                                  dayOfWeekLabels[i]!,
+                                                  style: TextStyle(
+                                                    color: isSel ? Colors.white : context.colors.textPrimary,
+                                                    fontSize: 11,
+                                                    fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          );
+                                        }),
+                                      ),
                                     ),
-                                  ),
-                                );
-                              },
-                            ),
+                                    const SizedBox(height: 12),
+
+                                    // Exercícios desta Ficha
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text('Exercícios (${exercises.length})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                        TextButton.icon(
+                                          icon: const Icon(Icons.search, size: 14),
+                                          label: const Text('Buscar e Adicionar', style: TextStyle(fontSize: 11)),
+                                          onPressed: () {
+                                            _showExerciseSearchCatalogDialog(setStateBuilder, exercises);
+                                          },
+                                          style: TextButton.styleFrom(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                            minimumSize: Size.zero,
+                                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 6),
+                                    
+                                    if (exercises.isEmpty)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(vertical: 16),
+                                        width: double.infinity,
+                                        alignment: Alignment.center,
+                                        decoration: BoxDecoration(
+                                          color: context.colors.surfaceLight.withOpacity(0.5),
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          'Adicione movimentos para este treino! 🏋️',
+                                          style: TextStyle(color: context.colors.textMuted, fontSize: 11),
+                                        ),
+                                      )
+                                    else
+                                      ListView.builder(
+                                        shrinkWrap: true,
+                                        physics: const NeverScrollableScrollPhysics(),
+                                        itemCount: exercises.length,
+                                        itemBuilder: (context, index) {
+                                          final ex = exercises[index];
+                                          final name = ex['name'] as String;
+                                          return Card(
+                                            margin: const EdgeInsets.only(bottom: 6),
+                                            color: context.colors.surfaceLight,
+                                            child: ListTile(
+                                              dense: true,
+                                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                                              title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                              subtitle: Text(
+                                                'Séries: ${ex['series']} | Reps: ${ex['repetitions']} | Carga: ${ex['load_kg']}kg',
+                                                style: const TextStyle(fontSize: 10),
+                                              ),
+                                              trailing: IconButton(
+                                                icon: const Icon(Icons.delete_outline, color: AppColors.accentError, size: 16),
+                                                onPressed: () {
+                                                  setStateBuilder(() {
+                                                    exercises.removeAt(index);
+                                                  });
+                                                },
+                                                padding: EdgeInsets.zero,
+                                                constraints: const BoxConstraints(),
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }).toList(),
                         ],
                       ),
                     ),
@@ -785,16 +910,34 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
                         backgroundColor: AppColors.primary,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                      onPressed: addedExercises.isEmpty ? null : () async {
+                      onPressed: () {
+                        // Validar se todas as fichas possuem pelo menos um exercício
+                        bool isValid = true;
+                        for (final s in programSheets) {
+                          if ((s['exercises'] as List).isEmpty) {
+                            isValid = false;
+                            break;
+                          }
+                        }
+
+                        if (!isValid) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Por favor, adicione pelo menos um exercício em cada ficha de treino.'),
+                              backgroundColor: AppColors.accentWarning,
+                            ),
+                          );
+                          return;
+                        }
+
                         Navigator.pop(ctx);
                         _saveCustomProgram(
                           programNameController.text,
-                          sheetNameController.text,
-                          selectedDay,
-                          addedExercises,
+                          programGoalController.text,
+                          programSheets,
                         );
                       },
-                      child: const Text('Criar Minha Rotina', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                      child: const Text('Criar Meu Programa', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
                     ),
                   ),
                 ],
@@ -808,9 +951,8 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
 
   Future<void> _saveCustomProgram(
     String programName,
-    String sheetName,
-    int selectedDay,
-    List<Map<String, dynamic>> addedExercises,
+    String programGoal,
+    List<Map<String, dynamic>> programSheets,
   ) async {
     final authProvider = context.read<AuthProvider>();
     final userId = authProvider.user?.id;
@@ -824,50 +966,54 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
     final sheetProvider = context.read<WorkoutSheetProvider>();
 
     try {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => const Center(child: CircularProgressIndicator()),
-      );
+      setState(() {
+        _isSaving = true;
+      });
 
-      // Mapeia os exercícios locais para DTOs
-      final List<ExerciseCreateDTO> exercises = addedExercises.map((ex) {
-        return ExerciseCreateDTO(
-          name: ex['name'] as String,
-          muscleGroup: ex['muscle_group'] as String,
-          series: ex['series'] as int,
-          repetitions: ex['repetitions'] as int,
-          loadKg: ex['load_kg'] as double,
-          restSeconds: ex['rest_seconds'] as int,
-          gifUrl: ex['gif_url'] as String?,
-          imageUrl: ex['image_url'] as String?,
-          order: ex['order'] as int,
+      // Mapeia cada ficha local para CreateWorkoutSheetDTO
+      final List<CreateWorkoutSheetDTO> sheets = programSheets.map((s) {
+        final List<ExerciseCreateDTO> exercises = (s['exercises'] as List<Map<String, dynamic>>).map((ex) {
+          return ExerciseCreateDTO(
+            name: ex['name'] as String,
+            muscleGroup: ex['muscle_group'] as String,
+            series: ex['series'] as int,
+            repetitions: ex['repetitions'] as int,
+            loadKg: ex['load_kg'] as double,
+            restSeconds: ex['rest_seconds'] as int,
+            gifUrl: ex['gif_url'] as String?,
+            imageUrl: ex['image_url'] as String?,
+            order: ex['order'] as int,
+          );
+        }).toList();
+
+        final sheetNameController = s['nameController'] as TextEditingController;
+
+        return CreateWorkoutSheetDTO(
+          workoutProgramId: '', // O backend associa automaticamente no fluxo de criação de programa
+          name: sheetNameController.text.trim().isEmpty ? 'Sem Nome' : sheetNameController.text.trim(),
+          dayOfWeek: s['day_of_week'] as int,
+          order: 1,
+          exercises: exercises,
         );
       }).toList();
 
-      // Cria a Ficha dentro do Programa
-      final sheetDTO = CreateWorkoutSheetDTO(
-        workoutProgramId: '', // O backend associa automaticamente no fluxo de criação de programa
-        name: sheetName,
-        dayOfWeek: selectedDay,
-        order: 1,
-        exercises: exercises,
-      );
-
       final programDTO = CreateWorkoutProgramDTO(
         userId: userId,
-        name: programName,
-        description: 'Ficha personalizada criada pelo usuário.',
-        goal: 'Hipertrofia',
-        workoutSheets: [sheetDTO],
+        name: programName.trim().isEmpty ? 'Meu Treino Personalizado' : programName.trim(),
+        description: 'Programa personalizado criado pelo usuário.',
+        goal: programGoal.trim().isEmpty ? 'Hipertrofia' : programGoal.trim(),
+        workoutSheets: sheets,
       );
 
       final newProgram = await sheetProvider.createProgram(programDTO);
       sheetProvider.selectProgram(newProgram);
       await sheetProvider.loadSheets(workoutProgramId: newProgram.id);
 
+      setState(() {
+        _isSaving = false;
+      });
+
       if (mounted) {
-        Navigator.pop(context); // Fecha o loader
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Row(
@@ -882,95 +1028,34 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
         );
       }
     } on NetworkException catch (e) {
-      if (mounted) Navigator.pop(context);
+      setState(() {
+        _isSaving = false;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Erro de conexão: ${e.message}'), backgroundColor: AppColors.accentError),
       );
     } on ApiException catch (e) {
-      if (mounted) Navigator.pop(context);
+      setState(() {
+        _isSaving = false;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Erro na API: ${e.message}'), backgroundColor: AppColors.accentError),
       );
     } catch (e) {
-      if (mounted) Navigator.pop(context);
+      setState(() {
+        _isSaving = false;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Erro ao criar rotina: $e'), backgroundColor: AppColors.accentError),
       );
     }
   }
 
-  void _showExerciseSearchCatalogDialog(StateSetter parentSetState, List<Map<String, dynamic>> addedExercises) {
-    final searchController = TextEditingController();
-    Timer? debounce;
-
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            final sheetProvider = context.watch<WorkoutSheetProvider>();
-
-            void triggerSearch(String query) {
-              if (debounce?.isActive ?? false) debounce!.cancel();
-              debounce = Timer(const Duration(milliseconds: 500), () {
-                sheetProvider.searchCatalog(search: query, limit: 15);
-              });
-            }
-
-            return AlertDialog(
-              title: const Text('Selecionar Exercício'),
-              content: SizedBox(
-                width: double.maxFinite,
-                height: 400,
-                child: Column(
-                  children: [
-                    TextField(
-                      controller: searchController,
-                      decoration: InputDecoration(
-                        hintText: 'Digite o nome do exercício...',
-                        prefixIcon: const Icon(Icons.search),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                        contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                      ),
-                      onChanged: triggerSearch,
-                    ),
-                    const SizedBox(height: 12),
-                    Expanded(
-                      child: sheetProvider.isLoading
-                          ? const Center(child: CircularProgressIndicator())
-                          : sheetProvider.catalogItems.isEmpty
-                              ? const Center(child: Text('Nenhum exercício encontrado.'))
-                              : ListView.builder(
-                                  itemCount: sheetProvider.catalogItems.length,
-                                  itemBuilder: (context, index) {
-                                    final item = sheetProvider.catalogItems[index];
-                                    return ListTile(
-                                      dense: true,
-                                      title: Text(item.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                                      subtitle: Text(item.muscleGroupMapped ?? 'Geral', style: const TextStyle(fontSize: 11)),
-                                      trailing: const Icon(Icons.add_circle_outline, color: AppColors.primary),
-                                      onTap: () {
-                                        Navigator.pop(ctx);
-                                        _showSetsAndLoadSetupDialog(parentSetState, addedExercises, item);
-                                      },
-                                    );
-                                  },
-                                ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Fechar'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
+  Future<void> _showExerciseSearchCatalogDialog(StateSetter parentSetState, List<Map<String, dynamic>> addedExercises) async {
+    final item = await showExerciseCatalogPicker(context);
+    if (item != null) {
+      _showSetsAndLoadSetupDialog(parentSetState, addedExercises, item);
+    }
   }
 
   void _showSetsAndLoadSetupDialog(StateSetter parentSetState, List<Map<String, dynamic>> addedExercises, ExerciseCatalogItem item) {
@@ -1017,7 +1102,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
               onPressed: () {
                 final series = int.tryParse(seriesController.text) ?? 4;
                 final reps = int.tryParse(repsController.text) ?? 10;
-                final load = double.tryParse(loadController.text) ?? 10.0;
+                final load = double.tryParse(loadController.text) ?? 15.0;
                 final rest = int.tryParse(restController.text) ?? 60;
 
                 parentSetState(() {
@@ -1172,11 +1257,10 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
               _buildActiveProgramSelector(provider),
               const SizedBox(height: 16),
 
-              // 2. Pulse Sugestão de Hoje
+              // 2. Sugestão de Hoje (Efeito de entrada elegante, sem pulsação infinita)
               if (todaySuggestedSheet != null) ...[
-                Pulse(
-                  infinite: true,
-                  duration: const Duration(seconds: 4),
+                FadeInDown(
+                  duration: const Duration(milliseconds: 500),
                   child: _buildTodaySuggestionCard(todaySuggestedSheet),
                 ),
                 const SizedBox(height: 16),
@@ -1614,15 +1698,68 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
             padding: const EdgeInsets.all(12),
             child: Row(
               children: [
+                // Thumbnail
+                Container(
+                  width: 44,
+                  height: 44,
+                  margin: const EdgeInsets.only(right: 12),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: ex.imageUrl != null && ex.imageUrl!.isNotEmpty
+                        ? Image.network(
+                            ex.imageUrl!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) => Center(
+                              child: Text(
+                                _getMuscleGroupEmoji(ex.muscleGroup),
+                                style: const TextStyle(fontSize: 20),
+                              ),
+                            ),
+                          )
+                        : Center(
+                            child: Text(
+                              _getMuscleGroupEmoji(ex.muscleGroup),
+                              style: const TextStyle(fontSize: 20),
+                            ),
+                          ),
+                  ),
+                ),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(ex.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                      Text(ex.muscleGroup.toUpperCase(), style: TextStyle(color: context.colors.textMuted, fontSize: 10, letterSpacing: 1.1)),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              ex.name,
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          IconButton(
+                            icon: const Icon(Icons.info_outline, size: 18, color: AppColors.primary),
+                            onPressed: () => _showExerciseInstructions(ex),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        ex.muscleGroup.toUpperCase(),
+                        style: TextStyle(color: context.colors.textMuted, fontSize: 10, letterSpacing: 1.1),
+                      ),
                     ],
                   ),
                 ),
+                const SizedBox(width: 8),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(color: context.colors.surfaceLight, borderRadius: BorderRadius.circular(4)),
@@ -2175,6 +2312,321 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  String _getMuscleGroupEmoji(String? group) {
+    if (group == null) return '🏃';
+    const emojis = {
+      'peito': '💪',
+      'costas': '🔙',
+      'costa': '🔙',
+      'ombro': '🏋️',
+      'ombros': '🏋️',
+      'bíceps': '💪',
+      'biceps': '💪',
+      'tríceps': '💪',
+      'triceps': '💪',
+      'antebraço': '🦾',
+      'core': '🎯',
+      'perna_anterior': '🦵',
+      'perna_posterior': '🦵',
+      'panturrilha': '🦶',
+    };
+    return emojis[group.toLowerCase()] ?? '🏃';
+  }
+
+  void _showExerciseInstructions(ExerciseResponse ex) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return _ExerciseInstructionsSheet(exercise: ex);
+      },
+    );
+  }
+}
+
+class _ExerciseInstructionsSheet extends StatefulWidget {
+  final ExerciseResponse exercise;
+
+  const _ExerciseInstructionsSheet({required this.exercise});
+
+  @override
+  State<_ExerciseInstructionsSheet> createState() => _ExerciseInstructionsSheetState();
+}
+
+class _ExerciseInstructionsSheetState extends State<_ExerciseInstructionsSheet> {
+  bool _isLoading = true;
+  ExerciseCatalogItem? _catalogItem;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchCatalogItem();
+  }
+
+  Future<void> _fetchCatalogItem() async {
+    try {
+      final sheetProvider = context.read<WorkoutSheetProvider>();
+      // Busca no catálogo por termo exato
+      final result = await sheetProvider.service.searchExerciseCatalog(
+        search: widget.exercise.name,
+        limit: 1,
+      );
+      if (mounted) {
+        setState(() {
+          if (result.data.isNotEmpty) {
+            _catalogItem = result.data.first;
+          }
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Erro ao carregar detalhes do catálogo.';
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final mediaUrl = widget.exercise.gifUrl ?? widget.exercise.imageUrl ?? _catalogItem?.gifUrl ?? _catalogItem?.imageUrl;
+    final String muscle = widget.exercise.muscleGroup;
+    final String? description = widget.exercise.observations;
+
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.85,
+      decoration: BoxDecoration(
+        color: context.colors.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        children: [
+          // Handle bar
+          Container(
+            margin: const EdgeInsets.only(top: 10, bottom: 4),
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: context.colors.border,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+
+          // Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.exercise.name,
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        muscle.toUpperCase(),
+                        style: TextStyle(color: context.colors.textMuted, fontSize: 10, letterSpacing: 1.1, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, size: 20),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Imagem ou GIF de Demonstração
+                  if (mediaUrl != null && mediaUrl.isNotEmpty) ...[
+                    Container(
+                      height: 220,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.02),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Image.network(
+                          mediaUrl,
+                          fit: BoxFit.contain,
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) return child;
+                            return const Center(
+                              child: CircularProgressIndicator(color: AppColors.primary),
+                            );
+                          },
+                          errorBuilder: (context, error, stackTrace) => const Center(
+                            child: Icon(Icons.image_not_supported_outlined, size: 40, color: Colors.grey),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+
+                  // Observações do Professor/Aluno
+                  if (description != null && description.trim().isNotEmpty) ...[
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.08),
+                        border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(Icons.notes, size: 16, color: AppColors.primary),
+                              SizedBox(width: 6),
+                              Text('Observações Técnicas', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.primary)),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            description,
+                            style: TextStyle(fontSize: 12, color: context.colors.textPrimary),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+
+                  // Chips Extras de Mídia
+                  if (_catalogItem != null) ...[
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        if (_catalogItem!.category != null)
+                          _buildExtraChip('Categoria: ${_catalogItem!.category!}', AppColors.primary),
+                        if (_catalogItem!.equipment != null)
+                          _buildExtraChip('Equipamento: ${_catalogItem!.equipment!}', AppColors.accent),
+                        if (_catalogItem!.level != null)
+                          _buildExtraChip('Nível: ${_catalogItem!.level!}', Colors.orange),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+
+                  // Instruções de passo a passo
+                  const Text(
+                    'Como Executar o Movimento',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                  ),
+                  const SizedBox(height: 12),
+
+                  if (_isLoading)
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 20),
+                        child: CircularProgressIndicator(color: AppColors.primary),
+                      ),
+                    )
+                  else if (_errorMessage != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(vertical: 20),
+                      alignment: Alignment.center,
+                      child: Text(
+                        _errorMessage!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: AppColors.accentError, fontSize: 12),
+                      ),
+                    )
+                  else if (_catalogItem == null || _catalogItem!.instructions == null || _catalogItem!.instructions!.isEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(vertical: 20),
+                      alignment: Alignment.center,
+                      child: Text(
+                        'Sem instruções detalhadas de passo a passo para este movimento.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: context.colors.textMuted, fontSize: 12),
+                      ),
+                    )
+                  else
+                    ..._catalogItem!.instructions!.asMap().entries.map((stepEntry) {
+                      final idx = stepEntry.key;
+                      final instruction = stepEntry.value;
+
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              width: 22,
+                              height: 22,
+                              alignment: Alignment.center,
+                              decoration: const BoxDecoration(
+                                color: AppColors.primary,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Text(
+                                '${idx + 1}',
+                                style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                instruction,
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  color: context.colors.textPrimary,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExtraChip(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.08),
+        border: Border.all(color: color.withOpacity(0.3)),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold),
       ),
     );
   }

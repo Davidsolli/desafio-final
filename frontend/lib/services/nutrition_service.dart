@@ -135,18 +135,20 @@ class NutritionService {
     }
   }
 
-  /// Atualiza dieta (nome/objetivo/refeições).
+  /// Atualiza dieta (nome/objetivo/refeições/água).
   Future<Diet> updateDiet({
     required String dietId,
     String? name,
     String? goal,
     required List<Map<String, dynamic>> meals,
+    int? waterTargetMl,
   }) async {
     try {
       final body = <String, dynamic>{
         if (name != null) 'name': name,
         if (goal != null) 'goal': goal,
         'meals': meals,
+        if (waterTargetMl != null) 'water_target_ml': waterTargetMl,
       };
       final response = await _apiClient.put<Diet>(
         '/diets/$dietId',

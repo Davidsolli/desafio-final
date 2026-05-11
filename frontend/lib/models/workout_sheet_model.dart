@@ -153,7 +153,7 @@ class CreateWorkoutSheetDTO {
   });
 
   Map<String, dynamic> toJson() => {
-        'workout_program_id': workoutProgramId,
+        if (workoutProgramId.isNotEmpty) 'workout_program_id': workoutProgramId,
         'name': name,
         if (description != null) 'description': description,
         if (dayOfWeek != null) 'day_of_week': dayOfWeek,

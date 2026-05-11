@@ -57,6 +57,8 @@ class _CreateWorkoutSheetDialogState extends State<CreateWorkoutSheetDialog> {
       setState(() {
         final entry = _ExerciseFormEntry(order: _exercises.length + 1);
         entry.nameController.text = item.name;
+        entry.imageUrl = item.imageUrl;
+        entry.gifUrl = item.gifUrl;
         if (item.muscleGroupMapped != null &&
             validMuscleGroups.contains(item.muscleGroupMapped)) {
           entry.selectedMuscleGroup = item.muscleGroupMapped!;
@@ -71,6 +73,8 @@ class _CreateWorkoutSheetDialogState extends State<CreateWorkoutSheetDialog> {
     if (item != null && mounted) {
       setState(() {
         _exercises[index].nameController.text = item.name;
+        _exercises[index].imageUrl = item.imageUrl;
+        _exercises[index].gifUrl = item.gifUrl;
         if (item.muscleGroupMapped != null &&
             validMuscleGroups.contains(item.muscleGroupMapped)) {
           _exercises[index].selectedMuscleGroup = item.muscleGroupMapped!;
@@ -118,6 +122,8 @@ class _CreateWorkoutSheetDialogState extends State<CreateWorkoutSheetDialog> {
         restSeconds: int.tryParse(e.restController.text) ?? 60,
         observations:
             e.obsController.text.isEmpty ? null : e.obsController.text.trim(),
+        imageUrl: e.imageUrl,
+        gifUrl: e.gifUrl,
         order: i + 1,
       );
     }).toList();
@@ -587,6 +593,8 @@ class _ExerciseFormEntry {
   final TextEditingController restController;
   final TextEditingController obsController;
   String selectedMuscleGroup;
+  String? imageUrl;
+  String? gifUrl;
 
   _ExerciseFormEntry({required this.order})
       : nameController = TextEditingController(),
