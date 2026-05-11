@@ -180,13 +180,10 @@ class NotificationScheduler:
                         continue
 
                     # RN05/RN08: idempotência diária no fuso local
-                    tz_name = (
-                        getattr(user, "timezone", None) if user else None
-                    ) or "America/Sao_Paulo"
                     if await notification_service.repository.has_log_today_local(
                         user_id=pref.user_id,
                         notification_type="meal_reminder",
-                        tz_name=tz_name,
+                        tz_name=_user_zone_name(user),
                     ):
                         continue
 

@@ -38,13 +38,11 @@ def validate_timezone_value(v: Optional[str]) -> Optional[str]:
         return v
     try:
         ZoneInfo(v)
-    except ZoneInfoNotFoundError as exc:
+    except (ZoneInfoNotFoundError, ValueError, OSError) as exc:
         raise ValueError(
             f"Fuso horário inválido: {v!r}. Use um identificador IANA "
             "(ex: 'America/Sao_Paulo', 'America/Manaus')."
         ) from exc
-    except Exception as exc:  # ZoneInfo levanta vários tipos a depender do input
-        raise ValueError(f"Fuso horário inválido: {v!r}.") from exc
     return v
 
 

@@ -7,9 +7,6 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException, status
 
-# Default usado quando o User não tem timezone configurado (RN03 da Fase 2)
-DEFAULT_USER_TIMEZONE = "America/Sao_Paulo"
-
 from app.repositories.notification_repository import NotificationRepository
 from app.services.fcm_service import FCMService
 from app.models.notification import (
@@ -24,6 +21,9 @@ from app.models.user import User
 from sqlalchemy import select, and_, delete
 
 logger = logging.getLogger(__name__)
+
+# Default usado quando o User não tem timezone configurado (RN03 da Fase 2)
+DEFAULT_USER_TIMEZONE = "America/Sao_Paulo"
 
 # Notificações essenciais que nunca podem ser desativadas (Card 15.16)
 _ESSENTIAL_FIELDS = frozenset({"new_workout_sheet_enabled"})

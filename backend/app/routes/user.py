@@ -475,13 +475,6 @@ async def update_timezone(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Usuário não encontrado",
         )
-    except Exception as e:
-        import logging
-        logging.error(f"Erro inesperado ao atualizar timezone: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Erro ao atualizar fuso horário",
-        )
 
 
 @router.put(
