@@ -513,3 +513,150 @@ class TestNotifyAchievement:
             assert mock_notify.called, (
                 "RN09: completar Goal deveria disparar notify_achievement."
             )
+
+
+# ---------------------------------------------------------------------------
+# Cobertura direta dos métodos notify_* (caminhos de sucesso e exceção)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestNotifyMethodsDirect:
+    """Testes unitários cobrindo notify_new_workout_sheet/notify_achievement."""
+
+    async def test_notify_new_workout_sheet_chama_send_notification(
+        self, test_db_session: AsyncSession
+    ):
+        user_id = uuid4()
+        user = _make_user(user_id, fcm_token="tok")
+        test_db_session.add(user)
+        await test_db_session.commit()
+
+        service = NotificationService(test_db_session)
+        sheet_id = uuid4()
+
+        with patch.object(
+            NotificationService, "send_notification"
+        ) as mock_send:
+            mock_send.return_value = None
+            result = await service.notify_new_workout_sheet(
+                user_id=user_id, sheet_id=sheet_id, sheet_name="Treino A"
+            )
+
+            mock_send.assert_called_once()
+            kwargs = mock_send.call_args.kwargs
+            assert kwargs["type"] == "new_workout_sheet"
+            assert kwargs["user_id"] == user_id
+            assert "Treino A" in kwargs["body"]
+
+    async def test_notify_new_workout_sheet_exception_retorna_none(
+        self, test_db_session: AsyncSession
+    ):
+        service = NotificationService(test_db_session)
+
+        with patch.object(
+            NotificationService,
+            "send_notification",
+            side_effect=Exception("FCM falhou"),
+        ):
+            result = await service.notify_new_workout_sheet(
+                user_id=uuid4(), sheet_id=uuid4(), sheet_name="X"
+            )
+        assert result is None
+
+    async def test_notify_achievement_chama_send_notification(
+        self, test_db_session: AsyncSession
+    ):
+        user_id = uuid4()
+        user = _make_user(user_id, fcm_token="tok")
+        test_db_session.add(user)
+        await test_db_session.commit()
+
+        service = NotificationService(test_db_session)
+        goal_id = uuid4()
+
+        with patch.object(
+            NotificationService, "send_notification"
+        ) as mock_send:
+            mock_send.return_value = None
+            await service.notify_achievement(
+                user_id=user_id, goal_id=goal_id, goal_title="Supino 100kg"
+            )
+
+            mock_send.assert_called_once()
+            kwargs = mock_send.call_args.kwargs
+            assert kwargs["type"] == "achievement"
+            assert kwargs["user_id"] == user_id
+            assert "Supino 100kg" in kwargs["body"]
+
+    async def test_notify_achievement_exception_retorna_none(
+        self, test_db_session: AsyncSession
+    ):
+        service = NotificationService(test_db_session)
+
+        with patch.object(
+            NotificationService,
+            "send_notification",
+            side_effect=Exception("FCM falhou"),
+        ):
+            result = await service.notify_achievement(
+                user_id=uuid4(), goal_id=uuid4(), goal_title="meta"
+            )
+        assert result is None
+
+    async def test_regenerate_schedules_sem_fichas_retorna_zero(
+        self, test_db_session: AsyncSession
+    ):
+        """Sem nenhuma WorkoutSheet ativa, regenerate retorna 0."""
+        user_id = uuid4()
+        service = NotificationService(test_db_session)
+        created = await service.regenerate_workout_schedules(
+            user_id=user_id,
+            workout_reminder_time=time(17, 0),
+            silent_days=[],
+        )
+        assert created == 0
+
+    async def test_update_preferences_regenera_quando_muda_horario(
+        self, test_db_session: AsyncSession
+    ):
+        """update_preferences chama regenerate quando workout_reminder_time muda."""
+        user_id = uuid4()
+        from app.models.workout_sheet import WorkoutSheet
+
+        sheet = WorkoutSheet(
+            user_id=user_id,
+            personal_trainer_id=user_id,
+            name="Treino diário",
+            day_of_week=0,
+            is_active=True,
+        )
+        test_db_session.add(sheet)
+        pref = NotificationPreference(
+            user_id=user_id,
+            notifications_enabled=True,
+            workout_reminder_enabled=True,
+        )
+        test_db_session.add(pref)
+        await test_db_session.commit()
+
+        service = NotificationService(test_db_session)
+        from app.dtos.notification_dto import UpdateNotificationPreferenceDTO
+
+        await service.update_preferences(
+            user_id,
+            UpdateNotificationPreferenceDTO(
+                workout_reminder_time=time(7, 30),
+                silent_days=[],
+            ),
+        )
+        await test_db_session.commit()
+
+        result = await test_db_session.execute(
+            select(WorkoutReminderSchedule).where(
+                WorkoutReminderSchedule.user_id == user_id
+            )
+        )
+        schedules = result.scalars().all()
+        assert len(schedules) == 7
+        assert all(s.scheduled_time == time(7, 30) for s in schedules)
