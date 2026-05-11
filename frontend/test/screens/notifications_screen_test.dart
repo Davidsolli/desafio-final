@@ -1,20 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:mockito/mockito.dart';
 import 'package:provider/provider.dart';
 import 'package:omniconnect_fitness/screens/notifications_screen.dart';
 import 'package:omniconnect_fitness/services/notification_service.dart';
 import 'package:omniconnect_fitness/theme/app_theme.dart';
 
-import 'notifications_settings_screen_test.mocks.dart';
+import '../test_helpers/fake_notification_service.dart';
 
 void main() {
   group('NotificationsScreen', () {
-    late MockNotificationService mockService;
+    late FakeNotificationService fakeService;
 
     setUp(() {
-      mockService = MockNotificationService();
+      fakeService = FakeNotificationService();
     });
 
     Widget _wrap(Widget child) {
@@ -26,7 +25,7 @@ void main() {
       );
       return MultiProvider(
         providers: [
-          Provider<NotificationService>.value(value: mockService),
+          Provider<NotificationService>.value(value: fakeService),
         ],
         child: MaterialApp.router(
           theme: AppTheme.darkTheme,
@@ -37,36 +36,36 @@ void main() {
 
     testWidgets('carrega histórico da API e renderiza itens',
         (WidgetTester tester) async {
-      when(mockService.getHistory()).thenAnswer((_) async => [
-            {
-              'id': 'n1',
-              'notification_type': 'workout_reminder',
-              'title': 'Hora do treino',
-              'body': 'Treino A está programado',
-              'created_at': '2026-05-08T10:00:00Z',
-              'read_at': null,
-            },
-            {
-              'id': 'n2',
-              'notification_type': 'achievement',
-              'title': 'Meta concluída',
-              'body': 'Parabéns',
-              'created_at': '2026-05-07T18:30:00Z',
-              'read_at': '2026-05-07T19:00:00Z',
-            },
-          ]);
+      fakeService.historyToReturn = [
+        {
+          'id': 'n1',
+          'notification_type': 'workout_reminder',
+          'title': 'Hora do treino',
+          'body': 'Treino A está programado',
+          'created_at': '2026-05-08T10:00:00Z',
+          'read_at': null,
+        },
+        {
+          'id': 'n2',
+          'notification_type': 'achievement',
+          'title': 'Meta concluída',
+          'body': 'Parabéns',
+          'created_at': '2026-05-07T18:30:00Z',
+          'read_at': '2026-05-07T19:00:00Z',
+        },
+      ];
 
       await tester.pumpWidget(_wrap(const NotificationsScreen()));
       await tester.pumpAndSettle();
 
       expect(find.text('Hora do treino'), findsOneWidget);
       expect(find.text('Meta concluída'), findsOneWidget);
-      verify(mockService.getHistory()).called(1);
+      expect(fakeService.historyCallCount, equals(1));
     });
 
     testWidgets('exibe estado vazio quando histórico está vazio',
         (WidgetTester tester) async {
-      when(mockService.getHistory()).thenAnswer((_) async => []);
+      fakeService.historyToReturn = [];
 
       await tester.pumpWidget(_wrap(const NotificationsScreen()));
       await tester.pumpAndSettle();
@@ -76,7 +75,7 @@ void main() {
 
     testWidgets('exibe estado de erro quando service lança',
         (WidgetTester tester) async {
-      when(mockService.getHistory()).thenThrow(Exception('boom'));
+      fakeService.throwOnHistory = true;
 
       await tester.pumpWidget(_wrap(const NotificationsScreen()));
       await tester.pumpAndSettle();
@@ -86,17 +85,16 @@ void main() {
 
     testWidgets('toque em notificação não-lida chama markAsRead',
         (WidgetTester tester) async {
-      when(mockService.getHistory()).thenAnswer((_) async => [
-            {
-              'id': 'unread-1',
-              'notification_type': 'workout_reminder',
-              'title': 'Hora do treino',
-              'body': 'Treino A',
-              'created_at': '2026-05-08T10:00:00Z',
-              'read_at': null,
-            },
-          ]);
-      when(mockService.markAsRead(any)).thenAnswer((_) async => true);
+      fakeService.historyToReturn = [
+        {
+          'id': 'unread-1',
+          'notification_type': 'workout_reminder',
+          'title': 'Hora do treino',
+          'body': 'Treino A',
+          'created_at': '2026-05-08T10:00:00Z',
+          'read_at': null,
+        },
+      ];
 
       await tester.pumpWidget(_wrap(const NotificationsScreen()));
       await tester.pumpAndSettle();
@@ -104,21 +102,21 @@ void main() {
       await tester.tap(find.text('Hora do treino'));
       await tester.pumpAndSettle();
 
-      verify(mockService.markAsRead('unread-1')).called(1);
+      expect(fakeService.markReadIds, equals(['unread-1']));
     });
 
     testWidgets('toque em notificação já lida NÃO chama markAsRead',
         (WidgetTester tester) async {
-      when(mockService.getHistory()).thenAnswer((_) async => [
-            {
-              'id': 'read-1',
-              'notification_type': 'achievement',
-              'title': 'Meta concluída',
-              'body': 'Parabéns',
-              'created_at': '2026-05-07T18:30:00Z',
-              'read_at': '2026-05-07T19:00:00Z',
-            },
-          ]);
+      fakeService.historyToReturn = [
+        {
+          'id': 'read-1',
+          'notification_type': 'achievement',
+          'title': 'Meta concluída',
+          'body': 'Parabéns',
+          'created_at': '2026-05-07T18:30:00Z',
+          'read_at': '2026-05-07T19:00:00Z',
+        },
+      ];
 
       await tester.pumpWidget(_wrap(const NotificationsScreen()));
       await tester.pumpAndSettle();
@@ -126,7 +124,7 @@ void main() {
       await tester.tap(find.text('Meta concluída'));
       await tester.pumpAndSettle();
 
-      verifyNever(mockService.markAsRead(any));
+      expect(fakeService.markReadIds, isEmpty);
     });
   });
 }
