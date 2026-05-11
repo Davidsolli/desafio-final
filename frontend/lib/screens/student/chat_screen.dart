@@ -1,13 +1,11 @@
 import 'dart:convert';
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:animate_do/animate_do.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/theme_colors.dart';
-import '../../routes/app_routes.dart';
 import '../../config/api_config.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -19,9 +17,12 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
   final List<Map<String, String>> _messages = [];
   WebSocketChannel? _channel;
   bool _isConnected = false;
+  bool _isTyping = false;
+  String _typingStatus = '';
   String? _conversationId;
 
   @override
@@ -50,7 +51,7 @@ class _ChatScreenState extends State<ChatScreen> {
     // Usa ApiConfig para URL base (não hardcoded)
     final wsBaseUrl = ApiConfig.wsBaseUrl;
     if (wsBaseUrl == null) return;
-    
+
     final wsUrl = Uri.parse('$wsBaseUrl/api/v1/chat/ws');
 
     try {
@@ -68,10 +69,11 @@ class _ChatScreenState extends State<ChatScreen> {
                 _isConnected = true;
                 _messages.add({
                   'role': 'assistant',
-                  'text': 'Olá! 👋 Sou seu assistente fitness conectado. Como posso te ajudar hoje?',
+                  'text': 'Olá! Sou seu assistente fitness. Como posso te ajudar hoje?',
                   'time': _formatTime(),
                 });
               });
+              _scrollToBottom();
             }
           } else if (data['type'] == 'auth_error') {
             if (mounted) {
@@ -85,28 +87,43 @@ class _ChatScreenState extends State<ChatScreen> {
               });
             }
             _channel?.sink.close();
+          } else if (data['type'] == 'status') {
+            // Indicador de carregamento intermediário (thinking/searching/generating)
+            if (mounted) {
+              setState(() {
+                _isTyping = true;
+                _typingStatus = (data['message'] as String?) ?? 'Processando...';
+              });
+              _scrollToBottom();
+            }
           } else if (data['type'] == 'response') {
             if (data['conversation_id'] != null) {
               _conversationId = data['conversation_id'];
             }
             if (mounted) {
               setState(() {
+                _isTyping = false;
+                _typingStatus = '';
                 _messages.add({
                   'role': 'assistant',
                   'text': data['content'] ?? '',
                   'time': _formatTime(),
                 });
               });
+              _scrollToBottom();
             }
           } else if (data['type'] == 'error' || data['type'] == 'timeout') {
             if (mounted) {
               setState(() {
+                _isTyping = false;
+                _typingStatus = '';
                 _messages.add({
                   'role': 'assistant',
                   'text': 'Desculpe, ocorreu um erro: ${data['error'] ?? 'Desconhecido'}',
                   'time': _formatTime(),
                 });
               });
+              _scrollToBottom();
             }
             if (data['type'] == 'timeout') {
               _channel?.sink.close();
@@ -117,6 +134,8 @@ class _ChatScreenState extends State<ChatScreen> {
           if (mounted) {
             setState(() {
               _isConnected = false;
+              _isTyping = false;
+              _typingStatus = '';
             });
           }
         },
@@ -124,6 +143,8 @@ class _ChatScreenState extends State<ChatScreen> {
           if (mounted) {
             setState(() {
               _isConnected = false;
+              _isTyping = false;
+              _typingStatus = '';
               _messages.add({
                 'role': 'assistant',
                 'text': 'Erro de conexão com o servidor: $error',
@@ -157,32 +178,52 @@ class _ChatScreenState extends State<ChatScreen> {
     return '${now.hour}:${now.minute.toString().padLeft(2, '0')}';
   }
 
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
   @override
   void dispose() {
     _messageController.dispose();
+    _scrollController.dispose();
     _channel?.sink.close();
     super.dispose();
   }
 
   void _sendMessage() {
     if (_messageController.text.trim().isEmpty) return;
+    if (_isTyping) return; // evita enviar enquanto IA está respondendo
 
     final text = _messageController.text.trim();
-    
+
     setState(() {
       _messages.add({
         'role': 'user',
         'text': text,
         'time': _formatTime(),
       });
+      // Mostrar indicador imediatamente: o backend só envia 'thinking'
+      // depois de processar input; um feedback otimista evita silêncio
+      // visual no intervalo entre o envio e o primeiro evento de status.
+      _isTyping = true;
+      _typingStatus = 'Analisando sua pergunta...';
     });
+    _scrollToBottom();
 
     if (_isConnected && _channel != null) {
       final payload = {
         'type': 'message',
         'content': text,
       };
-      
+
       if (_conversationId != null) {
         payload['conversation_id'] = _conversationId!;
       }
@@ -190,12 +231,15 @@ class _ChatScreenState extends State<ChatScreen> {
       _channel!.sink.add(jsonEncode(payload));
     } else {
       setState(() {
+        _isTyping = false;
+        _typingStatus = '';
         _messages.add({
           'role': 'assistant',
           'text': 'Você está desconectado. Reinicie o aplicativo para tentar novamente.',
           'time': _formatTime(),
         });
       });
+      _scrollToBottom();
     }
 
     _messageController.clear();
@@ -239,9 +283,15 @@ class _ChatScreenState extends State<ChatScreen> {
           children: [
             Expanded(
               child: ListView.builder(
+                controller: _scrollController,
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                itemCount: _messages.length,
+                // +1 quando _isTyping para reservar espaço do indicador
+                itemCount: _messages.length + (_isTyping ? 1 : 0),
                 itemBuilder: (context, index) {
+                  if (_isTyping && index == _messages.length) {
+                    return _TypingIndicator(status: _typingStatus);
+                  }
+
                   final msg = _messages[index];
                   final isUser = msg['role'] == 'user';
 
@@ -299,9 +349,11 @@ class _ChatScreenState extends State<ChatScreen> {
                   Expanded(
                     child: TextField(
                       controller: _messageController,
-                      enabled: _isConnected,
+                      enabled: _isConnected && !_isTyping,
                       decoration: InputDecoration(
-                        hintText: _isConnected ? 'Pergunte algo...' : 'Conectando...',
+                        hintText: !_isConnected
+                            ? 'Conectando...'
+                            : (_isTyping ? 'Aguardando resposta...' : 'Pergunte algo...'),
                         hintStyle: TextStyle(color: context.colors.textMuted),
                         filled: true,
                         fillColor: context.colors.surfaceLight,
@@ -320,18 +372,110 @@ class _ChatScreenState extends State<ChatScreen> {
                   const SizedBox(width: 10),
                   Container(
                     decoration: BoxDecoration(
-                      color: _isConnected ? AppColors.primary : Colors.grey,
+                      color: (_isConnected && !_isTyping) ? AppColors.primary : Colors.grey,
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: IconButton(
                       icon: const Icon(Icons.send, color: Colors.white, size: 20),
-                      onPressed: _isConnected ? _sendMessage : null,
+                      onPressed: (_isConnected && !_isTyping) ? _sendMessage : null,
                     ),
                   ),
                 ],
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Indicador de "digitando" com 3 bolinhas pulsantes + texto de status.
+/// Renderizado abaixo das mensagens enquanto a IA processa a resposta.
+class _TypingIndicator extends StatefulWidget {
+  final String status;
+
+  const _TypingIndicator({required this.status});
+
+  @override
+  State<_TypingIndicator> createState() => _TypingIndicatorState();
+}
+
+class _TypingIndicatorState extends State<_TypingIndicator>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1100),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Container(
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).size.width * 0.75,
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: context.colors.surface,
+            border: Border.all(color: context.colors.border, width: 1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              AnimatedBuilder(
+                animation: _controller,
+                builder: (context, _) => Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: List.generate(3, (i) {
+                    final t = (_controller.value + i * 0.2) % 1.0;
+                    final scale = 0.6 + (1 - (t - 0.5).abs() * 2).clamp(0.0, 1.0) * 0.6;
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      child: Transform.scale(
+                        scale: scale,
+                        child: Container(
+                          width: 7,
+                          height: 7,
+                          decoration: BoxDecoration(
+                            color: AppColors.primary,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Flexible(
+                child: Text(
+                  widget.status.isEmpty ? 'Pensando...' : widget.status,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: context.colors.textSecondary,
+                        fontSize: 12,
+                      ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
