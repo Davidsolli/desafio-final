@@ -30,6 +30,8 @@ class NotificationPreference(Base):
     new_workout_sheet_enabled = Column(Boolean, default=True, nullable=False)
     achievement_enabled = Column(Boolean, default=True, nullable=False)
     performance_report_enabled = Column(Boolean, default=True, nullable=False)
+    # Apenas trainers recebem este tipo (Fase 4 — RN02/RN04)
+    student_inactivity_enabled = Column(Boolean, default=True, nullable=False)
     
     # Preferências
     quiet_hours_start = Column(Time, nullable=True) # Ex: 22:00

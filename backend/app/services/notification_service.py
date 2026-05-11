@@ -35,6 +35,7 @@ _TYPE_TO_PREF_FIELD: Dict[str, str] = {
     "new_workout_sheet": "new_workout_sheet_enabled",
     "achievement": "achievement_enabled",
     "performance_report": "performance_report_enabled",
+    "student_inactivity": "student_inactivity_enabled",
 }
 
 
