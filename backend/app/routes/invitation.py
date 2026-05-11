@@ -2,26 +2,36 @@
 Rotas HTTP para gerenciamento de convites de acesso.
 
 Endpoints:
-- POST /api/v1/invitations → Gerar novo convite (apenas personal_trainer)
+- POST /api/v1/invitations → Gerar novo convite (personal_trainer ou admin)
 - POST /api/v1/invitations/validate → Validar código (público)
-- GET /api/v1/invitations → Listar meus convites (apenas personal_trainer)
+- GET /api/v1/invitations → Listar meus convites (personal_trainer ou admin)
+- GET /api/v1/invitations/whatsapp-pending → Listar pré-cadastros aguardando aprovação (admin)
+- POST /api/v1/invitations/whatsapp-approve → Aprovar pré-cadastro e enviar código (admin)
 """
 
+from sqlalchemy import select
 from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
+from app.models.whatsapp_pre_registration import WhatsAppPreRegistration
 from app.dtos.invitation_dto import (
+    ApproveWhatsAppDTO,
     GenerateInvitationDTO,
     ValidateInvitationDTO,
     InvitationResponseDTO,
     ListInvitationsResponseDTO,
     ValidateInvitationResponseDTO,
+    WhatsAppPendingItemDTO,
+    WhatsAppPendingListDTO,
+    WhatsAppPrefillResponseDTO,
 )
 from app.services.invitation_service import InvitationService
+from app.services.whatsapp_service import WhatsAppService
 from app.config.database import get_db
 from app.dependencies.auth import get_current_user
 
+_ALLOWED_ROLES = {"personal_trainer", "admin"}
 
 router = APIRouter(
     prefix="/api/v1/invitations",
@@ -40,40 +50,23 @@ router = APIRouter(
     response_model=InvitationResponseDTO,
     status_code=status.HTTP_201_CREATED,
     summary="Gerar novo convite",
-    responses={
-        201: {"description": "Convite gerado com sucesso"},
-        401: {"description": "Não autenticado"},
-        403: {"description": "Apenas personal_trainer pode gerar convites"},
-    },
 )
 async def generate_invitation(
     dto: GenerateInvitationDTO,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ) -> InvitationResponseDTO:
-    """
-    Gerar novo código de convite.
-
-    Apenas personal trainers podem gerar convites.
-    O código gerado é único e pode ser compartilhado com alunos.
-
-    **Requer autenticação:** Usuário deve ter role=personal_trainer
-
-    **Response:**
-    - 201: Código gerado (10 caracteres aleatórios)
-    - 403: Usuário não é personal_trainer
-    """
-    if current_user.role != "personal_trainer":
+    """Gerar novo código de convite. Permitido para personal_trainer e admin."""
+    if current_user.role not in _ALLOWED_ROLES:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Apenas personal trainers podem gerar convites",
+            detail="Apenas personal trainers e admins podem gerar convites",
         )
 
     service = InvitationService(session)
-
     try:
         return await service.generate(current_user.id)
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Erro ao gerar convite",
@@ -85,27 +78,12 @@ async def generate_invitation(
     response_model=ValidateInvitationResponseDTO,
     status_code=status.HTTP_200_OK,
     summary="Validar código de convite",
-    responses={
-        200: {"description": "Validação concluída"},
-        400: {"description": "Código inválido ou já utilizado"},
-    },
 )
 async def validate_invitation(
     dto: ValidateInvitationDTO,
     session: AsyncSession = Depends(get_db),
 ) -> ValidateInvitationResponseDTO:
-    """
-    Validar um código de convite.
-
-    Pode ser chamado sem autenticação (para usar na tela de cadastro do aluno).
-
-    **Request body:**
-    - code: Código a validar
-
-    **Response:**
-    - valid: true se o código é válido
-    - message: Descrição do status
-    """
+    """Validar um código de convite. Público, sem autenticação."""
     service = InvitationService(session)
     is_valid = await service.validate(dto.code)
 
@@ -115,12 +93,11 @@ async def validate_invitation(
             code=dto.code,
             message="Código válido e pronto para usar",
         )
-    else:
-        return ValidateInvitationResponseDTO(
-            valid=False,
-            code=None,
-            message="Código inválido, expirado ou já utilizado",
-        )
+    return ValidateInvitationResponseDTO(
+        valid=False,
+        code=None,
+        message="Código inválido, expirado ou já utilizado",
+    )
 
 
 @router.get(
@@ -128,39 +105,133 @@ async def validate_invitation(
     response_model=ListInvitationsResponseDTO,
     status_code=status.HTTP_200_OK,
     summary="Listar meus convites",
-    responses={
-        200: {"description": "Lista de convites retornada"},
-        401: {"description": "Não autenticado"},
-        403: {"description": "Apenas personal_trainer pode listar"},
-    },
 )
 async def list_invitations(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ) -> ListInvitationsResponseDTO:
-    """
-    Listar todos os convites gerados pelo personal trainer autenticado.
-
-    **Requer autenticação:** Apenas personal_trainer
-
-    **Response:**
-    - total: Total de convites gerados
-    - pending: Quantos ainda não foram usados
-    - used: Quantos já foram usados
-    - invitations: Lista detalhada dos convites
-    """
-    if current_user.role != "personal_trainer":
+    """Listar convites gerados. Permitido para personal_trainer e admin."""
+    if current_user.role not in _ALLOWED_ROLES:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Apenas personal trainers podem listar convites",
+            detail="Apenas personal trainers e admins podem listar convites",
         )
 
     service = InvitationService(session)
-
     try:
         return await service.list_by_trainer(current_user.id)
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Erro ao listar convites",
         )
+
+
+@router.get(
+    "/whatsapp-prefill",
+    response_model=WhatsAppPrefillResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Buscar dados do pré-cadastro WhatsApp pelo código de convite (público)",
+)
+async def whatsapp_prefill(
+    code: str,
+    session: AsyncSession = Depends(get_db),
+) -> WhatsAppPrefillResponseDTO:
+    """
+    Retorna nome, email e telefone do pré-cadastro WhatsApp vinculado ao código.
+
+    Chamado pelo app quando o usuário digita o código de convite na tela de cadastro.
+    Se não houver pré-cadastro vinculado, retorna found=false sem erro — o usuário
+    simplesmente preenche os campos manualmente.
+    """
+    result = await session.execute(
+        select(WhatsAppPreRegistration).where(
+            WhatsAppPreRegistration.invitation_code == code.upper(),
+            WhatsAppPreRegistration.state == "approved",
+        )
+    )
+    pre_reg = result.scalar_one_or_none()
+
+    if not pre_reg:
+        return WhatsAppPrefillResponseDTO(found=False)
+
+    return WhatsAppPrefillResponseDTO(
+        found=True,
+        name=pre_reg.name,
+        email=pre_reg.email,
+        phone=pre_reg.phone,
+    )
+
+
+@router.get(
+    "/whatsapp-pending",
+    response_model=WhatsAppPendingListDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Listar pré-cadastros WhatsApp aguardando aprovação (admin)",
+)
+async def list_whatsapp_pending(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> WhatsAppPendingListDTO:
+    """Retorna todos os pré-cadastros via WhatsApp com estado pending_approval."""
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Apenas admins podem ver pré-cadastros pendentes",
+        )
+
+    result = await session.execute(
+        select(WhatsAppPreRegistration).where(
+            WhatsAppPreRegistration.state == "pending_approval"
+        )
+    )
+    rows = result.scalars().all()
+
+    items = [WhatsAppPendingItemDTO.model_validate(r) for r in rows]
+    return WhatsAppPendingListDTO(total=len(items), items=items)
+
+
+@router.post(
+    "/whatsapp-approve",
+    response_model=InvitationResponseDTO,
+    status_code=status.HTTP_201_CREATED,
+    summary="Aprovar pré-cadastro WhatsApp e enviar código (admin)",
+)
+async def approve_whatsapp_registration(
+    dto: ApproveWhatsAppDTO,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> InvitationResponseDTO:
+    """
+    Aprova um pré-cadastro via WhatsApp:
+    1. Gera um código de convite
+    2. Vincula ao pré-cadastro
+    3. Envia o código ao usuário via WhatsApp
+    """
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Apenas admins podem aprovar pré-cadastros",
+        )
+
+    result = await session.execute(
+        select(WhatsAppPreRegistration).where(
+            WhatsAppPreRegistration.phone == dto.phone,
+            WhatsAppPreRegistration.state == "pending_approval",
+        )
+    )
+    pre_reg = result.scalar_one_or_none()
+
+    if not pre_reg:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Pré-cadastro não encontrado ou já aprovado",
+        )
+
+    invitation_service = InvitationService(session)
+    invitation = await invitation_service.generate(current_user.id)
+
+    whatsapp_service = WhatsAppService(session)
+    await whatsapp_service.send_approval_code(dto.phone, invitation.code)
+
+    return invitation

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:provider/provider.dart';
 import 'theme/app_theme.dart';
 import 'theme/theme_provider.dart';
@@ -22,7 +23,11 @@ import 'providers/workout_sheet_provider.dart';
 import 'providers/invitation_provider.dart';
 import 'providers/admin_provider.dart';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'services/notification_service.dart';
+
 void main() async {
+  usePathUrlStrategy();
   WidgetsFlutterBinding.ensureInitialized();
 
   // Inicializa API Client
@@ -33,17 +38,35 @@ void main() async {
   final themeProvider = ThemeProvider();
   await themeProvider.init();
 
-  runApp(OmniConnectApp(apiClient: apiClient, themeProvider: themeProvider));
+  // Notificações push só em plataformas móveis (Web não suporta FCM com firebase_messaging v14)
+  NotificationService? notificationService;
+  if (!kIsWeb) {
+    try {
+      notificationService = NotificationService(apiClient: apiClient);
+      await notificationService.initialize();
+    } catch (e) {
+      debugPrint('Erro ao inicializar notificações: $e');
+      notificationService = null;
+    }
+  }
+
+  runApp(OmniConnectApp(
+    apiClient: apiClient,
+    themeProvider: themeProvider,
+    notificationService: notificationService,
+  ));
 }
 
 class OmniConnectApp extends StatelessWidget {
   final ApiClient apiClient;
   final ThemeProvider themeProvider;
+  final NotificationService? notificationService;
 
   const OmniConnectApp({
     Key? key,
     required this.apiClient,
     required this.themeProvider,
+    this.notificationService,
   }) : super(key: key);
 
   @override
@@ -52,6 +75,10 @@ class OmniConnectApp extends StatelessWidget {
       providers: [
         // API Client (singleton)
         Provider<ApiClient>.value(value: apiClient),
+
+        // Notification Service (apenas em mobile)
+        if (notificationService != null)
+          Provider<NotificationService>.value(value: notificationService!),
 
         // Auth Service (depende de ApiClient)
         ProxyProvider<ApiClient, AuthService>(

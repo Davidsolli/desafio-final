@@ -18,7 +18,8 @@ class AdminShell extends StatefulWidget {
 class _AdminShellState extends State<AdminShell> {
   int _getSelectedNavIndex(String currentPath) {
     if (currentPath.contains('/admin/trainers')) return 0;
-    if (currentPath.contains('/admin/settings')) return 1;
+    if (currentPath.contains('/admin/whatsapp')) return 1;
+    if (currentPath.contains('/admin/settings')) return 2;
     return 0;
   }
 
@@ -45,6 +46,7 @@ class _AdminShellState extends State<AdminShell> {
         onTap: (index) {
           final routes = [
             '/admin/trainers',
+            '/admin/whatsapp',
             '/admin/settings',
           ];
           context.go(routes[index]);
@@ -55,6 +57,7 @@ class _AdminShellState extends State<AdminShell> {
         unselectedItemColor: context.colors.textMuted,
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.people_outlined), label: 'Trainers'),
+          BottomNavigationBarItem(icon: Icon(Icons.mark_chat_unread_outlined), label: 'WhatsApp'),
           BottomNavigationBarItem(icon: Icon(Icons.settings_outlined), label: 'Configurações'),
         ],
       ),

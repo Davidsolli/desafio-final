@@ -11,3 +11,4 @@ export 'omni_avatar.dart';
 export 'omni_status_badge.dart';
 export 'omni_progress_bar.dart';
 export 'omni_info_chip.dart';
+export 'change_password_dialog.dart';

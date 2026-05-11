@@ -34,6 +34,9 @@ env/
 !.env.example
 firebase-credentials.json
 firebase-*.json
+serviceAccountKey.json
+google-services.json
+GoogleService-Info.plist
 
 # Volumes Locais do Docker
 postgres_data/

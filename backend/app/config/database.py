@@ -43,6 +43,11 @@ def _get_async_session_local():
     return _AsyncSessionLocal
 
 
+def SessionLocal():
+    """Context manager de sessão para uso em tasks/schedulers (fora do ciclo de request)."""
+    return _get_async_session_local()()
+
+
 async def get_db() -> AsyncSession:
     """Dependency injection para obter sessão de banco."""
     session_local = _get_async_session_local()
@@ -59,12 +64,15 @@ async def init_db() -> None:
     """
     import logging
     from app.models.user import Base  # noqa: F401 — registra User
+    import app.models.password_reset_token  # noqa: F401 — registra PasswordResetToken
     from app.models.goal import Goal, GoalProgressEntry  # noqa: F401 — registra Goals
     import app.models.logbook  # noqa: F401 — registra WorkoutSession e SessionExercise no Base
     import app.models.food_catalog  # noqa: F401 — registra FoodCatalog no Base
     import app.models.diet  # noqa: F401 — registra CustomFood, Diet, DietMeal, DietItem
     import app.models.diet_logbook  # noqa: F401 — registra DietLogbook, DietLogbookEntry
     from app.models.invitation import Invitation  # noqa: F401 — registra Invitation
+    from app.models.whatsapp_pre_registration import WhatsAppPreRegistration  # noqa: F401
+    import app.models.notification  # noqa: F401 — registra NotificationPreference, NotificationLog, WorkoutReminderSchedule
 
     logger = logging.getLogger(__name__)
 
@@ -81,7 +89,7 @@ async def init_db() -> None:
         await conn.run_sync(Base.metadata.create_all)
         logger.info("✓ Todas as tabelas criadas/verificadas com sucesso")
 
-        # 3. Migração manual: Adicionar colunas de dados corporais à tabela users
+        # 3. Migração manual: Adicionar colunas de dados corporais e FCM à tabela users
         alters = [
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS weight DOUBLE PRECISION",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS height DOUBLE PRECISION",
@@ -90,13 +98,15 @@ async def init_db() -> None:
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_whatsapp VARCHAR(20)",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS goal_type VARCHAR(50)",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS theme_preference VARCHAR(20) DEFAULT NULL",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS fcm_token VARCHAR(500)",
         ]
         for alter in alters:
             try:
                 await conn.execute(text(alter))
             except Exception as exc:
-                logger.warning("Erro ao executar ALTER TABLE: %s", exc)
-        logger.info("✓ Colunas de dados corporais verificadas/adicionadas em users")
+                logger.warning("Erro ao executar ALTER TABLE users: %s", exc)
+        logger.info("✓ Colunas de dados corporais e FCM verificadas/adicionadas em users")
 
         # 4. Migração: Adaptar WorkoutSheets para usar WorkoutProgram
         alters_workout = [
@@ -105,8 +115,6 @@ async def init_db() -> None:
             "ALTER TABLE workout_sheets ALTER COLUMN day_of_week DROP NOT NULL",
             "ALTER TABLE workout_sheets ALTER COLUMN user_id DROP NOT NULL",
             "ALTER TABLE workout_sheets ALTER COLUMN personal_trainer_id DROP NOT NULL",
-            # Nós mantemos as colunas user_id e personal_trainer_id ou podemos apagá-las.
-            # Como sqlalchemy pode reclamar se a coluna não existir no model mas existir no DB? Não, SQLAlchemy não reclama do DB ter mais colunas.
         ]
         for alter in alters_workout:
             try:
@@ -126,16 +134,17 @@ async def init_db() -> None:
                 logger.warning("Erro ao executar ALTER TABLE diets: %s", exc)
         logger.info("✓ Colunas atualizadas em diets para suportar water_target_ml")
 
-    # 4. Migração manual: Adicionar food_name ao logbook entries se não existir
-    # (feita APÓS criar as tabelas, em transação separada)
-    # COMENTADO TEMPORARIAMENTE - será aplicado depois
-    # engine = _get_engine()
-    # async with engine.begin() as conn:
-    #     try:
-    #         await conn.execute(text("ALTER TABLE diet_logbook_entries ADD COLUMN IF NOT EXISTS food_name VARCHAR(255) DEFAULT '';"))
-    #         logger.info("✓ Coluna food_name verificada/adicionada em diet_logbook_entries")
-    #     except Exception as exc:
-    #         logger.warning("Erro na migração manual de diet_logbook_entries: %s", exc)
+        # 6. Migração: converter colunas de password_reset_tokens para TIMESTAMPTZ
+        token_col_alters = [
+            "ALTER TABLE password_reset_tokens ALTER COLUMN expires_at TYPE TIMESTAMPTZ USING expires_at AT TIME ZONE 'UTC'",
+            "ALTER TABLE password_reset_tokens ALTER COLUMN used_at TYPE TIMESTAMPTZ USING used_at AT TIME ZONE 'UTC'",
+            "ALTER TABLE password_reset_tokens ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at AT TIME ZONE 'UTC'",
+        ]
+        for alter in token_col_alters:
+            try:
+                await conn.execute(text(alter))
+            except Exception:
+                pass  # tabela ainda não existe ou coluna já é TIMESTAMPTZ
 
     # Popular Banco de Dados Inicial (Seed)
     import sys
