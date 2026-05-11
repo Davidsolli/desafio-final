@@ -109,7 +109,6 @@ async def init_db() -> None:
         logger.info("✓ Colunas de users verificadas/adicionadas")
 
         # Migração: converter colunas de password_reset_tokens para TIMESTAMPTZ
-        # Necessário em ambientes onde a tabela foi criada com DateTime (sem timezone)
         token_col_alters = [
             "ALTER TABLE password_reset_tokens ALTER COLUMN expires_at TYPE TIMESTAMPTZ USING expires_at AT TIME ZONE 'UTC'",
             "ALTER TABLE password_reset_tokens ALTER COLUMN used_at TYPE TIMESTAMPTZ USING used_at AT TIME ZONE 'UTC'",
@@ -120,6 +119,20 @@ async def init_db() -> None:
                 await conn.execute(text(alter))
             except Exception:
                 pass  # tabela ainda não existe ou coluna já é TIMESTAMPTZ
+
+        # Migração: contexto da escalação na conversa de chat (chatbot Etapa 3)
+        try:
+            await conn.execute(
+                text(
+                    "ALTER TABLE chat_conversations "
+                    "ADD COLUMN IF NOT EXISTS escalation_data JSON"
+                )
+            )
+            logger.info("✓ Coluna escalation_data verificada/adicionada em chat_conversations")
+        except Exception as exc:
+            logger.warning(
+                "Erro ao adicionar escalation_data em chat_conversations: %s", exc
+            )
 
     # 4. Migração manual: Adicionar food_name ao logbook entries se não existir
     # (feita APÓS criar as tabelas, em transação separada)
@@ -159,3 +172,13 @@ async def init_db() -> None:
         logger.info("✓ Seed de usuários e dados de domínio concluída")
     except Exception as exc:
         logger.warning("Erro ao popular dados de domínio iniciais: %s", exc)
+
+    try:
+        from scripts.seed_knowledge_base import seed as seed_knowledge_base
+        inserted = await seed_knowledge_base(force=False)
+        logger.info(
+            "✓ Verificação/Seed da base de conhecimento concluída (%d novos docs)",
+            inserted,
+        )
+    except Exception as exc:
+        logger.warning("Erro ao popular base de conhecimento: %s", exc)

@@ -13,6 +13,7 @@ import 'services/nutrition_service.dart';
 import 'services/workout_sheet_service.dart';
 import 'services/invitation_service.dart';
 import 'services/admin_service.dart';
+import 'services/chat_service.dart';
 import 'providers/auth_provider.dart';
 import 'providers/user_provider.dart';
 import 'providers/goal_provider.dart';
@@ -117,6 +118,11 @@ class OmniConnectApp extends StatelessWidget {
         // Admin Service (depende de ApiClient)
         ProxyProvider<ApiClient, AdminService>(
           update: (_, apiClient, _) => AdminService(apiClient: apiClient),
+        ),
+
+        // Chat Service (depende de ApiClient)
+        ProxyProvider<ApiClient, ChatService>(
+          update: (_, apiClient, _) => ChatService(apiClient: apiClient),
         ),
 
         // Auth Provider (depende de AuthService)

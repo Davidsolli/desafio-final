@@ -25,10 +25,17 @@ from app.tasks.notification_scheduler import NotificationScheduler
 async def lifespan(app: FastAPI):
     """
     Gerenciar lifecycle da aplicação.
-    Inicializa o banco de dados na startup.
+    Inicializa o banco de dados e aquece o modelo de embeddings na startup
+    para evitar latência adicional na primeira requisição do chatbot.
     """
-    # Startup
     await init_db()
+
+    # Pré-aquece o modelo de embeddings local (HuggingFace)
+    try:
+        from app.ai.rag_chain import rag_chain
+        await rag_chain.warm_up()
+    except Exception:
+        pass
 
     # Iniciar Cronjob de Notificações
     NotificationScheduler.start()

@@ -189,8 +189,13 @@ class ChatConversation(Base):
     escalation_reason = Column(
         String(100),
         nullable=True,
-    )  # too_complex | user_requested | low_confidence | health_risk
+    )  # too_complex | user_requested | low_confidence | health_risk |
+    # validation_failed | timeout | generation_error
     escalated_at = Column(DateTime, nullable=True)
+
+    # Contexto serializado da escalação (Card 19.10):
+    #   {original_question, rag_best_score, reason, user_context_summary}
+    escalation_data = Column(JSON, nullable=True)
 
     # ── Satisfação do Aluno ───────────────────────────────────────────────
     rating = Column(Integer, nullable=True)  # 1-5

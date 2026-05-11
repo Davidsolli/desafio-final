@@ -2,9 +2,12 @@
 
 Responsável por:
 - Enviar mensagens via Meta Cloud API
+- Rotear mensagens recebidas:
+    * Telefone vinculado a User ativo  → ChatService (RAG)
+    * Telefone NÃO vinculado           → fluxo de pré-cadastro
 - Gerenciar o fluxo conversacional de pré-cadastro
 
-States da conversa:
+States da conversa de pré-cadastro:
     awaiting_name     → aguardando nome do usuário
     awaiting_email    → aguardando email
     pending_approval  → dados coletados, aguardando aprovação do admin
@@ -19,7 +22,13 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.user import User
 from app.models.whatsapp_pre_registration import WhatsAppPreRegistration
+from app.services.chat_service import (
+    ChatService,
+    MessageTooLongError,
+    RateLimitExceededError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -27,31 +36,43 @@ _WHATSAPP_API_BASE = "https://graph.facebook.com/v20.0"
 
 _MESSAGES = {
     "welcome": (
-        "Olá! 👋 Sou o assistente do *Fitloop*.\n\n"
+        "Olá! Sou o assistente do *Fitloop*.\n\n"
         "Vou te ajudar a fazer seu pré-cadastro rapidinho. "
         "Qual é o seu *nome completo*?"
     ),
-    "ask_email": "Perfeito, *{name}*! 💪\n\nAgora me passa o seu *email*:",
+    "ask_email": "Perfeito, *{name}*!\n\nAgora me passa o seu *email*:",
     "invalid_email": "Hmm, esse email não parece válido. Tenta de novo:",
     "pending_approval": (
-        "✅ *Pré-cadastro recebido!*\n\n"
+        "*Pré-cadastro recebido!*\n\n"
         "Seus dados foram enviados para análise. "
-        "Em breve você receberá aqui o seu código de acesso. 🎉"
+        "Em breve você receberá aqui o seu código de acesso."
     ),
     "already_pending": (
-        "Seu pré-cadastro já está em análise! ⏳\n\n"
+        "Seu pré-cadastro já está em análise!\n\n"
         "Assim que aprovado, você receberá o código de acesso aqui mesmo."
     ),
     "approval_code": (
-        "🎉 *Seu cadastro foi aprovado!*\n\n"
+        "*Seu cadastro foi aprovado!*\n\n"
         "Abra o app *Fitloop*, toque em *Tenho código de convite* "
         "e use o código:\n\n"
-        "🔑 *{code}*\n\n"
+        "*{code}*\n\n"
         "Seus dados já vão estar preenchidos. Bem-vindo(a)!"
     ),
     "already_approved": (
-        "Seu cadastro já foi aprovado! 🎉\n\n"
+        "Seu cadastro já foi aprovado!\n\n"
         "Use o código *{code}* no app *Fitloop* para finalizar."
+    ),
+    "chat_rate_limited": (
+        "Você atingiu o limite de mensagens por hora.\n"
+        "Tente novamente em breve!"
+    ),
+    "chat_message_too_long": (
+        "Sua mensagem é muito longa.\n"
+        "Tente reformular em até 500 caracteres."
+    ),
+    "chat_generic_error": (
+        "Tive um problema ao processar sua mensagem.\n"
+        "Tente novamente em alguns instantes!"
     ),
 }
 
@@ -112,9 +133,67 @@ class WhatsAppService:
         await self.send_message(phone, _MESSAGES["approval_code"].format(code=code))
 
     async def handle_message(self, phone: str, text: str) -> None:
-        """Processa a mensagem recebida e avança o fluxo de pré-cadastro."""
-        text = text.strip()
+        """Roteia mensagem recebida do webhook WhatsApp.
 
+        Fluxo:
+            1. Mensagem vazia → ignora.
+            2. Telefone vinculado a User ativo → encaminha ao ChatService.
+            3. Caso contrário → mantém o fluxo de pré-cadastro existente.
+        """
+        text = text.strip()
+        if not text:
+            return
+
+        user = await self._find_user_by_phone(phone)
+        if user is not None and user.is_active:
+            await self._handle_chat_message(user=user, phone=phone, text=text)
+            return
+
+        await self._handle_pre_registration(phone, text)
+
+    @staticmethod
+    def _normalize_phone(phone: str) -> str:
+        """Remove caracteres não-numéricos para comparação consistente."""
+        return re.sub(r"\D", "", phone or "")
+
+    async def _find_user_by_phone(self, phone: str) -> User | None:
+        """Busca o User vinculado ao telefone (apenas dígitos)."""
+        normalized = self._normalize_phone(phone)
+        if not normalized:
+            return None
+        result = await self.session.execute(
+            select(User).where(User.phone_whatsapp == normalized)
+        )
+        return result.scalar_one_or_none()
+
+    async def _handle_chat_message(
+        self, user: User, phone: str, text: str
+    ) -> None:
+        """Encaminha a mensagem ao ChatService e devolve a resposta via Cloud API.
+
+        Erros conhecidos viram mensagens amigáveis; exceções inesperadas
+        são logadas (com stacktrace) sem nunca expor o erro ao usuário.
+        """
+        chat_service = ChatService(self.session)
+        try:
+            result = await chat_service.send_message(
+                user_id=user.id,
+                message=text,
+                channel="whatsapp",
+            )
+            await self.send_message(phone, result["content"])
+        except RateLimitExceededError:
+            await self.send_message(phone, _MESSAGES["chat_rate_limited"])
+        except MessageTooLongError:
+            await self.send_message(phone, _MESSAGES["chat_message_too_long"])
+        except Exception:
+            logger.exception(
+                "Erro ao processar mensagem WhatsApp do user %s", user.id
+            )
+            await self.send_message(phone, _MESSAGES["chat_generic_error"])
+
+    async def _handle_pre_registration(self, phone: str, text: str) -> None:
+        """Fluxo original de pré-cadastro — preservado integralmente."""
         result = await self.session.execute(
             select(WhatsAppPreRegistration).where(
                 WhatsAppPreRegistration.phone == phone
