@@ -228,6 +228,8 @@ class UserService:
             user.goal_type = dto.goal_type
         if dto.theme_preference is not None:
             user.theme_preference = dto.theme_preference
+        if dto.timezone is not None:
+            user.timezone = dto.timezone
 
         try:
             updated_user = await self.repository.update(user)
