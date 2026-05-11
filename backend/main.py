@@ -1,14 +1,21 @@
-from contextlib import asynccontextmanager
+from dotenv import load_dotenv
+load_dotenv()
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from app.config.database import init_db
-from app.routes import user, auth, chat, logbook, goal, invitation
+from app.config.limiter import limiter
+from app.routes import user, auth, chat, logbook, goal, invitation, webhooks
+from app.routes.pages import router as pages_router
 from app.routes.workout_sheet import router as workout_sheet_router, catalog_router as exercise_catalog_router
 from app.routes.food_catalog import router as food_catalog_router
 from app.routes.diet import custom_food_router, diet_router
 from app.routes.diet_logbook import router as diet_logbook_router
+from app.routes.password import router as password_router
 from app.routes.notification import router as notification_router
 
 from app.tasks.notification_scheduler import NotificationScheduler
@@ -22,15 +29,14 @@ async def lifespan(app: FastAPI):
     """
     # Startup
     await init_db()
-    
+
     # Iniciar Cronjob de Notificações
     NotificationScheduler.start()
-    
+
     yield
-    
+
     # Shutdown
     NotificationScheduler.stop()
-
 
 
 # Inicialização da aplicação
@@ -40,6 +46,10 @@ app = FastAPI(
     description="Backend do sistema OmniConnect Fitness",
     lifespan=lifespan,
 )
+
+# Rate limiting global (slowapi) — instância compartilhada com os routers
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Configurar CORS para permitir requisições do Flutter web (desenvolvimento)
 app.add_middleware(
@@ -74,5 +84,7 @@ app.include_router(food_catalog_router)
 app.include_router(custom_food_router)
 app.include_router(diet_router)
 app.include_router(diet_logbook_router)
+app.include_router(webhooks.router)
+app.include_router(pages_router)
+app.include_router(password_router)
 app.include_router(notification_router)
-

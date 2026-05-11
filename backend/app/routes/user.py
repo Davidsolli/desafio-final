@@ -20,9 +20,11 @@ from app.dtos.user_dto import (
     UpdateUserDTO,
     UserResponseDTO,
     PaginatedUsersResponseDTO,
+    UpdateThemePreferenceDTO,
 )
+from app.dtos.auth_dto import ChangePasswordDTO
 from app.controllers.user_controller import UserController
-from app.services.user_service import UserAlreadyExistsError, UserNotFoundError, InvalidInvitationError
+from app.services.user_service import UserAlreadyExistsError, UserNotFoundError, InvalidInvitationError, InvalidCredentialsError
 from app.config.database import get_db
 from app.dependencies.auth import get_current_user
 from app.models.user import User
@@ -363,7 +365,7 @@ async def update_user(
 
     **NÃO é possível atualizar:**
     - email (requer verificação de propriedade)
-    - password (endpoint separado no futuro)
+    - password (use PUT /{user_id}/password)
     - created_at (imutável)
     """
     is_owner = user_id == current_user.id
@@ -388,6 +390,116 @@ async def update_user(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Erro ao atualizar usuário",
+        )
+
+
+@router.put(
+    "/me/theme-preference",
+    response_model=UserResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Atualizar preferência de tema do usuário autenticado",
+    responses={
+        200: {"description": "Preferência de tema atualizada"},
+        400: {"description": "Validação falhou (tema inválido)"},
+        401: {"description": "Não autenticado"},
+    },
+)
+async def update_theme_preference(
+    dto: UpdateThemePreferenceDTO,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> UserResponseDTO:
+    """
+    Atualizar preferência de tema do usuário autenticado.
+
+    **Requer autenticação:** Usuário deve estar logado.
+
+    **Request body:**
+    - theme_preference: 'light', 'dark' ou 'system'
+
+    **Response:**
+    - Dados completos do usuário com tema atualizado
+    """
+    controller = UserController(session)
+
+    try:
+        update_dto = UpdateUserDTO(theme_preference=dto.theme_preference)
+        return await controller.update_user(current_user.id, update_dto)
+    except UserNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuário não encontrado",
+        )
+    except Exception as e:
+        import logging
+        logging.error(f"Erro inesperado ao atualizar preferência de tema: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro ao atualizar preferência de tema",
+        )
+
+
+@router.put(
+    "/{user_id}/password",
+    response_model=UserResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Trocar senha do usuário",
+    responses={
+        200: {"description": "Senha alterada com sucesso"},
+        400: {"description": "Validação falhou"},
+        401: {"description": "Senha atual incorreta ou não autenticado"},
+        403: {"description": "Acesso negado"},
+        404: {"description": "Usuário não encontrado"},
+    },
+)
+async def change_password(
+    user_id: UUID,
+    dto: ChangePasswordDTO,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> UserResponseDTO:
+    """
+    Trocar senha do usuário.
+
+    **Requer autenticação:**
+    - Usuário autenticado pode trocar apenas sua própria senha
+    - Admin pode trocar senha de qualquer usuário
+
+    **Request body:**
+    - current_password: Senha atual (obrigatória)
+    - new_password: Nova senha (8+ chars, maiúscula, minúscula, número, caractere especial)
+    - confirm_password: Confirmação da nova senha
+    """
+    is_owner = user_id == current_user.id
+    is_admin = current_user.role == "admin"
+
+    if not (is_owner or is_admin):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Você só pode alterar sua própria senha",
+        )
+
+    # Admin alterando a senha de outro usuário não precisa da senha atual
+    skip_current_check = is_admin and not is_owner
+
+    controller = UserController(session)
+
+    try:
+        return await controller.change_password(user_id, dto, skip_current_check=skip_current_check)
+    except InvalidCredentialsError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e),
+        )
+    except UserNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro ao alterar senha",
         )
 
 

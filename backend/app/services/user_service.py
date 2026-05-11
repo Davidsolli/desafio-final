@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
 from app.dtos.user_dto import CreateUserDTO, UpdateUserDTO, UserResponseDTO
+from app.dtos.auth_dto import ChangePasswordDTO
 from app.repositories.user_repository import UserRepository
 from app.services.invitation_service import InvitationService
 from app.repositories.invitation_repository import InvitationRepository
@@ -33,6 +34,12 @@ class InvalidInvitationError(Exception):
 
 class UserNotFoundError(Exception):
     """Exceção quando usuário não é encontrado."""
+
+    pass
+
+
+class InvalidCredentialsError(Exception):
+    """Exceção quando a senha atual está incorreta."""
 
     pass
 
@@ -219,6 +226,8 @@ class UserService:
             user.phone_whatsapp = dto.phone_whatsapp
         if dto.goal_type is not None:
             user.goal_type = dto.goal_type
+        if dto.theme_preference is not None:
+            user.theme_preference = dto.theme_preference
 
         try:
             updated_user = await self.repository.update(user)
@@ -228,6 +237,45 @@ class UserService:
         except IntegrityError as e:
             await self.repository.rollback()
             raise Exception(f"Erro ao atualizar usuário: {str(e)}")
+
+    async def change_password(
+        self,
+        user_id: UUID,
+        dto: ChangePasswordDTO,
+        skip_current_check: bool = False,
+    ) -> UserResponseDTO:
+        """
+        Trocar senha do usuário.
+
+        Args:
+            user_id: UUID do usuário
+            dto: ChangePasswordDTO com senha atual e nova senha
+            skip_current_check: Se True, não verifica a senha atual (uso exclusivo de admin
+                alterando a senha de outro usuário)
+
+        Returns:
+            UserResponseDTO: Usuário com senha atualizada
+
+        Raises:
+            UserNotFoundError: Se usuário não encontrado
+            InvalidCredentialsError: Se senha atual incorreta
+        """
+        user = await self.repository.get_by_id_all_states(user_id)
+        if not user:
+            raise UserNotFoundError(f"Usuário com ID {user_id} não encontrado")
+
+        if not skip_current_check and not self.verify_password(dto.current_password, user.password):
+            raise InvalidCredentialsError("Senha atual incorreta")
+
+        user.password = self.hash_password(dto.new_password)
+
+        try:
+            updated_user = await self.repository.update(user)
+            await self.repository.commit()
+            return UserResponseDTO.model_validate(updated_user)
+        except Exception as e:
+            await self.repository.rollback()
+            raise Exception(f"Erro ao trocar senha: {str(e)}")
 
     async def delete(self, user_id: UUID) -> bool:
         """

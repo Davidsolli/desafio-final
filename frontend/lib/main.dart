@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:provider/provider.dart';
 import 'theme/app_theme.dart';
 import 'theme/theme_provider.dart';
@@ -21,41 +22,50 @@ import 'providers/workout_sheet_provider.dart';
 import 'providers/invitation_provider.dart';
 import 'providers/admin_provider.dart';
 
-import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'services/notification_service.dart';
 
 void main() async {
+  usePathUrlStrategy();
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // Inicializa o Firebase
-  try {
-    await Firebase.initializeApp();
-  } catch (e) {
-    debugPrint('Erro ao inicializar Firebase: $e');
-  }
 
   // Inicializa API Client
   final apiClient = ApiClient();
   await apiClient.initialize();
 
-  // Inicializa o serviço de notificações
-  final notificationService = NotificationService(apiClient: apiClient);
-  await notificationService.initialize();
+  // Inicializa ThemeProvider (carrega preferência salva)
+  final themeProvider = ThemeProvider();
+  await themeProvider.init();
+
+  // Notificações push só em plataformas móveis (Web não suporta FCM com firebase_messaging v14)
+  NotificationService? notificationService;
+  if (!kIsWeb) {
+    try {
+      notificationService = NotificationService(apiClient: apiClient);
+      await notificationService.initialize();
+    } catch (e) {
+      debugPrint('Erro ao inicializar notificações: $e');
+      notificationService = null;
+    }
+  }
 
   runApp(OmniConnectApp(
-    apiClient: apiClient, 
-    notificationService: notificationService
+    apiClient: apiClient,
+    themeProvider: themeProvider,
+    notificationService: notificationService,
   ));
 }
 
 class OmniConnectApp extends StatelessWidget {
   final ApiClient apiClient;
-  final NotificationService notificationService;
+  final ThemeProvider themeProvider;
+  final NotificationService? notificationService;
 
   const OmniConnectApp({
     Key? key,
     required this.apiClient,
-    required this.notificationService,
+    required this.themeProvider,
+    this.notificationService,
   }) : super(key: key);
 
   @override
@@ -64,9 +74,10 @@ class OmniConnectApp extends StatelessWidget {
       providers: [
         // API Client (singleton)
         Provider<ApiClient>.value(value: apiClient),
-        
-        // Notification Service
-        Provider<NotificationService>.value(value: notificationService),
+
+        // Notification Service (apenas em mobile)
+        if (notificationService != null)
+          Provider<NotificationService>.value(value: notificationService!),
 
         // Auth Service (depende de ApiClient)
         ProxyProvider<ApiClient, AuthService>(
@@ -188,14 +199,14 @@ class OmniConnectApp extends StatelessWidget {
           },
         ),
       ],
-      child: ChangeNotifierProvider(
-        create: (_) => ThemeProvider(),
+      child: ChangeNotifierProvider.value(
+        value: themeProvider,
         child: Consumer<ThemeProvider>(
-          builder: (_, themeProvider, __) => MaterialApp.router(
+          builder: (_, provider, __) => MaterialApp.router(
             title: 'FitLoop',
             theme: AppTheme.lightTheme,
             darkTheme: AppTheme.darkTheme,
-            themeMode: themeProvider.themeMode,
+            themeMode: provider.themeMode,
             routerConfig: AppRoutes.router,
             debugShowCheckedModeBanner: false,
           ),

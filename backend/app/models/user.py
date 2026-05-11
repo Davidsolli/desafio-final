@@ -87,6 +87,15 @@ class User(Base):
 
     goal_type = Column(String(50), nullable=True)
 
+    theme_preference = Column(
+        String(20),
+        nullable=True,
+        default=None,
+        comment="Preferência de tema: 'light', 'dark', 'system', ou NULL para padrão do dispositivo"
+    )
+
+    token_version = Column(Integer, nullable=False, default=0)
+
     fcm_token = Column(String(500), nullable=True)
 
     def __repr__(self) -> str:

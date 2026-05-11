@@ -13,7 +13,10 @@ class OmniAvatar extends StatelessWidget {
     this.useGradient = false,
   }) : super(key: key);
 
-  String get _initial => name.isNotEmpty ? name[0].toUpperCase() : '?';
+  String get _initial {
+    final trimmed = name.trim();
+    return trimmed.isNotEmpty ? trimmed[0].toUpperCase() : '?';
+  }
 
   @override
   Widget build(BuildContext context) {
