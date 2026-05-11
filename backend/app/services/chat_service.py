@@ -253,6 +253,27 @@ class ChatService:
                 "objective": user.goal_type or "não informado",
             }
 
+        # ── Personal trainer vinculado ────────────────────────────────────
+        # Busca o User referenciado por user.trainer_id. Permite o LLM
+        # responder "quem é meu personal trainer?" e similares.
+        personal_trainer: dict[str, Any] | None = None
+        if user and user.trainer_id:
+            try:
+                trainer_stmt = select(User).where(
+                    User.id == user.trainer_id,
+                    User.is_active == True,
+                )
+                trainer_result = await self.session.execute(trainer_stmt)
+                trainer = trainer_result.scalar_one_or_none()
+                if trainer:
+                    personal_trainer = {
+                        "id": str(trainer.id),
+                        "name": trainer.name,
+                        "email": trainer.email,
+                    }
+            except Exception as exc:
+                logger.debug("Falha ao carregar personal trainer: %s", exc)
+
         # ── Ficha de treino ativa (mais recente) ──────────────────────────
         active_workout_sheet: dict[str, Any] | None = None
         try:
@@ -360,6 +381,7 @@ class ChatService:
 
         return {
             "user_profile": user_profile,
+            "personal_trainer": personal_trainer,
             "active_workout_sheet": active_workout_sheet,
             "active_goals": active_goals,
             "recent_history": recent_history,

@@ -468,6 +468,75 @@ class TestGreetingFastPath:
         chain.retrieve.assert_called_once()
 
 
+class TestTrainerLookupFastPath:
+    """Perguntas sobre "quem é meu personal" são respondidas a partir do user_context."""
+
+    @pytest.mark.parametrize(
+        "query",
+        [
+            "Quem é meu personal?",
+            "quem e o meu personal trainer?",
+            "qual o meu personal?",
+            "qual o nome do meu personal?",
+            "como se chama meu personal?",
+            "meu personal trainer?",
+            "Quem é meu treinador?",
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_trainer_lookup_returns_name_from_context(self, chain, mock_session, query):
+        """Quando há trainer no user_context, devolve o nome direto."""
+        chain.retrieve = AsyncMock()
+        chain.generate = AsyncMock()
+        ctx = {
+            "user_profile": {"name": "Aluno", "role": "client"},
+            "personal_trainer": {"id": "abc", "name": "Lucas Silva", "email": "l@x.com"},
+        }
+
+        result = await chain.run(query=query, session=mock_session, user_context=ctx)
+
+        assert result.model_used == "trainer_lookup"
+        assert result.should_escalate is False
+        assert "Lucas Silva" in result.answer
+        chain.retrieve.assert_not_called()
+        chain.generate.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_trainer_lookup_no_trainer_linked(self, chain, mock_session):
+        """Sem trainer vinculado, devolve mensagem orientando o aluno."""
+        chain.retrieve = AsyncMock()
+        chain.generate = AsyncMock()
+        ctx = {
+            "user_profile": {"name": "Aluno"},
+            "personal_trainer": None,
+        }
+
+        result = await chain.run(
+            query="quem é meu personal?", session=mock_session, user_context=ctx,
+        )
+
+        assert result.model_used == "trainer_lookup"
+        assert "ainda não tem" in result.answer.lower() or "não vinculado" in result.answer.lower()
+
+    @pytest.mark.asyncio
+    async def test_trainer_lookup_does_not_escalate(self, chain, mock_session):
+        """Pergunta sobre personal NÃO deve escalar — antes a keyword 'personal trainer'
+        em EXPLICIT_REQUEST_KEYWORDS sequestrava esse fluxo."""
+        chain.retrieve = AsyncMock()
+        chain.generate = AsyncMock()
+        ctx = {"personal_trainer": {"name": "Joana"}}
+
+        result = await chain.run(
+            query="quem é meu personal trainer?",
+            session=mock_session,
+            user_context=ctx,
+        )
+
+        assert result.should_escalate is False
+        assert result.escalation_reason == ""
+        assert "Joana" in result.answer
+
+
 class TestRunPipeline:
     """Testa o pipeline RAG completo (run())."""
 

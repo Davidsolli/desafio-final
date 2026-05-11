@@ -68,7 +68,6 @@ FAQ_RULES: tuple[FAQRule, ...] = (
             r"\bavalia[cç][aã]o\s+f[ií]sica\b",
             r"\bagendar\s+(uma\s+|minha\s+)?avalia[cç][aã]o\b",
             r"\bcomo\s+agendo\s+(uma\s+|minha\s+)?avalia[cç][aã]o\b",
-            r"\bquem\s+[eé]\s+(o\s+)?meu\s+personal\b",
         ),
         response=(
             "Para agendar sua avaliação física, você pode acessar a aba "

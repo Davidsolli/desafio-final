@@ -44,11 +44,16 @@ LLM_MAX_TOKENS = settings.RAG_LLM_MAX_TOKENS
 LLM_TEMPERATURE = settings.RAG_LLM_TEMPERATURE
 HISTORY_MAX_TOKENS = settings.RAG_HISTORY_MAX_TOKENS
 
-# Palavras-chave que indicam pedido EXPLÍCITO de humano (RN-12)
+# Palavras-chave que indicam pedido EXPLÍCITO de humano (RN-12).
+# IMPORTANTE: estas keywords são matched por substring, então não podem
+# ser ambíguas. "personal trainer" sozinho casava perguntas legítimas
+# como "quem é meu personal trainer?" e escalava indevidamente; foi
+# removido. "humano" também era genérico demais.
 EXPLICIT_REQUEST_KEYWORDS = [
     "falar com personal", "chamar personal", "quero personal",
-    "personal trainer", "me ajuda pessoalmente", "suporte humano",
-    "falar com profissional", "humano", "atendente",
+    "quero falar com personal", "falar com o personal",
+    "me ajuda pessoalmente", "suporte humano", "falar com humano",
+    "falar com profissional", "falar com atendente", "atendimento humano",
     "não entendi", "nao entendi", "ainda com dúvida", "ainda com duvida",
 ]
 
@@ -111,6 +116,19 @@ GREETING_RESPONSE = (
     "Olá! Sou o assistente do OmniConnect Fitness. Posso ajudar com dúvidas "
     "sobre execução de exercícios, sua ficha de treino, nutrição básica e "
     "informações operacionais da academia. O que você gostaria de saber?"
+)
+
+# Perguntas diretas sobre o personal trainer do aluno. Respondidas
+# deterministicamente a partir do user_context, sem chamar o LLM.
+TRAINER_QUERY_PATTERNS: tuple[str, ...] = (
+    r"\bquem\s+(é|e|seria|sera|será)\s+(o\s+)?meu\s+personal\b",
+    r"\bquem\s+(é|e)\s+(o\s+)?meu\s+(treinador|professor)\b",
+    r"\b(qual|nome)\s+(é\s+)?(o\s+)?(do\s+)?meu\s+personal\b",
+    r"\bcomo\s+(se\s+)?chama\s+(o\s+)?meu\s+personal\b",
+    r"\bmeu\s+personal\s+trainer\s*\??$",
+)
+_TRAINER_QUERY_REGEX = re.compile(
+    "|".join(TRAINER_QUERY_PATTERNS), flags=re.IGNORECASE
 )
 
 # System prompt base do chatbot
@@ -369,11 +387,18 @@ class RAGChain:
         """
         # Formatar perfil do aluno
         profile = user_context.get("user_profile", {})
+        trainer = user_context.get("personal_trainer")
+        trainer_line = (
+            f"\nPersonal Trainer: {trainer.get('name')}"
+            if trainer and trainer.get("name")
+            else "\nPersonal Trainer: ainda não vinculado"
+        )
         user_profile_str = (
             f"Nome: {profile.get('name', 'Aluno')}\n"
             f"Nível: {profile.get('level', 'não informado')}\n"
             f"Objetivo: {profile.get('objective', 'não informado')}\n"
             f"Role: {profile.get('role', 'client')}"
+            f"{trainer_line}"
         ) if profile else "Nível e objetivo não informados."
 
         # Formatar ficha ativa
@@ -637,6 +662,34 @@ class RAGChain:
                 latency_ms=latency_ms,
                 confidence_score=1.0,
                 model_used="greeting_fallback",
+            )
+
+        # ── 0.5. FAST-PATH "QUEM É MEU PERSONAL?" ─────────────────────────
+        # Pergunta direta sobre o personal trainer vinculado é respondida
+        # deterministicamente a partir do user_context (preenchido pelo
+        # ChatService a partir de User.trainer_id). Evita uma chamada
+        # desnecessária ao LLM e garante consistência.
+        if _TRAINER_QUERY_REGEX.search(query):
+            trainer = (user_context or {}).get("personal_trainer")
+            if trainer and trainer.get("name"):
+                answer = (
+                    f"Seu Personal Trainer é o(a) {trainer['name']}. Você "
+                    "pode falar com ele(a) pelo aplicativo ou na recepção "
+                    "da academia."
+                )
+            else:
+                answer = (
+                    "Você ainda não tem um Personal Trainer vinculado no "
+                    "sistema. Procure a recepção para fazer essa associação."
+                )
+            latency_ms = int((time.monotonic() - start_time) * 1000)
+            return RAGResult(
+                answer=answer,
+                retrieved_documents=[],
+                should_escalate=False,
+                latency_ms=latency_ms,
+                confidence_score=1.0,
+                model_used="trainer_lookup",
             )
 
         # ── 1. RETRIEVE ────────────────────────────────────────────────────
