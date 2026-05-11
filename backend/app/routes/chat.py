@@ -12,6 +12,7 @@ Rotas:
     GET    /api/v1/chat/admin/escalated
     POST   /api/v1/chat/admin/knowledge-base
     GET    /api/v1/chat/admin/knowledge-base
+    POST   /api/v1/chat/send-audio        (audio food logging)
 
 Camada de roteamento: apenas valida payload, autentica e delega ao ChatController.
 Toda lógica de negócio fica no ChatService (consumido pelo controller).
@@ -24,7 +25,7 @@ import json
 import logging
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, File, Form, HTTPException, status, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -33,6 +34,7 @@ from app.config.settings import settings
 from app.controllers.chat_controller import ChatController
 from app.dependencies.auth import get_current_user, get_user_from_token
 from app.dtos.chat_dto import (
+    AudioFoodResponseDTO,
     ConversationDetailDTO,
     ConversationListResponseDTO,
     CreateKnowledgeDocumentDTO,
@@ -157,6 +159,215 @@ async def send_message_stream(
             "X-Accel-Buffering": "no",
             "Connection": "keep-alive",
         },
+    )
+
+
+@router.post(
+    "/send-audio",
+    response_model=AudioFoodResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Registrar refeição por áudio",
+    description=(
+        "Recebe um arquivo de áudio onde o usuário descreve o que comeu "
+        "(alimento + quantidade em gramas). Transcreve com Groq Whisper, "
+        "identifica o alimento no catálogo TACO via LLM e registra "
+        "automaticamente no diário alimentar do dia."
+    ),
+)
+async def send_audio_message(
+    audio: UploadFile = File(
+        ...,
+        description="Arquivo de áudio (mp3, m4a, wav, webm, ogg — máx 25 MB)",
+    ),
+    conversation_id: str | None = Form(
+        None,
+        description="UUID de conversa existente (opcional — cria nova se omitido)",
+    ),
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> AudioFoodResponseDTO:
+    """
+    Fluxo:
+    1. Transcreve o áudio com Groq Whisper (pt-BR)
+    2. LLM extrai alimento, quantidade e refeição do texto
+    3. Busca no catálogo TACO e escolhe o melhor match
+    4. Registra no DietLogbook do dia com snapshot de macros
+    5. Salva mensagem na conversa do chatbot e retorna confirmação
+    """
+    from datetime import datetime, timezone
+    from uuid import uuid4
+
+    from app.ai.audio_transcriber import (
+        AudioFormatError,
+        AudioTooLargeError,
+        AudioTranscriptionError,
+        audio_transcriber,
+    )
+    from app.ai.food_parser import (
+        FoodNotFoundError,
+        FoodParseError,
+        QuantityNotFoundError,
+        food_parser,
+    )
+    from app.dtos.diet_logbook_dto import AddLogbookEntryDTO
+    from app.models.chatbot import ChatConversation, ChatMessage
+    from app.services.diet_logbook_service import DietLogbookService
+
+    # ── 1. Ler o arquivo de áudio ─────────────────────────────────────────
+    audio_bytes = await audio.read()
+
+    # ── 2. Transcrição (Groq Whisper) ─────────────────────────────────────
+    try:
+        transcription = await audio_transcriber.transcribe(
+            audio_bytes=audio_bytes,
+            filename=audio.filename or "audio.m4a",
+            content_type=audio.content_type or "audio/m4a",
+        )
+    except AudioTooLargeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": "AUDIO_TOO_LARGE", "message": str(exc)},
+        )
+    except AudioFormatError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": "AUDIO_FORMAT_ERROR", "message": str(exc)},
+        )
+    except AudioTranscriptionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "TRANSCRIPTION_FAILED", "message": str(exc)},
+        )
+
+    if not transcription:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "TRANSCRIPTION_FAILED", "message": "Áudio inaudível ou sem conteúdo."},
+        )
+
+    # ── 3. Parser de refeição (LLM + TACO) ───────────────────────────────
+    try:
+        parse_result = await food_parser.parse(transcription, session)
+    except QuantityNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "QUANTITY_NOT_FOUND", "message": str(exc)},
+        )
+    except FoodNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "FOOD_NOT_FOUND", "message": str(exc)},
+        )
+    except FoodParseError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "PARSE_ERROR", "message": str(exc)},
+        )
+
+    # ── 4. Registrar no DietLogbook ───────────────────────────────────────
+    logbook_service = DietLogbookService(session)
+    entry_dto = AddLogbookEntryDTO(
+        meal_name=parse_result.meal_name,
+        food_id=parse_result.catalog_item.id,
+        quantity_g=parse_result.quantity_g,
+    )
+    logbook_entry = await logbook_service.add_entry(
+        user_id=current_user.id,
+        dto=entry_dto,
+    )
+
+    # ── 5. Montar mensagem de confirmação do Vitali ───────────────────────
+    food_name_display = parse_result.catalog_item.name
+    qty = parse_result.quantity_g
+    meal = parse_result.meal_name
+    vitali_message = (
+        f"✅ Registrei **{qty:.0f}g de {food_name_display}** no seu {meal}!\n\n"
+        f"📊 Macros adicionados:\n"
+        f"• Calorias: {logbook_entry.kcal:.0f} kcal\n"
+        f"• Proteínas: {logbook_entry.protein:.1f}g\n"
+        f"• Carboidratos: {logbook_entry.carbs:.1f}g\n"
+        f"• Gorduras: {logbook_entry.fats:.1f}g\n\n"
+        f"💡 Você também pode perguntar: qual é meu total de calorias de hoje?"
+    )
+
+    # ── 6. Salvar na conversa do chatbot ──────────────────────────────────
+    conv_id: UUID | None = None
+    if conversation_id:
+        try:
+            conv_id = UUID(conversation_id)
+        except ValueError:
+            pass
+
+    # Get-or-create conversa
+    if conv_id:
+        from sqlalchemy import select as sa_select
+        stmt = sa_select(ChatConversation).where(
+            ChatConversation.id == conv_id,
+            ChatConversation.user_id == current_user.id,
+        )
+        result = await session.execute(stmt)
+        conversation = result.scalar_one_or_none()
+    else:
+        conversation = None
+
+    if conversation is None:
+        conversation = ChatConversation(
+            user_id=current_user.id,
+            channel="app",
+            status="active",
+        )
+        session.add(conversation)
+        await session.flush()
+
+    # Mensagem do usuário (transcrição)
+    user_msg = ChatMessage(
+        conversation_id=conversation.id,
+        role="user",
+        content=f"🎤 {transcription}",
+        channel="app",
+    )
+    session.add(user_msg)
+    await session.flush()
+
+    # Mensagem do assistente (confirmação)
+    assistant_msg = ChatMessage(
+        conversation_id=conversation.id,
+        role="assistant",
+        content=vitali_message,
+        channel="app",
+        model_used="food_logging",
+        context_data={
+            "food_logged": {
+                "food_id": parse_result.catalog_item.id,
+                "food_name": food_name_display,
+                "quantity_g": qty,
+                "meal_name": meal,
+                "logbook_entry_id": str(logbook_entry.id),
+            }
+        },
+    )
+    session.add(assistant_msg)
+    await session.commit()
+    await session.refresh(assistant_msg)
+
+    # ── 7. Resposta ───────────────────────────────────────────────────────
+    return AudioFoodResponseDTO(
+        message_id=str(assistant_msg.id),
+        conversation_id=str(conversation.id),
+        transcription=transcription,
+        content=vitali_message,
+        food_logged={
+            "food_name": food_name_display,
+            "quantity_g": qty,
+            "meal_name": meal,
+            "kcal": logbook_entry.kcal,
+            "protein": logbook_entry.protein,
+            "carbs": logbook_entry.carbs,
+            "fats": logbook_entry.fats,
+            "logbook_entry_id": str(logbook_entry.id),
+        },
+        parse_confidence=parse_result.confidence,
+        created_at=assistant_msg.created_at.isoformat() + "Z",
     )
 
 
