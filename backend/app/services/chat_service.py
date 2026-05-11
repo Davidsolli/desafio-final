@@ -440,7 +440,7 @@ class ChatService:
 
         # 1. Sanitizar e validar
         clean_message = self.sanitize_input(message)
-        if len(message) > MAX_MESSAGE_LENGTH:
+        if len(clean_message) > MAX_MESSAGE_LENGTH:
             raise MessageTooLongError(
                 f"Mensagem excede {MAX_MESSAGE_LENGTH} caracteres."
             )
@@ -779,7 +779,7 @@ class ChatService:
             raise ValueError(f"channel inválido: {channel!r}")
 
         clean_message = self.sanitize_input(message)
-        if len(message) > MAX_MESSAGE_LENGTH:
+        if len(clean_message) > MAX_MESSAGE_LENGTH:
             raise MessageTooLongError(f"Mensagem excede {MAX_MESSAGE_LENGTH} caracteres.")
 
         await self._check_rate_limit(user_id)

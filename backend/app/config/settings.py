@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     # ── RAG Melhorias ──────────────────────────────────────────────────────
     RAG_HYBRID_SEARCH: bool = True              # BM25 (PostgreSQL FTS) + vetorial com RRF
     RAG_HYBRID_FETCH_K: int = 10               # Candidatos extras antes do re-ranking
-    RAG_QUERY_REWRITE: bool = True             # LLM reformula query antes do RETRIEVE
+    RAG_QUERY_REWRITE: bool = False            # LLM reformula query (desligado: +1 chamada Groq)
     RAG_RERANK_ENABLED: bool = True            # Cross-encoder após RETRIEVE
     RAG_RERANK_MODEL: str = "cross-encoder/ms-marco-MiniLM-L-2-v2"  # Configurável via env
 

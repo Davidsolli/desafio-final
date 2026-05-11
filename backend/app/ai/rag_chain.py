@@ -299,7 +299,7 @@ class RAGChain:
 
         if settings.RAG_RERANK_ENABLED:
             try:
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
                 cross_encoder = self._get_cross_encoder()
                 await loop.run_in_executor(
                     None, cross_encoder.predict, [("warmup query", "warmup doc")]
@@ -455,14 +455,14 @@ class RAGChain:
                     id::text AS doc_id,
                     ROW_NUMBER() OVER (
                         ORDER BY ts_rank(
-                            to_tsvector('simple', title || ' ' || content),
-                            plainto_tsquery('simple', :query_text)
+                            to_tsvector('portuguese', title || ' ' || content),
+                            plainto_tsquery('portuguese', :query_text)
                         ) DESC
                     ) AS trank
                 FROM knowledge_base
                 WHERE is_active = true {academy_filter}
-                  AND to_tsvector('simple', title || ' ' || content)
-                          @@ plainto_tsquery('simple', :query_text)
+                  AND to_tsvector('portuguese', title || ' ' || content)
+                          @@ plainto_tsquery('portuguese', :query_text)
                 LIMIT :fetch_k
             ),
             rrf AS (
@@ -506,9 +506,13 @@ class RAGChain:
             logger.warning("Hybrid search falhou, caindo para vector puro: %s", exc)
             return await self._retrieve_vector(query, session, academy_id, top_k)
 
-        # Threshold mais permissivo que o vector puro para permitir que o
-        # reranker selecione candidatos de text-search com vscore baixo
-        min_vscore = MIN_RELEVANCE_SCORE / 2  # 0.35
+        # Quando o reranker está ativo, usamos threshold permissivo para
+        # deixar o cross-encoder filtrar. Sem reranker, voltamos ao threshold
+        # original para não inundar o augment() com documentos de baixa
+        # relevância semântica.
+        min_vscore = (
+            MIN_RELEVANCE_SCORE / 2 if settings.RAG_RERANK_ENABLED else MIN_RELEVANCE_SCORE
+        )
 
         docs: list[RetrievedDocument] = []
         for row in rows:
@@ -577,7 +581,7 @@ class RAGChain:
         pairs = [(query, doc.content[:400]) for doc in docs]
 
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             scores = await loop.run_in_executor(None, cross_encoder.predict, pairs)
             scores_list: list[float] = (
                 scores.tolist() if hasattr(scores, "tolist") else list(scores)
@@ -875,12 +879,14 @@ class RAGChain:
         session: AsyncSession,
         academy_id: str | None,
         user_context: dict[str, Any],
-        conversation_history: list[dict[str, str]],
         start_time: float,
     ) -> dict[str, Any] | RAGResult:
         """
         Executa os passos compartilhados entre run() e run_stream():
         fast-paths, query rewrite, retrieve híbrido e rerank.
+
+        conversation_history não é passado aqui pois só é consumido em
+        augment(), chamado nos callers run() e run_stream() depois deste setup.
 
         Returns:
             dict com campos intermediários para continuar o pipeline, OU
@@ -1001,7 +1007,7 @@ class RAGChain:
         logger.info("RAG pipeline iniciado | query=%r", query[:100])
 
         setup = await self._run_pipeline_setup(
-            query, session, academy_id, user_context, conversation_history, start_time
+            query, session, academy_id, user_context, start_time
         )
 
         # Se setup retornou um RAGResult já pronto (fast-path), devolve direto
@@ -1113,7 +1119,7 @@ class RAGChain:
         yield {"type": "status", "status": "thinking", "message": "Analisando sua pergunta..."}
 
         setup = await self._run_pipeline_setup(
-            query, session, academy_id, user_context, conversation_history, start_time
+            query, session, academy_id, user_context, start_time
         )
 
         # Fast-path retornou RAGResult pronto — emite como "done" sem chunks
@@ -1144,12 +1150,43 @@ class RAGChain:
             query, retrieved_docs, user_context, conversation_history
         )
 
-        # ── 3. GENERATE STREAM ─────────────────────────────────────────────
+        # ── 3. GENERATE STREAM (com timeout via task + queue) ─────────────
+        # asyncio.wait_for() não funciona nativamente em async generators;
+        # usamos uma fila com produtor cancelável para aplicar o mesmo
+        # CHAT_MAX_RESPONSE_LATENCY_MS do pipeline blocking.
+        timeout_seconds = settings.CHAT_MAX_RESPONSE_LATENCY_MS / 1000
+        chunk_queue: asyncio.Queue[str | BaseException | None] = asyncio.Queue()
+
+        async def _produce_chunks() -> None:
+            try:
+                async for chunk in self.generate_stream(system_prompt, query):
+                    await chunk_queue.put(chunk)
+                await chunk_queue.put(None)  # sentinel: stream finalizado
+            except Exception as exc:
+                await chunk_queue.put(exc)
+
+        producer = asyncio.create_task(_produce_chunks())
         full_answer = ""
+        timed_out = False
+        deadline = time.monotonic() + timeout_seconds
+
         try:
-            async for chunk in self.generate_stream(system_prompt, query):
-                full_answer += chunk
-                yield {"type": "chunk", "content": chunk}
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    timed_out = True
+                    break
+                try:
+                    item = await asyncio.wait_for(chunk_queue.get(), timeout=remaining)
+                except asyncio.TimeoutError:
+                    timed_out = True
+                    break
+                if item is None:  # sentinel
+                    break
+                if isinstance(item, BaseException):
+                    raise item
+                full_answer += item
+                yield {"type": "chunk", "content": item}
         except Exception as exc:
             logger.error("Falha no streaming: %s", exc)
             latency_ms = int((time.monotonic() - start_time) * 1000)
@@ -1159,6 +1196,33 @@ class RAGChain:
                 "retrieved_documents": [],
                 "should_escalate": True,
                 "escalation_reason": "generation_error",
+                "model_used": "",
+                "tokens_used": 0,
+                "latency_ms": latency_ms,
+                "confidence_score": 0.0,
+                "query_rewritten": effective_query,
+            }
+            return
+        finally:
+            if not producer.done():
+                producer.cancel()
+                try:
+                    await producer
+                except (asyncio.CancelledError, Exception):
+                    pass
+
+        if timed_out and not full_answer:
+            logger.warning(
+                "Streaming excedeu %dms sem tokens — escalar com timeout",
+                settings.CHAT_MAX_RESPONSE_LATENCY_MS,
+            )
+            latency_ms = int((time.monotonic() - start_time) * 1000)
+            yield {
+                "type": "done",
+                "answer": ESCALATION_MESSAGES["timeout"],
+                "retrieved_documents": [],
+                "should_escalate": True,
+                "escalation_reason": "timeout",
                 "model_used": "",
                 "tokens_used": 0,
                 "latency_ms": latency_ms,
@@ -1181,6 +1245,16 @@ class RAGChain:
         )
         latency_ms = int((time.monotonic() - start_time) * 1000)
 
+        # Estimativa de tokens (4 chars ≈ 1 token para pt-BR).
+        # O Groq não expõe contagem de tokens em modo streaming;
+        # esta estimativa serve para analytics e dashboards de custo.
+        estimated_tokens = max(1, len(full_answer) // 4)
+        logger.debug(
+            "RAG stream tokens (estimado): ~%d | latency_ms=%d",
+            estimated_tokens,
+            latency_ms,
+        )
+
         logger.info(
             "RAG stream concluído | docs=%d | escalate=%s | latency_ms=%d",
             len(retrieved_docs),
@@ -1195,7 +1269,7 @@ class RAGChain:
             "should_escalate": should_escalate,
             "escalation_reason": escalation_reason,
             "model_used": settings.GROQ_MODEL,
-            "tokens_used": 0,  # streaming não expõe contagem de tokens
+            "tokens_used": estimated_tokens,
             "latency_ms": latency_ms,
             "confidence_score": round(confidence, 4),
             "query_rewritten": effective_query,
