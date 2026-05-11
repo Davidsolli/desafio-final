@@ -9,6 +9,7 @@ import '../../services/api_client.dart';
 import '../../services/home_service.dart';
 import '../../providers/home_provider.dart';
 import '../../shared/widgets/index.dart';
+import 'widgets/step_summary_card.dart';
 
 // HomeScreen creates and injects HomeProvider locally so main.dart stays
 // untouched. The provider is scoped to this route and disposed with it.
@@ -76,6 +77,11 @@ class _HomeBody extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: _buildStatsRow(context, data),
+                  ),
+                  const SizedBox(height: 12),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16),
+                    child: StepSummaryCard(),
                   ),
                   const SizedBox(height: 12),
                   Padding(

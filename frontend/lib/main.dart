@@ -15,6 +15,7 @@ import 'services/workout_sheet_service.dart';
 import 'services/invitation_service.dart';
 import 'services/admin_service.dart';
 import 'services/chat_service.dart';
+import 'services/step_service.dart';
 import 'providers/auth_provider.dart';
 import 'providers/user_provider.dart';
 import 'providers/goal_provider.dart';
@@ -23,6 +24,7 @@ import 'providers/nutrition_provider.dart';
 import 'providers/workout_sheet_provider.dart';
 import 'providers/invitation_provider.dart';
 import 'providers/admin_provider.dart';
+import 'providers/step_provider.dart';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'services/notification_service.dart';
@@ -126,6 +128,11 @@ class OmniConnectApp extends StatelessWidget {
           update: (_, apiClient, _) => ChatService(apiClient: apiClient),
         ),
 
+        // Step Service (depende de ApiClient)
+        ProxyProvider<ApiClient, StepService>(
+          update: (_, apiClient, _) => StepService(apiClient: apiClient),
+        ),
+
         // Auth Provider (depende de AuthService)
         ChangeNotifierProxyProvider<AuthService, AuthProvider>(
           create: (context) => AuthProvider(
@@ -203,6 +210,16 @@ class OmniConnectApp extends StatelessWidget {
           ),
           update: (_, adminService, previous) {
             return previous ?? AdminProvider(service: adminService);
+          },
+        ),
+
+        // Step Provider (depende de StepService) — sensor de passos
+        ChangeNotifierProxyProvider<StepService, StepProvider>(
+          create: (context) => StepProvider(
+            stepService: context.read<StepService>(),
+          ),
+          update: (_, stepService, previous) {
+            return previous ?? StepProvider(stepService: stepService);
           },
         ),
       ],

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:fl_chart/fl_chart.dart';
 import 'package:go_router/go_router.dart';
 import 'package:animate_do/animate_do.dart';
 import 'package:provider/provider.dart';
@@ -13,6 +14,8 @@ import '../../services/user_service.dart';
 import '../../services/workout_sheet_service.dart';
 import '../../services/dashboard_service.dart';
 import '../../services/api_client.dart';
+import '../../services/step_service.dart';
+import '../../models/step_models.dart';
 import '../../widgets/frequency_bar_chart.dart';
 import '../../widgets/progression_line_chart.dart';
 import '../../shared/widgets/index.dart';
@@ -67,7 +70,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     _tabController.addListener(_handleTabChanged);
 
     // Carrega dados do aluno e fichas via API
@@ -90,6 +93,38 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
     // Garante recarga quando a aba de Evolução for selecionada
     if (_tabController.index == 3 && !_evolutionLoading && _frequencyData.isEmpty) {
       _loadEvolutionData();
+    }
+    // Aba de Passos
+    if (_tabController.index == 4 && !_stepsLoading && _stepHistory == null) {
+      _loadStepHistory();
+    }
+  }
+
+  // ----- Estado da aba de Passos -----
+  StepHistory? _stepHistory;
+  bool _stepsLoading = false;
+  String? _stepsError;
+
+  Future<void> _loadStepHistory() async {
+    setState(() {
+      _stepsLoading = true;
+      _stepsError = null;
+    });
+    try {
+      final apiClient = context.read<ApiClient>();
+      final stepService = StepService(apiClient: apiClient);
+      final history = await stepService.getStudentHistory(widget.studentId);
+      if (!mounted) return;
+      setState(() {
+        _stepHistory = history;
+        _stepsLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _stepsError = 'Erro ao carregar histórico de passos: $e';
+        _stepsLoading = false;
+      });
     }
   }
 
@@ -800,7 +835,9 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                   Tab(icon: Icon(Icons.fitness_center), text: 'Treinos'),
                   Tab(icon: Icon(Icons.restaurant_outlined), text: 'Nutrição'),
                   Tab(icon: Icon(Icons.trending_up), text: 'Evolução'),
+                  Tab(icon: Icon(Icons.directions_walk), text: 'Passos'),
                 ],
+                isScrollable: true,
                 labelColor: AppColors.primary,
                 unselectedLabelColor: context.colors.textMuted,
                 indicatorColor: AppColors.primary,
@@ -814,6 +851,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                   _buildWorkoutsTab(),
                   _buildNutritionTab(),
                   _buildEvolutionTab(),
+                  _buildStepsTab(),
                 ],
               ),
             ),
@@ -2693,6 +2731,285 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
             .toList(),
       ),
     );
+  }
+
+  // ----- Aba de Passos -----
+
+  Widget _buildStepsTab() {
+    if (_stepsLoading) {
+      return const OmniLoader();
+    }
+    if (_stepsError != null) {
+      return OmniErrorState(
+        message: _stepsError!,
+        onRetry: _loadStepHistory,
+      );
+    }
+    final history = _stepHistory;
+    if (history == null || history.logs.isEmpty) {
+      return OmniEmptyState(
+        icon: Icons.directions_walk,
+        title: 'Sem registros de passos',
+        subtitle: 'Este aluno ainda não sincronizou nenhum dia.',
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadStepHistory,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildStepsSummary(history),
+            const SizedBox(height: 16),
+            Text(
+              'Série histórica (últimos 30 dias)',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            const SizedBox(height: 12),
+            _buildStepsLineChart(history),
+            const SizedBox(height: 24),
+            Text(
+              'Histórico',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            const SizedBox(height: 12),
+            ..._sortLogsDesc(history.logs).take(30).map(_buildStepRow),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStepsSummary(StepHistory history) {
+    return Row(
+      children: [
+        Expanded(
+          child: _summaryCell(
+            label: 'Semana atual',
+            value: _formatThousands(history.currentWeekTotal),
+            color: AppColors.primary,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _summaryCell(
+            label: 'Recorde semanal',
+            value: _formatThousands(history.weeklyBest),
+            color: history.isNewWeekRecord
+                ? AppColors.accentSuccess
+                : context.colors.textPrimary,
+            badge: history.isNewWeekRecord ? '🏆' : null,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _summaryCell({
+    required String label,
+    required String value,
+    required Color color,
+    String? badge,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: context.colors.surface,
+        border: Border.all(color: context.colors.border),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                label,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: context.colors.textSecondary,
+                    ),
+              ),
+              if (badge != null) ...[
+                const SizedBox(width: 4),
+                Text(badge, style: const TextStyle(fontSize: 12)),
+              ],
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStepsLineChart(StepHistory history) {
+    final logs = List<StepLog>.from(history.logs)
+      ..sort((a, b) => a.date.compareTo(b.date));
+
+    if (logs.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final spots = List<FlSpot>.generate(
+      logs.length,
+      (i) => FlSpot(i.toDouble(), logs[i].steps.toDouble()),
+    );
+    final maxY = logs.fold<int>(0, (m, l) => l.steps > m ? l.steps : m);
+    final yMax = maxY > 0 ? maxY * 1.15 : 1000.0;
+
+    return Container(
+      height: 220,
+      padding: const EdgeInsets.fromLTRB(12, 16, 16, 8),
+      decoration: BoxDecoration(
+        color: context.colors.surface,
+        border: Border.all(color: context.colors.border),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: LineChart(
+        LineChartData(
+          maxY: yMax.toDouble(),
+          minY: 0,
+          lineBarsData: [
+            LineChartBarData(
+              spots: spots,
+              isCurved: true,
+              color: AppColors.primary,
+              barWidth: 2.5,
+              dotData: const FlDotData(show: false),
+              belowBarData: BarAreaData(
+                show: true,
+                color: AppColors.primary.withValues(alpha: 0.15),
+              ),
+            ),
+          ],
+          titlesData: FlTitlesData(
+            topTitles: const AxisTitles(
+                sideTitles: SideTitles(showTitles: false)),
+            rightTitles: const AxisTitles(
+                sideTitles: SideTitles(showTitles: false)),
+            bottomTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                reservedSize: 28,
+                interval: (logs.length / 6).ceilToDouble().clamp(1.0, 10.0),
+                getTitlesWidget: (value, meta) {
+                  final idx = value.toInt();
+                  if (idx < 0 || idx >= logs.length) {
+                    return const SizedBox.shrink();
+                  }
+                  final d = logs[idx].date;
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      '${d.day}/${d.month}',
+                      style: const TextStyle(fontSize: 9),
+                    ),
+                  );
+                },
+              ),
+            ),
+            leftTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                reservedSize: 40,
+                getTitlesWidget: (value, meta) {
+                  if (value == 0) return const SizedBox.shrink();
+                  final v = value.toInt();
+                  return Text(
+                    v >= 1000 ? '${(v / 1000).toStringAsFixed(0)}k' : '$v',
+                    style: const TextStyle(fontSize: 9),
+                  );
+                },
+              ),
+            ),
+          ),
+          gridData: const FlGridData(show: true, drawVerticalLine: false),
+          borderData: FlBorderData(show: false),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStepRow(StepLog log) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: context.colors.surface,
+        border: Border.all(color: context.colors.border),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _formatDate(log.date),
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+                Text(
+                  '${log.distanceKm.toStringAsFixed(2)} km',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: context.colors.textSecondary,
+                      ),
+                ),
+              ],
+            ),
+          ),
+          Text(
+            _formatThousands(log.steps),
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+          ),
+          if (log.isWeekRecord) ...[
+            const SizedBox(width: 6),
+            const Text('🏆'),
+          ],
+        ],
+      ),
+    );
+  }
+
+  static List<StepLog> _sortLogsDesc(List<StepLog> logs) {
+    final list = List<StepLog>.from(logs);
+    list.sort((a, b) => b.date.compareTo(a.date));
+    return list;
+  }
+
+  static String _formatThousands(int n) {
+    final s = n.toString();
+    final buf = StringBuffer();
+    for (int i = 0; i < s.length; i++) {
+      if (i > 0 && (s.length - i) % 3 == 0) buf.write('.');
+      buf.write(s[i]);
+    }
+    return buf.toString();
+  }
+
+  static String _formatDate(DateTime d) {
+    const months = [
+      'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun',
+      'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez',
+    ];
+    return '${d.day.toString().padLeft(2, '0')} ${months[d.month - 1]} ${d.year}';
   }
 }
 

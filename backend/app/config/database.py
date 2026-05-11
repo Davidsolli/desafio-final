@@ -73,6 +73,7 @@ async def init_db() -> None:
     from app.models.invitation import Invitation  # noqa: F401 — registra Invitation
     from app.models.whatsapp_pre_registration import WhatsAppPreRegistration  # noqa: F401
     import app.models.notification  # noqa: F401 — registra NotificationPreference, NotificationLog, WorkoutReminderSchedule
+    import app.models.step_log  # noqa: F401 — registra StepLog
 
     logger = logging.getLogger(__name__)
 
