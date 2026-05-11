@@ -159,11 +159,34 @@ class _LoginScreenState extends State<LoginScreen> {
                         alignment: Alignment.centerRight,
                         child: TextButton(
                           onPressed: () => context.go(AppRoutes.forgotPassword),
-                          child: Text(
-                            'Esqueci minha senha',
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: context.colors.primary,
-                                ),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.lock_reset_outlined,
+                                size: 16,
+                                color: context.colors.primary,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Esqueci minha senha',
+                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                      color: context.colors.primary,
+                                      fontWeight: FontWeight.w500,
+                                      decoration: TextDecoration.underline,
+                                      decorationColor: context.colors.primary,
+                                    ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
