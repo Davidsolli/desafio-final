@@ -463,6 +463,135 @@ KNOWLEDGE_DOCUMENTS: list[dict[str, Any]] = [
         ),
         "category": "sistema",
     },
+    # ── métricas ─────────────────────────────────────────────────────────────
+    {
+        "title": "Sistema: IMC — Tabela OMS e Interpretação",
+        "content": (
+            "O Índice de Massa Corporal (IMC) é calculado dividindo o peso (kg) "
+            "pela altura ao quadrado (m²). Classificação segundo a OMS: "
+            "abaixo de 18,5 = Abaixo do peso; 18,5–24,9 = Peso normal; "
+            "25,0–29,9 = Sobrepeso; 30,0–34,9 = Obesidade grau I; "
+            "35,0–39,9 = Obesidade grau II; 40,0 ou mais = Obesidade grau III. "
+            "Para praticantes de musculação com massa muscular elevada, o IMC pode "
+            "superestimar a gordura corporal — nesses casos, percentual de gordura "
+            "e circunferências são indicadores mais precisos. "
+            "Exemplo: 70 kg / (1,80)² = 70 / 3,24 ≈ 21,6 (Peso normal)."
+        ),
+        "category": "sistema",
+    },
+    {
+        "title": "Sistema: Frequência Cardíaca Máxima e Zonas de Treino",
+        "content": (
+            "A FC máxima estimada é calculada pela fórmula: FCmáx = 220 − idade. "
+            "As 5 zonas de treino são definidas como percentuais da FCmáx: "
+            "Zona 1 (50–60%): aquecimento e recuperação ativa; "
+            "Zona 2 (60–70%): queima de gordura e resistência aeróbica de base; "
+            "Zona 3 (70–80%): melhora cardiovascular e limiar aeróbico; "
+            "Zona 4 (80–90%): limiar anaeróbico, melhora de performance; "
+            "Zona 5 (90–100%): esforço máximo, sprints curtos. "
+            "Exemplo para 22 anos: FCmáx = 198 bpm. Zona 2 = 119–139 bpm. "
+            "Para treino de hipertrofia, o objetivo não é atingir zonas altas; "
+            "o cardio complementar costuma ficar nas zonas 2–3."
+        ),
+        "category": "sistema",
+    },
+    {
+        "title": "Sistema: Gasto Calórico Estimado por Tipo de Exercício",
+        "content": (
+            "O gasto calórico depende do peso corporal, intensidade e duração. "
+            "Estimativas aproximadas para 70 kg em 30 minutos de atividade: "
+            "Musculação moderada: 130–180 kcal; "
+            "Musculação intensa (alta carga): 180–250 kcal; "
+            "Corrida em esteira a 10 km/h: 280–340 kcal; "
+            "Bicicleta ergométrica moderada: 200–260 kcal; "
+            "HIIT (intervalado de alta intensidade): 300–400 kcal; "
+            "Caminhada em esteira 5 km/h: 130–160 kcal. "
+            "Para estimar com mais precisão, utilize a fórmula MET × peso (kg) × horas. "
+            "Musculação tem MET entre 3 e 6; corrida entre 8 e 12."
+        ),
+        "category": "sistema",
+    },
+    {
+        "title": "Sistema: Tempo de Descanso Entre Séries por Objetivo",
+        "content": (
+            "O tempo de descanso entre séries impacta diretamente a qualidade do treino. "
+            "Recomendações por objetivo: "
+            "Força máxima (1–5 repetições, cargas altas): 3–5 minutos — necessário "
+            "para restaurar ATP e fosfocreatina. "
+            "Hipertrofia (6–12 repetições, carga moderada-alta): 60–120 segundos — "
+            "equilibra estímulo metabólico e recuperação neuromuscular. "
+            "Resistência muscular (13+ repetições, carga baixa-moderada): 30–60 segundos — "
+            "mantém estresse metabólico e densidade do treino. "
+            "Circuitos e HIIT: 15–45 segundos entre exercícios, 1–2 minutos entre rodadas. "
+            "Descansar menos não é necessariamente melhor — comprometer a carga prejudica o estímulo."
+        ),
+        "category": "sistema",
+    },
+    {
+        "title": "Nutrição: Ingestão de Proteína Diária por Objetivo",
+        "content": (
+            "A proteína é o macronutriente central para preservação e ganho de massa muscular. "
+            "Recomendações gerais por objetivo (em gramas por kg de peso corporal/dia): "
+            "Sedentário (saúde geral): 0,8 g/kg — referência mínima da OMS. "
+            "Perda de peso com preservação muscular: 1,6–2,2 g/kg. "
+            "Hipertrofia (ganho de massa): 1,6–2,2 g/kg; evidências indicam pouco benefício "
+            "adicional acima de 2,2 g/kg para a maioria das pessoas. "
+            "Atletas de força avançados: até 2,5 g/kg em fases de ganho intensivo. "
+            "Exemplo: aluno de 70 kg visando hipertrofia → meta de 112–154 g de proteína/dia. "
+            "Fontes: frango, ovos, atum, whey protein, iogurte grego, leguminosas. "
+            "Distribua a ingestão em 4–5 refeições de 25–40 g para maximizar a síntese proteica."
+        ),
+        "category": "nutricao",
+    },
+    {
+        "title": "Sistema: Hidratação Durante o Treino",
+        "content": (
+            "A hidratação adequada mantém a performance e previne cãibras e fadiga precoce. "
+            "Recomendações gerais: "
+            "Pré-treino: beber 400–600 ml de água nas 2 horas anteriores ao exercício. "
+            "Durante o treino: 150–250 ml a cada 15–20 minutos de atividade. "
+            "Pós-treino: repor 150% do peso perdido em suor (pesar antes e depois ajuda). "
+            "Para treinos de até 60 minutos em temperatura moderada, água é suficiente. "
+            "Para treinos acima de 60–90 minutos ou em calor intenso, considerar bebidas "
+            "com eletrólitos (sódio, potássio) para repor o que é perdido no suor. "
+            "Sinal de hidratação adequada: urina clara a amarelo-pálida."
+        ),
+        "category": "sistema",
+    },
+    {
+        "title": "Sistema: Aquecimento e Alongamento — Protocolo Básico",
+        "content": (
+            "O aquecimento prepara o sistema cardiovascular, musculatura e articulações "
+            "para o esforço e reduz risco de lesões. "
+            "Aquecimento geral (5–10 min): caminhada ou corrida leve na esteira, bicicleta "
+            "ergométrica em ritmo suave ou polichinelos. Eleva FC gradualmente. "
+            "Aquecimento específico: 1–2 séries do exercício principal com carga reduzida "
+            "(30–50% da carga de trabalho) antes das séries efetivas. "
+            "Alongamento dinâmico pré-treino: rotações de quadril, leg swing, mobilidade "
+            "de tornozelo e ombro — mantém amplitude sem inibir força. "
+            "Alongamento estático pós-treino: mantenha cada posição por 20–30 segundos. "
+            "Foque nos grupos trabalhados: peitoral, dorsais, posteriores de coxa, quadríceps. "
+            "Não é necessário alongar até sentir dor — sensação de 'tensão confortável' é o alvo."
+        ),
+        "category": "sistema",
+    },
+    {
+        "title": "Periodização: Semana de Deload — Quando e Por Que",
+        "content": (
+            "O deload é uma semana de treino com volume e/ou intensidade reduzidos, "
+            "programado para permitir recuperação sem perda de adaptação. "
+            "Quando fazer: a cada 4–8 semanas de treino intenso, ou sempre que houver "
+            "sinais de overreaching: queda de força, sono ruim, irritabilidade, fadiga "
+            "persistente mesmo após descanso. "
+            "Como fazer: reduzir o volume total em 40–60% (menos séries por exercício) "
+            "mantendo a intensidade (mesma carga), OU reduzir a carga em 20–30% "
+            "mantendo o volume. Ambas as abordagens funcionam. "
+            "O que NÃO fazer: eliminar completamente o treino — o deload não é férias, "
+            "é treino estrategicamente reduzido. "
+            "Resultado: retorno com performance superior na semana seguinte (supercompensação)."
+        ),
+        "category": "periodizacao",
+    },
 ]
 
 

@@ -67,6 +67,19 @@ HEALTH_RISK_KEYWORDS = [
 # Mantido como alias para retrocompatibilidade (alguns testes externos consultam)
 ESCALATION_KEYWORDS = HEALTH_RISK_KEYWORDS + EXPLICIT_REQUEST_KEYWORDS
 
+# Padrões que indicam que o aluno está perguntando sobre seus próprios dados
+# (peso, altura, IMC, metas, progresso etc.). Quando a KB está vazia mas a
+# pergunta é pessoal, o LLM deve responder usando o user_context — não escalar.
+_PERSONAL_INTENT_RE = re.compile(
+    r"\b(meu|minha|meus|minhas)\s+"
+    r"(imc|peso|altura|meta|treino|ficha|dieta|hist[oó]rico|progresso|objetivo|idade)\b"
+    r"|\b(qual|como|quanto)\s+(est[áa]|[eé]|[eé])\s+(meu|minha|o\s+meu|a\s+minha)\b"
+    r"|\b(calcul[ae]|mostr[ae]|ver?|saber?|mostrar?)\s+.{0,20}"
+    r"\s*(imc|peso|altura|meta|progresso)\b"
+    r"|\b(imc|índice\s+de\s+massa\s+corporal)\b",
+    flags=re.IGNORECASE,
+)
+
 # Mensagens contextualizadas por motivo de escalação (Card 19.10)
 ESCALATION_MESSAGES: dict[str, str] = {
     "user_requested": (
@@ -154,6 +167,13 @@ suplementos com dosagem ou recomendações médicas; encaminhe ao Nutricionista.
 com base nos documentos. Reforce a importância do acompanhamento do Personal Trainer.
 9. Quando precisar mencionar a academia, use sempre "FitLoop". Nunca use \
 outros nomes de marca.
+10. Você tem acesso aos dados REAIS do aluno na seção "Perfil do Aluno" abaixo. \
+USE esses dados para personalizar as respostas. Se o aluno perguntar sobre IMC, \
+peso, altura, metas ou histórico de treino — responda usando os dados do contexto. \
+NUNCA diga que não tem as informações se elas estiverem no perfil abaixo. Para \
+cálculos (ex.: IMC = peso / altura²), faça você mesmo usando os valores fornecidos.
+11. Ao final de cada resposta, sugira 1 pergunta relacionada que o aluno pode \
+fazer a seguir. Use o formato: "💡 Você também pode perguntar: [pergunta]"
 
 FAQ (Dúvidas Gerais e Operacionais):
 - Horário: Segunda a sexta, das 06:00 às 23:00, e sábados das 08:00 às 18:00.
@@ -396,11 +416,29 @@ class RAGChain:
             if trainer and trainer.get("name")
             else "\nPersonal Trainer: ainda não vinculado"
         )
+        weight = profile.get("weight")
+        height = profile.get("height")
+        age = profile.get("age")
+        gender = profile.get("gender", "não informado")
+        imc_line = ""
+        if weight and height:
+            imc = round(weight / ((height / 100) ** 2), 1)
+            imc_line = f"\nPeso: {weight} kg | Altura: {height} cm | IMC calculado: {imc}"
+        elif weight:
+            imc_line = f"\nPeso: {weight} kg"
+        elif height:
+            imc_line = f"\nAltura: {height} cm"
+        age_gender_line = ""
+        if age:
+            age_gender_line = f"\nIdade: {age} anos | Sexo: {gender}"
+
         user_profile_str = (
             f"Nome: {profile.get('name', 'Aluno')}\n"
             f"Nível: {profile.get('level', 'não informado')}\n"
             f"Objetivo: {profile.get('objective', 'não informado')}\n"
             f"Role: {profile.get('role', 'client')}"
+            f"{imc_line}"
+            f"{age_gender_line}"
             f"{trainer_line}"
         ) if profile else "Nível e objetivo não informados."
 
@@ -495,6 +533,7 @@ class RAGChain:
         self,
         query: str,
         retrieved_docs: list[RetrievedDocument],
+        user_context: dict[str, Any] | None = None,
     ) -> tuple[bool, str]:
         """
         Verificar se a pergunta deve ser escalada para Personal.
@@ -503,6 +542,7 @@ class RAGChain:
             1. health_risk     — RN-17: menção a risco de saúde
             2. user_requested  — RN-12: pedido explícito por humano
             3. low_confidence  — RN-07: nenhum documento recuperado
+                (exceto quando a pergunta é sobre dados pessoais do aluno)
             4. too_complex     — best score < ESCALATE_THRESHOLD
 
         Returns:
@@ -522,6 +562,14 @@ class RAGChain:
 
         # 3. RAG vazio
         if not retrieved_docs:
+            # Perguntas sobre dados pessoais (IMC, peso, metas...) não precisam
+            # da KB — o LLM responde usando o user_context do perfil do aluno.
+            ctx = user_context or {}
+            has_personal_data = bool(
+                ctx.get("user_profile") or ctx.get("active_goals") or ctx.get("recent_history")
+            )
+            if has_personal_data and _PERSONAL_INTENT_RE.search(query):
+                return False, ""
             return True, "low_confidence"
 
         # 4. Score insuficiente
@@ -700,7 +748,7 @@ class RAGChain:
 
         # ── Verificar necessidade de escalação explícita ANTES de gerar ──────────────
         should_escalate, escalation_reason = self._should_escalate(
-            query, retrieved_docs
+            query, retrieved_docs, user_context
         )
 
         if should_escalate and escalation_reason in {"user_requested", "health_risk"}:
