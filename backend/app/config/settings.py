@@ -37,6 +37,13 @@ class Settings(BaseSettings):
     RAG_LLM_TEMPERATURE: float = 0.3            # RN PRD: temperatura baixa para consistência
     RAG_HISTORY_MAX_TOKENS: int = 80            # RN-05: máximo de tokens do histórico
 
+    # ── RAG Melhorias ──────────────────────────────────────────────────────
+    RAG_HYBRID_SEARCH: bool = True              # BM25 (PostgreSQL FTS) + vetorial com RRF
+    RAG_HYBRID_FETCH_K: int = 10               # Candidatos extras antes do re-ranking
+    RAG_QUERY_REWRITE: bool = False            # LLM reformula query (desligado: +1 chamada Groq)
+    RAG_RERANK_ENABLED: bool = True            # Cross-encoder após RETRIEVE
+    RAG_RERANK_MODEL: str = "cross-encoder/ms-marco-MiniLM-L-2-v2"  # Configurável via env
+
     # ── Chat Service ───────────────────────────────────────────────────────
     CHAT_RATE_LIMIT_MESSAGES: int = 30          # RN-16: max mensagens por hora por usuário
     CHAT_RATE_LIMIT_WINDOW_HOURS: int = 1

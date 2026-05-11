@@ -3,6 +3,7 @@ Endpoints HTTP do Chatbot de Dúvidas.
 
 Rotas:
     POST   /api/v1/chat/send-message
+    POST   /api/v1/chat/send-message/stream   (SSE)
     WS     /api/v1/chat/ws
     GET    /api/v1/chat/conversations
     GET    /api/v1/chat/conversations/{id}
@@ -19,10 +20,12 @@ Toda lógica de negócio fica no ChatService (consumido pelo controller).
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status, WebSocket, WebSocketDisconnect
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.database import get_db
@@ -107,6 +110,54 @@ async def send_message(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Erro interno ao processar mensagem: {exc}",
         )
+
+
+@router.post(
+    "/send-message/stream",
+    status_code=status.HTTP_200_OK,
+    summary="Enviar mensagem ao chatbot com resposta streamada (SSE)",
+    description=(
+        "Envia uma mensagem e recebe a resposta token a token via Server-Sent Events. "
+        "Eventos: 'status' (progresso), 'chunk' (fragmento de texto), 'final' (metadados completos). "
+        "Erros de validação são enviados como eventos do tipo 'error'."
+    ),
+)
+async def send_message_stream(
+    payload: SendMessageDTO,
+    session: AsyncSession = Depends(get_db),
+    user_id: UUID = Depends(get_current_user_id),
+) -> StreamingResponse:
+    service = ChatService(session)
+
+    async def event_generator():
+        try:
+            async for event in service.send_message_stream(
+                user_id=user_id,
+                message=payload.message,
+                conversation_id=payload.conversation_id,
+            ):
+                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+        except RateLimitExceededError as exc:
+            yield f"data: {json.dumps({'type': 'error', 'code': 429, 'error': str(exc)}, ensure_ascii=False)}\n\n"
+        except MessageTooLongError as exc:
+            yield f"data: {json.dumps({'type': 'error', 'code': 422, 'error': str(exc)}, ensure_ascii=False)}\n\n"
+        except UnauthorizedConversationError as exc:
+            yield f"data: {json.dumps({'type': 'error', 'code': 403, 'error': str(exc)}, ensure_ascii=False)}\n\n"
+        except ConversationNotFoundError as exc:
+            yield f"data: {json.dumps({'type': 'error', 'code': 404, 'error': str(exc)}, ensure_ascii=False)}\n\n"
+        except Exception as exc:
+            logger.error("Erro no stream SSE: %s", exc)
+            yield f"data: {json.dumps({'type': 'error', 'code': 500, 'error': 'Erro interno ao processar mensagem'}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
 
 
 @router.websocket("/ws")
