@@ -146,6 +146,31 @@ async def init_db() -> None:
             except Exception:
                 pass  # tabela ainda não existe ou coluna já é TIMESTAMPTZ
 
+        # Migração: contexto da escalação na conversa de chat (chatbot Etapa 3)
+        try:
+            await conn.execute(
+                text(
+                    "ALTER TABLE chat_conversations "
+                    "ADD COLUMN IF NOT EXISTS escalation_data JSON"
+                )
+            )
+            logger.info("✓ Coluna escalation_data verificada/adicionada em chat_conversations")
+        except Exception as exc:
+            logger.warning(
+                "Erro ao adicionar escalation_data em chat_conversations: %s", exc
+            )
+
+    # 4. Migração manual: Adicionar food_name ao logbook entries se não existir
+    # (feita APÓS criar as tabelas, em transação separada)
+    # COMENTADO TEMPORARIAMENTE - será aplicado depois
+    # engine = _get_engine()
+    # async with engine.begin() as conn:
+    #     try:
+    #         await conn.execute(text("ALTER TABLE diet_logbook_entries ADD COLUMN IF NOT EXISTS food_name VARCHAR(255) DEFAULT '';"))
+    #         logger.info("✓ Coluna food_name verificada/adicionada em diet_logbook_entries")
+    #     except Exception as exc:
+    #         logger.warning("Erro na migração manual de diet_logbook_entries: %s", exc)
+
     # Popular Banco de Dados Inicial (Seed)
     import sys
     import os
@@ -173,3 +198,13 @@ async def init_db() -> None:
         logger.info("✓ Seed de usuários e dados de domínio concluída")
     except Exception as exc:
         logger.warning("Erro ao popular dados de domínio iniciais: %s", exc)
+
+    try:
+        from scripts.seed_knowledge_base import seed as seed_knowledge_base
+        inserted = await seed_knowledge_base(force=False)
+        logger.info(
+            "✓ Verificação/Seed da base de conhecimento concluída (%d novos docs)",
+            inserted,
+        )
+    except Exception as exc:
+        logger.warning("Erro ao popular base de conhecimento: %s", exc)
