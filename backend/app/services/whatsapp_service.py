@@ -36,42 +36,42 @@ _WHATSAPP_API_BASE = "https://graph.facebook.com/v20.0"
 
 _MESSAGES = {
     "welcome": (
-        "Olá! 👋 Sou o assistente do *Fitloop*.\n\n"
+        "Olá! Sou o assistente do *Fitloop*.\n\n"
         "Vou te ajudar a fazer seu pré-cadastro rapidinho. "
         "Qual é o seu *nome completo*?"
     ),
-    "ask_email": "Perfeito, *{name}*! 💪\n\nAgora me passa o seu *email*:",
+    "ask_email": "Perfeito, *{name}*!\n\nAgora me passa o seu *email*:",
     "invalid_email": "Hmm, esse email não parece válido. Tenta de novo:",
     "pending_approval": (
-        "✅ *Pré-cadastro recebido!*\n\n"
+        "*Pré-cadastro recebido!*\n\n"
         "Seus dados foram enviados para análise. "
-        "Em breve você receberá aqui o seu código de acesso. 🎉"
+        "Em breve você receberá aqui o seu código de acesso."
     ),
     "already_pending": (
-        "Seu pré-cadastro já está em análise! ⏳\n\n"
+        "Seu pré-cadastro já está em análise!\n\n"
         "Assim que aprovado, você receberá o código de acesso aqui mesmo."
     ),
     "approval_code": (
-        "🎉 *Seu cadastro foi aprovado!*\n\n"
+        "*Seu cadastro foi aprovado!*\n\n"
         "Abra o app *Fitloop*, toque em *Tenho código de convite* "
         "e use o código:\n\n"
-        "🔑 *{code}*\n\n"
+        "*{code}*\n\n"
         "Seus dados já vão estar preenchidos. Bem-vindo(a)!"
     ),
     "already_approved": (
-        "Seu cadastro já foi aprovado! 🎉\n\n"
+        "Seu cadastro já foi aprovado!\n\n"
         "Use o código *{code}* no app *Fitloop* para finalizar."
     ),
     "chat_rate_limited": (
-        "Você atingiu o limite de mensagens por hora. ⏳\n"
+        "Você atingiu o limite de mensagens por hora.\n"
         "Tente novamente em breve!"
     ),
     "chat_message_too_long": (
-        "Sua mensagem é muito longa. ✂️\n"
+        "Sua mensagem é muito longa.\n"
         "Tente reformular em até 500 caracteres."
     ),
     "chat_generic_error": (
-        "Tive um problema ao processar sua mensagem. 😔\n"
+        "Tive um problema ao processar sua mensagem.\n"
         "Tente novamente em alguns instantes!"
     ),
 }
