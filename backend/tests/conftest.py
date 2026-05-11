@@ -19,6 +19,7 @@ from main import app as fastapi_app
 from app.config.database import get_db
 from app.models.user import Base, User
 from app.models.invitation import Invitation  # noqa: F401 — registra invitations no Base.metadata
+import app.models.password_reset_token  # noqa: F401 — registra password_reset_tokens no Base.metadata
 import app.models.logbook  # noqa: F401 — garante que workout_sessions/session_exercises entram no Base.metadata
 from app.models.goal import Goal as _Goal, GoalProgressEntry as _GoalProgressEntry  # noqa: F401
 from app.models import workout_sheet  # noqa: F401 — registra workout_sheets/exercises no Base.metadata

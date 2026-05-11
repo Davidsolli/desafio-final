@@ -165,6 +165,32 @@ class AuthService {
     }
   }
 
+  /// Solicita recuperação de senha por email
+  Future<void> forgotPassword({required String email}) async {
+    await _apiClient.post<void>(
+      '/auth/forgot-password',
+      body: {'email': email},
+      fromJson: (_) {},
+    );
+  }
+
+  /// Redefine a senha com o token recebido por email
+  Future<void> resetPassword({
+    required String token,
+    required String newPassword,
+    required String confirmPassword,
+  }) async {
+    await _apiClient.post<void>(
+      '/auth/reset-password',
+      body: {
+        'token': token,
+        'new_password': newPassword,
+        'confirm_password': confirmPassword,
+      },
+      fromJson: (_) {},
+    );
+  }
+
   /// Faz logout limpando o token
   Future<void> logout() async {
     await _apiClient.clearToken();

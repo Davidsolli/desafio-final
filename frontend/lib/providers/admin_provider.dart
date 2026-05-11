@@ -169,6 +169,31 @@ class AdminProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> changePassword({
+    required String userId,
+    required String currentPassword,
+    required String newPassword,
+    required String confirmPassword,
+  }) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+    try {
+      await _service.changePassword(
+        userId: userId,
+        currentPassword: currentPassword,
+        newPassword: newPassword,
+        confirmPassword: confirmPassword,
+      );
+    } catch (e) {
+      _error = e.toString();
+      rethrow;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   int getStudentCountForTrainer(String trainerId) {
     return _trainers
         .firstWhere((t) => t.id == trainerId)

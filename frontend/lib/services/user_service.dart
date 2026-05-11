@@ -127,6 +127,27 @@ class UserService {
     }
   }
 
+  Future<void> changePassword({
+    required String userId,
+    required String currentPassword,
+    required String newPassword,
+    required String confirmPassword,
+  }) async {
+    try {
+      await _apiClient.put<Map<String, dynamic>>(
+        '/users/$userId/password',
+        body: {
+          'current_password': currentPassword,
+          'new_password': newPassword,
+          'confirm_password': confirmPassword,
+        },
+        fromJson: (data) => data as Map<String, dynamic>,
+      );
+    } catch (e) {
+      rethrow;
+    }
+  }
+
   /// Busca lista de alunos do personal trainer autenticado
   Future<List<UserResponse>> getStudents({
     int page = 1,

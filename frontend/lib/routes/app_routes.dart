@@ -3,6 +3,8 @@ import '../screens/auth/splash_screen.dart';
 import '../screens/auth/login_screen.dart';
 import '../screens/auth/register_screen.dart';
 import '../screens/auth/invite_code_screen.dart';
+import '../screens/auth/forgot_password_screen.dart';
+import '../screens/auth/reset_password_screen.dart';
 import '../screens/student/student_shell.dart';
 import '../screens/student/home_screen.dart';
 import '../screens/student/workouts_screen.dart';
@@ -13,6 +15,7 @@ import '../screens/student/goals_screen.dart';
 import '../screens/student/chat_screen.dart';
 import '../screens/student/profile_screen_new.dart';
 import '../screens/notifications_screen.dart';
+import '../screens/notifications_settings_screen.dart';
 import '../screens/trainer/trainer_shell.dart';
 import '../screens/trainer/trainer_home_screen.dart';
 import '../screens/trainer/trainer_students_screen.dart';
@@ -35,6 +38,8 @@ class AppRoutes {
   static const String register = '/register';
   static const String inviteCode = '/invite-code';
   static const String generateInvite = '/trainer/generate-invite';
+  static const String forgotPassword = '/forgot-password';
+  static const String resetPassword = '/reset-password';
 
   // Student
   static const String home = '/home';
@@ -65,6 +70,7 @@ class AppRoutes {
 
   // Shared
   static const String notifications = '/notifications';
+  static const String notificationsSettings = '/notifications-settings';
 
   static final GoRouter router = GoRouter(
     initialLocation: splash,
@@ -88,6 +94,17 @@ class AppRoutes {
       GoRoute(
         path: inviteCode,
         builder: (context, state) => const InviteCodeScreen(),
+      ),
+      GoRoute(
+        path: forgotPassword,
+        builder: (context, state) => const ForgotPasswordScreen(),
+      ),
+      GoRoute(
+        path: resetPassword,
+        builder: (context, state) {
+          final token = state.uri.queryParameters['token'] ?? '';
+          return ResetPasswordScreen(token: token);
+        },
       ),
       GoRoute(
         path: generateInvite,
@@ -133,6 +150,10 @@ class AppRoutes {
       GoRoute(
         path: notifications,
         builder: (context, state) => const NotificationsScreen(),
+      ),
+      GoRoute(
+        path: notificationsSettings,
+        builder: (context, state) => const NotificationsSettingsScreen(),
       ),
       ShellRoute(
         builder: (context, state, child) => TrainerShell(child: child),
