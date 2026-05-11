@@ -18,7 +18,9 @@ RUN apt-get update && apt-get install -y \
 # Isso otimiza o uso do cache do Docker
 COPY requirements.txt .
 
+# Instala torch CPU-only antes dos demais pacotes para evitar baixar a versão CUDA (~2 GB a mais)
 RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu && \
     pip install --no-cache-dir -r requirements.txt
 
 # Copia todo o código fonte para dentro do container
