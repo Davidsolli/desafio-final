@@ -11,7 +11,7 @@ Nota sobre FKs externas:
   - exercise_id → exercises.id: UUID sem FK constraint (PRD_FICHA_TREINO pendente)
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -24,6 +24,10 @@ from sqlalchemy import (
     String,
     Text,
 )
+
+
+def _utc_now():
+    return datetime.now(timezone.utc)
 from sqlalchemy.dialects.postgresql import JSON, UUID as PG_UUID
 from sqlalchemy.orm import relationship
 
@@ -74,7 +78,7 @@ class WorkoutSession(Base):
         index=True,
     )
 
-    session_date = Column(DateTime, nullable=False, index=True)
+    session_date = Column(DateTime(timezone=True), nullable=False, index=True)
 
     status = Column(
         String(20),
@@ -89,20 +93,20 @@ class WorkoutSession(Base):
 
     mood = Column(String(20), nullable=True)
 
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_utc_now)
 
     updated_at = Column(
-        DateTime,
+        DateTime(timezone=True),
         nullable=False,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=_utc_now,
+        onupdate=_utc_now,
     )
 
-    completed_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
 
     # Auditoria — personal que aprovou (futuro)
     approved_by_personal_id = Column(PG_UUID(as_uuid=True), nullable=True)
-    approved_at = Column(DateTime, nullable=True)
+    approved_at = Column(DateTime(timezone=True), nullable=True)
 
     # Relação com exercícios da sessão
     session_exercises = relationship(
@@ -183,12 +187,12 @@ class SessionExercise(Base):
     # Status do exercício
     status = Column(String(20), nullable=False, default="completed")
 
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_utc_now)
     updated_at = Column(
-        DateTime,
+        DateTime(timezone=True),
         nullable=False,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=_utc_now,
+        onupdate=_utc_now,
     )
 
     # Relação reversa com a sessão
