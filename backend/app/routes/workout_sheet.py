@@ -27,6 +27,10 @@ from app.dtos.workout_sheet_dto import (
     PaginatedWorkoutSheetsDTO,
     UpdateWorkoutSheetDTO,
     WorkoutSheetResponseDTO,
+    CreateWorkoutProgramDTO,
+    UpdateWorkoutProgramDTO,
+    WorkoutProgramResponseDTO,
+    PaginatedWorkoutProgramsDTO,
 )
 from app.models.user import User
 from app.services.workout_sheet_service import (
@@ -44,6 +48,15 @@ router = APIRouter(
     },
 )
 
+program_router = APIRouter(
+    prefix="/api/v1/workout-programs",
+    tags=["workout-programs"],
+    responses={
+        401: {"description": "Não autenticado"},
+        500: {"description": "Erro interno do servidor"},
+    },
+)
+
 catalog_router = APIRouter(
     prefix="/api/v1/exercise-catalog",
     tags=["exercise-catalog"],
@@ -54,7 +67,132 @@ catalog_router = APIRouter(
 
 
 # ---------------------------------------------------------------------------
-# POST /workout-sheets — Criar Ficha
+# POST /workout-programs — Criar Programa
+# ---------------------------------------------------------------------------
+
+@program_router.post(
+    "",
+    response_model=WorkoutProgramResponseDTO,
+    status_code=status.HTTP_201_CREATED,
+    summary="Criar programa de treino",
+)
+async def create_workout_program(
+    dto: CreateWorkoutProgramDTO,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> WorkoutProgramResponseDTO:
+    controller = WorkoutSheetController(db)
+    try:
+        return await controller.create_workout_program(
+            requester_id=current_user.id,
+            role=current_user.role,
+            dto=dto,
+        )
+    except WorkoutSheetForbiddenError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erro interno")
+
+
+@program_router.get(
+    "",
+    response_model=PaginatedWorkoutProgramsDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Listar programas de treino",
+)
+async def list_workout_programs(
+    user_id: Optional[UUID] = Query(None),
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> PaginatedWorkoutProgramsDTO:
+    controller = WorkoutSheetController(db)
+    try:
+        return await controller.list_workout_programs(
+            requester_id=current_user.id,
+            role=current_user.role,
+            user_id_filter=user_id,
+            page=page,
+            limit=limit,
+        )
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erro interno")
+
+
+@program_router.get(
+    "/{program_id}",
+    response_model=WorkoutProgramResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Buscar programa por ID",
+)
+async def get_workout_program(
+    program_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> WorkoutProgramResponseDTO:
+    controller = WorkoutSheetController(db)
+    try:
+        return await controller.get_workout_program(
+            program_id=program_id, requester_id=current_user.id, role=current_user.role
+        )
+    except WorkoutSheetNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except WorkoutSheetForbiddenError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erro interno")
+
+
+@program_router.put(
+    "/{program_id}",
+    response_model=WorkoutProgramResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Atualizar programa de treino",
+)
+async def update_workout_program(
+    program_id: UUID,
+    dto: UpdateWorkoutProgramDTO,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> WorkoutProgramResponseDTO:
+    controller = WorkoutSheetController(db)
+    try:
+        return await controller.update_workout_program(
+            program_id=program_id, requester_id=current_user.id, role=current_user.role, dto=dto
+        )
+    except WorkoutSheetNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except WorkoutSheetForbiddenError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erro interno")
+
+
+@program_router.delete(
+    "/{program_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Deletar programa de treino",
+)
+async def delete_workout_program(
+    program_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    controller = WorkoutSheetController(db)
+    try:
+        await controller.delete_workout_program(
+            program_id=program_id, requester_id=current_user.id, role=current_user.role
+        )
+    except WorkoutSheetNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except WorkoutSheetForbiddenError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erro interno")
+
+# ---------------------------------------------------------------------------
+# Fichas (Rotinas) - workout-sheets
 # ---------------------------------------------------------------------------
 
 
@@ -117,8 +255,7 @@ async def create_workout_sheet(
     },
 )
 async def list_workout_sheets(
-    user_id: Optional[UUID] = Query(None, description="Filtrar por aluno (admin/personal)"),
-    day_of_week: Optional[int] = Query(None, ge=0, le=6, description="Filtrar por dia (0=seg … 6=dom)"),
+    workout_program_id: Optional[UUID] = Query(None, description="Filtrar por programa de treino"),
     page: int = Query(1, ge=1, description="Número da página"),
     limit: int = Query(10, ge=1, le=100, description="Itens por página (máx. 100)"),
     current_user: User = Depends(get_current_user),
@@ -126,17 +263,13 @@ async def list_workout_sheets(
 ) -> PaginatedWorkoutSheetsDTO:
     """
     Lista fichas de treino com paginação e filtros opcionais.
-
-    - **Aluno:** vê apenas suas próprias fichas.
-    - **Personal/Admin:** pode filtrar por `user_id` de qualquer aluno.
     """
     controller = WorkoutSheetController(db)
     try:
         return await controller.list_workout_sheets(
             requester_id=current_user.id,
             role=current_user.role,
-            user_id_filter=user_id,
-            day_of_week=day_of_week,
+            workout_program_id=workout_program_id,
             page=page,
             limit=limit,
         )

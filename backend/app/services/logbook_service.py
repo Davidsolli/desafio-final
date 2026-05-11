@@ -20,6 +20,8 @@ from app.dtos.logbook_dto import (
     CreateSessionDTO,
     FrequencyDataPointDTO,
     FrequencyResponseDTO,
+    MuscleGroupDistributionItemDTO,
+    MuscleGroupDistributionResponseDTO,
     PaginatedSessionsDTO,
     ProgressionDataPointDTO,
     ProgressionResponseDTO,
@@ -752,3 +754,40 @@ class LogbookService:
             best = max(groups[key], key=lambda dp: dp.actual_load_kg)
             result.append(best)
         return result
+
+    # ------------------------------------------------------------------
+    # Foco Muscular (Novo)
+    # ------------------------------------------------------------------
+
+    async def get_muscle_group_distribution(
+        self,
+        user_id: UUID,
+        days: int = 30,
+    ) -> MuscleGroupDistributionResponseDTO:
+        """
+        Retorna a distribuição de exercícios concluídos por grupo muscular.
+
+        Args:
+            user_id: ID do aluno
+            days: Janela de dias retroativos (padrão 30)
+        """
+        end_date = datetime.utcnow()
+        start_date = end_date - timedelta(days=days)
+
+        raw_distribution = await self.repository.get_muscle_group_distribution(
+            user_id=user_id,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+        distribution_items = [
+            MuscleGroupDistributionItemDTO(muscle_group=muscle, count=count)
+            for muscle, count in raw_distribution
+        ]
+
+        return MuscleGroupDistributionResponseDTO(
+            user_id=user_id,
+            days=days,
+            distribution=distribution_items,
+        )
+

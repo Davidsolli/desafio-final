@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/theme_colors.dart';
 import '../../../models/workout_sheet_model.dart';
-import '../../../providers/auth_provider.dart';
+
 import '../../../providers/workout_sheet_provider.dart';
 import '../../../services/workout_sheet_service.dart';
 import 'exercise_catalog_picker.dart';
@@ -18,9 +18,9 @@ import 'exercise_catalog_picker.dart';
 /// [targetUserId] - Se fornecido, a ficha será criada para este aluno.
 ///                  Se null, usa o ID do usuário logado (trainer/admin).
 class CreateWorkoutSheetDialog extends StatefulWidget {
-  final String? targetUserId;
+  final String? workoutProgramId;
 
-  const CreateWorkoutSheetDialog({super.key, this.targetUserId});
+  const CreateWorkoutSheetDialog({super.key, this.workoutProgramId});
 
   @override
   State<CreateWorkoutSheetDialog> createState() =>
@@ -57,6 +57,8 @@ class _CreateWorkoutSheetDialogState extends State<CreateWorkoutSheetDialog> {
       setState(() {
         final entry = _ExerciseFormEntry(order: _exercises.length + 1);
         entry.nameController.text = item.name;
+        entry.imageUrl = item.imageUrl;
+        entry.gifUrl = item.gifUrl;
         if (item.muscleGroupMapped != null &&
             validMuscleGroups.contains(item.muscleGroupMapped)) {
           entry.selectedMuscleGroup = item.muscleGroupMapped!;
@@ -71,6 +73,8 @@ class _CreateWorkoutSheetDialogState extends State<CreateWorkoutSheetDialog> {
     if (item != null && mounted) {
       setState(() {
         _exercises[index].nameController.text = item.name;
+        _exercises[index].imageUrl = item.imageUrl;
+        _exercises[index].gifUrl = item.gifUrl;
         if (item.muscleGroupMapped != null &&
             validMuscleGroups.contains(item.muscleGroupMapped)) {
           _exercises[index].selectedMuscleGroup = item.muscleGroupMapped!;
@@ -93,12 +97,12 @@ class _CreateWorkoutSheetDialogState extends State<CreateWorkoutSheetDialog> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final userId = widget.targetUserId ?? context.read<AuthProvider>().user?.id;
-    if (userId == null) {
+    final programId = widget.workoutProgramId;
+    if (programId == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Erro: ID do aluno não encontrado'),
+            content: Text('Erro: ID do programa não fornecido.'),
             backgroundColor: AppColors.accentError,
           ),
         );
@@ -118,17 +122,20 @@ class _CreateWorkoutSheetDialogState extends State<CreateWorkoutSheetDialog> {
         restSeconds: int.tryParse(e.restController.text) ?? 60,
         observations:
             e.obsController.text.isEmpty ? null : e.obsController.text.trim(),
+        imageUrl: e.imageUrl,
+        gifUrl: e.gifUrl,
         order: i + 1,
       );
     }).toList();
 
     final dto = CreateWorkoutSheetDTO(
-      userId: userId,
+      workoutProgramId: programId,
       name: _nameController.text.trim(),
       description: _descriptionController.text.isEmpty
           ? null
           : _descriptionController.text.trim(),
       dayOfWeek: _selectedDayOfWeek,
+      order: 1, // Default order para novas fichas
       exercises: exerciseDTOs,
     );
 
@@ -586,6 +593,8 @@ class _ExerciseFormEntry {
   final TextEditingController restController;
   final TextEditingController obsController;
   String selectedMuscleGroup;
+  String? imageUrl;
+  String? gifUrl;
 
   _ExerciseFormEntry({required this.order})
       : nameController = TextEditingController(),

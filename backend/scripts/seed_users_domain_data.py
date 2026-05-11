@@ -29,7 +29,7 @@ from app.models.food_catalog import FoodCatalog
 from app.models.goal import Goal, GoalProgressEntry
 from app.models.logbook import SessionExercise, WorkoutSession
 from app.models.user import User
-from app.models.workout_sheet import Exercise, WorkoutSheet
+from app.models.workout_sheet import Exercise, WorkoutSheet, WorkoutProgram
 
 logger = logging.getLogger(__name__)
 RNG = random.Random(42)
@@ -236,6 +236,7 @@ async def seed(force: bool = False) -> None:
                 Diet,
                 Exercise,
                 WorkoutSheet,
+                WorkoutProgram,
             ):
                 rows = await session.execute(select(model))
                 for row in rows.scalars().all():
@@ -382,22 +383,45 @@ async def seed(force: bool = False) -> None:
 
         for index, student in enumerate(students):
             trainer = trainers["camila"] if index < 2 else trainers["rafael"]
-            sheet_name = f"Treino Base {student.name.split()[0]}"
-            existing_sheet_result = await session.execute(
-                select(WorkoutSheet).where(
-                    WorkoutSheet.user_id == student.id,
-                    WorkoutSheet.name == sheet_name,
+            
+            program_name = f"Programa Base {student.name.split()[0]}"
+            existing_program_result = await session.execute(
+                select(WorkoutProgram).where(
+                    WorkoutProgram.user_id == student.id,
+                    WorkoutProgram.name == program_name,
                 )
             )
-            sheet = existing_sheet_result.scalars().first()
+            program = existing_program_result.scalars().first()
 
-            if not sheet:
-                sheet = WorkoutSheet(
+            if not program:
+                program = WorkoutProgram(
                     user_id=student.id,
                     personal_trainer_id=trainer.id,
+                    name=program_name,
+                    description="Programa inicial para ciclo de 4 semanas",
+                    goal="Hipertrofia" if student.goal_type == "gain_mass" else "Emagrecimento",
+                    is_active=True,
+                )
+                session.add(program)
+                await session.flush()
+
+            # Garante que sempre temos fichas associadas ao programa
+            sheets_result = await session.execute(
+                select(WorkoutSheet).where(
+                    WorkoutSheet.workout_program_id == program.id,
+                    WorkoutSheet.is_active.is_(True),
+                )
+            )
+            sheets_list = sheets_result.scalars().all()
+
+            if not sheets_list:
+                sheet_name = f"Treino A"
+                sheet = WorkoutSheet(
+                    workout_program_id=program.id,
                     name=sheet_name,
-                    description="Ficha inicial para ciclo de 4 semanas",
+                    description="Ficha base adaptacao",
                     day_of_week=index % 5,
+                    order=1,
                     is_active=True,
                 )
                 session.add(sheet)
@@ -418,53 +442,79 @@ async def seed(force: bool = False) -> None:
                     )
                     session.add(ex)
                 await session.flush()
+            else:
+                sheet = sheets_list[0]
 
             existing_session_result = await session.execute(
                 select(WorkoutSession).where(
                     WorkoutSession.user_id == student.id,
-                    WorkoutSession.workout_sheet_id == sheet.id,
+                    WorkoutSession.status == "completed",
                 )
             )
             workout_session = existing_session_result.scalars().first()
             if not workout_session:
-                workout_session = WorkoutSession(
-                    user_id=student.id,
-                    workout_sheet_id=sheet.id,
-                    session_date=datetime.utcnow() - timedelta(days=1),
-                    status="completed",
-                    general_notes="Sessao finalizada com boa aderencia.",
-                    difficulty_level=7,
-                    mood="good",
-                    completed_at=datetime.utcnow() - timedelta(days=1, minutes=-55),
-                    approved_by_personal_id=trainer.id,
-                    approved_at=datetime.utcnow() - timedelta(hours=20),
-                )
-                session.add(workout_session)
-                await session.flush()
+                # Seed de histórico de 8 semanas de progresso (16 treinos)
+                past_session_offsets = [53, 50, 46, 43, 39, 36, 32, 29, 25, 22, 18, 15, 11, 8, 4, 1]
 
+                # Carrega os exercícios cadastrados para esta ficha
                 exercises_result = await session.execute(
                     select(Exercise).where(Exercise.workout_sheet_id == sheet.id).order_by(Exercise.order)
                 )
-                for ex in exercises_result.scalars().all():
-                    session.add(
-                        SessionExercise(
-                            session_id=workout_session.id,
-                            exercise_id=ex.id,
-                            planned_series=ex.series,
-                            planned_repetitions=ex.repetitions,
-                            planned_load_kg=ex.load_kg,
-                            actual_series=ex.series,
-                            actual_repetitions=max(6, ex.repetitions - 1),
-                            actual_load_kg=ex.load_kg,
-                            series_details=[
-                                {"series": 1, "reps": max(6, ex.repetitions - 1), "load": ex.load_kg},
-                                {"series": 2, "reps": max(6, ex.repetitions - 1), "load": ex.load_kg},
-                            ],
-                            exercise_notes="Bom controle de movimento.",
-                            pain_or_discomfort=False,
-                            status="completed",
-                        )
+                sheet_exercises = exercises_result.scalars().all()
+
+                for offset in past_session_offsets:
+                    week_idx = 7 - (offset // 7)  # Semana 0 a 7
+                    s_date = datetime.utcnow() - timedelta(days=offset)
+
+                    workout_session = WorkoutSession(
+                        user_id=student.id,
+                        workout_sheet_id=sheet.id,
+                        session_date=s_date,
+                        status="completed",
+                        general_notes=f"Treino excelente da semana {week_idx + 1}.",
+                        difficulty_level=RNG.choice([6, 7, 8]),
+                        mood=RNG.choice(["good", "excellent"]),
+                        completed_at=s_date + timedelta(minutes=RNG.randint(45, 60)),
+                        approved_by_personal_id=trainer.id,
+                        approved_at=s_date + timedelta(hours=1),
                     )
+                    session.add(workout_session)
+                    await session.flush()
+
+                    for ex in sheet_exercises:
+                        # Progressão linear de carga: começa com 70% e evolui para 100% da carga ideal
+                        progression_factor = 0.7 + (0.3 * (week_idx / 7.0))
+                        actual_load = round(ex.load_kg * progression_factor, 1)
+                        actual_load = max(5.0, actual_load)  # Garante carga mínima plausível
+
+                        # Detalhes das séries com fadiga leve no final do treino
+                        series_details = []
+                        for s_num in range(1, ex.series + 1):
+                            fatigue = RNG.choice([0, 0, 1]) if s_num > 2 else 0
+                            reps = max(6, ex.repetitions - fatigue)
+                            series_details.append({
+                                "series": s_num,
+                                "reps": reps,
+                                "load": actual_load
+                            })
+
+                        session.add(
+                            SessionExercise(
+                                session_id=workout_session.id,
+                                exercise_id=ex.id,
+                                planned_series=ex.series,
+                                planned_repetitions=ex.repetitions,
+                                planned_load_kg=ex.load_kg,
+                                actual_series=ex.series,
+                                actual_repetitions=ex.repetitions,
+                                actual_load_kg=actual_load,
+                                series_details=series_details,
+                                exercise_notes="Execução controlada.",
+                                pain_or_discomfort=False,
+                                status="completed",
+                            )
+                        )
+                await session.flush()
 
             meal_foods = await _pick_foods_for_meals(session)
 

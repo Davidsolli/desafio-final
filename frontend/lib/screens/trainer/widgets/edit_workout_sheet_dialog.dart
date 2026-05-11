@@ -24,7 +24,7 @@ class _EditWorkoutSheetDialogState extends State<EditWorkoutSheetDialog> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _descriptionController = TextEditingController();
-  int _selectedDayOfWeek = 0;
+  int? _selectedDayOfWeek;
   final List<_ExerciseEditEntry> _exercises = [];
   bool _isLoading = true;
   bool _isSubmitting = false;
@@ -83,6 +83,8 @@ class _EditWorkoutSheetDialogState extends State<EditWorkoutSheetDialog> {
     if (item != null && mounted) {
       setState(() {
         _exercises[index].nameController.text = item.name;
+        _exercises[index].imageUrl = item.imageUrl;
+        _exercises[index].gifUrl = item.gifUrl;
         if (item.muscleGroupMapped != null &&
             validMuscleGroups.contains(item.muscleGroupMapped)) {
           _exercises[index].selectedMuscleGroup = item.muscleGroupMapped!;
@@ -108,7 +110,7 @@ class _EditWorkoutSheetDialogState extends State<EditWorkoutSheetDialog> {
       final i = entry.key;
       final e = entry.value;
       final load = double.tryParse(e.loadController.text) ?? 0.0;
-      return ExerciseCreateDTO(
+       return ExerciseCreateDTO(
         name: e.nameController.text.trim(),
         muscleGroup: e.selectedMuscleGroup,
         series: int.tryParse(e.seriesController.text) ?? 3,
@@ -117,6 +119,8 @@ class _EditWorkoutSheetDialogState extends State<EditWorkoutSheetDialog> {
         restSeconds: int.tryParse(e.restController.text) ?? 60,
         observations:
             e.obsController.text.isEmpty ? null : e.obsController.text.trim(),
+        imageUrl: e.imageUrl,
+        gifUrl: e.gifUrl,
         order: i + 1,
       );
     }).toList();
@@ -261,22 +265,28 @@ class _EditWorkoutSheetDialogState extends State<EditWorkoutSheetDialog> {
                                 ),
                                 const SizedBox(height: 12),
 
-                                _buildLabel('Dia da Semana *'),
-                                DropdownButtonFormField<int>(
+                                _buildLabel('Dia da Semana (opcional)'),
+                                DropdownButtonFormField<int?>(
                                   value: _selectedDayOfWeek,
                                   decoration: _inputDecoration(null),
                                   dropdownColor: context.colors.surface,
-                                  items: List.generate(7, (i) {
-                                    return DropdownMenuItem(
-                                      value: i,
-                                      child: Text(
-                                          '${_dayEmoji(i)} ${_dayLabel(i)}',
-                                          style: TextStyle(
-                                              color: context.colors.textPrimary)),
-                                    );
-                                  }),
+                                  items: [
+                                    const DropdownMenuItem<int?>(
+                                      value: null,
+                                      child: Text('Nenhum (Rotina Flutuante)'),
+                                    ),
+                                    ...List.generate(7, (i) {
+                                      return DropdownMenuItem<int?>(
+                                        value: i,
+                                        child: Text(
+                                            '${_dayEmoji(i)} ${_dayLabel(i)}',
+                                            style: TextStyle(
+                                                color: context.colors.textPrimary)),
+                                      );
+                                    })
+                                  ],
                                   onChanged: (v) => setState(
-                                      () => _selectedDayOfWeek = v ?? 0),
+                                      () => _selectedDayOfWeek = v),
                                 ),
                                 const SizedBox(height: 20),
 
@@ -592,6 +602,8 @@ class _ExerciseEditEntry {
   final TextEditingController restController;
   final TextEditingController obsController;
   String selectedMuscleGroup;
+  String? imageUrl;
+  String? gifUrl;
 
   _ExerciseEditEntry({required this.order})
       : nameController = TextEditingController(),
@@ -611,6 +623,8 @@ class _ExerciseEditEntry {
     entry.loadController.text = ex.loadKg.toString();
     entry.restController.text = ex.restSeconds.toString();
     entry.obsController.text = ex.observations ?? '';
+    entry.imageUrl = ex.imageUrl;
+    entry.gifUrl = ex.gifUrl;
     if (validMuscleGroups.contains(ex.muscleGroup)) {
       entry.selectedMuscleGroup = ex.muscleGroup;
     }

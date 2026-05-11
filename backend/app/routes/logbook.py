@@ -26,6 +26,7 @@ from app.dtos.logbook_dto import (
     CalendarResponseDTO,
     CreateSessionDTO,
     FrequencyResponseDTO,
+    MuscleGroupDistributionResponseDTO,
     PaginatedSessionsDTO,
     ProgressionResponseDTO,
     SessionExerciseDTO,
@@ -123,7 +124,7 @@ async def add_exercise(
     """
     from fastapi import Response
 
-    user_id, role = auth
+    user_id, role = current_user.id, current_user.role
     controller = LogbookController(session)
     try:
         exercise_dto, created = await controller.add_exercise(session_id, user_id, role, dto)
@@ -175,7 +176,7 @@ async def update_session(
 
     Personal **não** pode editar sessões de alunos.
     """
-    user_id, role = auth
+    user_id, role = current_user.id, current_user.role
     controller = LogbookController(session)
     try:
         return await controller.update_session(session_id, user_id, role, dto)
@@ -226,7 +227,7 @@ async def list_sessions(
     - **Aluno:** vê apenas suas próprias sessões.
     - **Personal/Admin:** pode filtrar por `user_id` de qualquer aluno.
     """
-    requester_id, role = auth
+    requester_id, role = current_user.id, current_user.role
     controller = LogbookController(session)
     try:
         return await controller.list_sessions(
@@ -272,7 +273,7 @@ async def get_session(
 
     Inclui valores planejados vs. reais e notas de cada exercício.
     """
-    user_id, role = auth
+    user_id, role = current_user.id, current_user.role
     controller = LogbookController(session)
     try:
         return await controller.get_session(session_id, user_id, role)
@@ -317,7 +318,7 @@ async def get_calendar(
     - `skipped`: marcou que faltou
     - `no_plan`: dia sem sessão registrada
     """
-    requester_id, role = auth
+    requester_id, role = current_user.id, current_user.role
     # Aluno vê o próprio calendário; personal/admin pode ver de outro aluno
     effective_user_id = user_id if (role != "client" and user_id) else requester_id
     controller = LogbookController(session)
@@ -437,8 +438,51 @@ async def get_frequency(
 
 
 # ---------------------------------------------------------------------------
+# GET /muscle-group-distribution — Distribuição por Grupo Muscular
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/muscle-group-distribution",
+    response_model=MuscleGroupDistributionResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Distribuição de exercícios concluídos por grupo muscular",
+    responses={
+        200: {"description": "Distribuição calculada"},
+    },
+)
+async def get_muscle_group_distribution(
+    days: int = Query(30, ge=1, le=365, description="Janela de dias retroativos (máx. 365)"),
+    user_id: Optional[UUID] = Query(None, description="Filtrar por aluno (admin/personal)"),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> MuscleGroupDistributionResponseDTO:
+    """
+    Retorna a distribuição de exercícios executados em sessões completadas,
+    agrupados por grupo muscular.
+
+    Parâmetros:
+    - `days`: Janela de dias retroativos (padrão 30, máx 365)
+    - `user_id`: Filtrar por aluno específico (apenas admin/personal)
+    """
+    effective_user_id = user_id if (current_user.role != "client" and user_id) else current_user.id
+    controller = LogbookController(session)
+    try:
+        return await controller.get_muscle_group_distribution(
+            user_id=effective_user_id,
+            days=days,
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao calcular distribuição por grupo muscular: {str(e)}",
+        )
+
+
+# ---------------------------------------------------------------------------
 # DELETE /sessions/{id} — Soft Delete
 # ---------------------------------------------------------------------------
+
 
 
 @router.delete(
@@ -463,7 +507,7 @@ async def delete_session(
     - Personal **não** pode deletar sessões de alunos.
     - A sessão continua no banco para fins de auditoria (LGPD).
     """
-    user_id, role = auth
+    user_id, role = current_user.id, current_user.role
     controller = LogbookController(session)
     try:
         await controller.delete_session(session_id, user_id, role)

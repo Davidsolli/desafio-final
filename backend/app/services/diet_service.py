@@ -142,6 +142,7 @@ class DietService:
             goal=dto.goal,
             is_active=True,
             meals=meals,
+            water_target_ml=dto.water_target_ml,
         )
 
         created = await self.repository.create_diet(diet)
@@ -183,6 +184,17 @@ class DietService:
         for d in diets:
             # Calcular total kcal para listagem
             total_kcal = await self._calculate_diet_kcal(d)
+
+            # Obter ou calcular meta de água
+            water_target = d.water_target_ml
+            if water_target is None or water_target == 0:
+                from app.models.user import User
+                user_obj = await self.session.get(User, d.user_id)
+                if user_obj and user_obj.weight:
+                    water_target = int(user_obj.weight * 35)
+                else:
+                    water_target = 2500
+
             items.append(
                 DietListItemDTO(
                     id=d.id,
@@ -195,6 +207,7 @@ class DietService:
                     meal_count=len(d.meals) if d.meals else 0,
                     total_kcal=total_kcal,
                     created_at=d.created_at,
+                    water_target_ml=water_target,
                 )
             )
 
@@ -230,6 +243,8 @@ class DietService:
             diet.name = dto.name
         if dto.goal is not None:
             diet.goal = dto.goal
+        if dto.water_target_ml is not None:
+            diet.water_target_ml = dto.water_target_ml
 
         # Substituição total de refeições
         if dto.meals is not None:
@@ -310,6 +325,7 @@ class DietService:
             goal=original.goal,
             is_active=True,
             meals=cloned_meals,
+            water_target_ml=original.water_target_ml,
         )
 
         created = await self.repository.create_diet(new_diet)
@@ -481,6 +497,16 @@ class DietService:
                 )
             )
 
+        # Obter ou calcular meta de água
+        water_target = diet.water_target_ml
+        if water_target is None or water_target == 0:
+            from app.models.user import User
+            user_obj = await self.session.get(User, diet.user_id)
+            if user_obj and user_obj.weight:
+                water_target = int(user_obj.weight * 35)
+            else:
+                water_target = 2500
+
         return DietResponseDTO(
             id=diet.id,
             user_id=diet.user_id,
@@ -496,4 +522,5 @@ class DietService:
             total_protein=round(total_protein, 2),
             total_carbs=round(total_carbs, 2),
             total_fats=round(total_fats, 2),
+            water_target_ml=water_target,
         )

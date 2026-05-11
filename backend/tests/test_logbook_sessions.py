@@ -58,11 +58,29 @@ async def test_db_logbook(test_engine_logbook):
 @pytest_asyncio.fixture
 async def async_client_logbook(test_db_logbook):
     """Cliente HTTP assíncrono com banco de teste injetado."""
+    from fastapi import Header
+    from app.models.user import User
+    from app.dependencies.auth import get_current_user
+    from uuid import UUID
 
     async def override_get_db():
         yield test_db_logbook
 
+    async def override_get_current_user(
+        x_user_id: str = Header(..., alias="X-User-Id"),
+        x_user_role: str = Header(..., alias="X-User-Role"),
+    ) -> User:
+        user = User()
+        user.id = UUID(x_user_id)
+        user.role = x_user_role
+        user.email = "mock@example.com"
+        user.name = "Mock User"
+        user.is_active = True
+        return user
+
     fastapi_app.dependency_overrides[get_db] = override_get_db
+    fastapi_app.dependency_overrides[get_current_user] = override_get_current_user
+
     transport = ASGITransport(app=fastapi_app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
@@ -806,7 +824,6 @@ async def test_progressao_com_agrupamento_semanal(async_client_as, sample_user):
     """Teste: GET /progression/{id}?group_by=week agrupa por semana."""
     client = await async_client_as(sample_user)
     try:
-        session_ids = []
         for i in range(3):
             session_date = past_date(days=i)
             r = await client.post(
@@ -814,16 +831,15 @@ async def test_progressao_com_agrupamento_semanal(async_client_as, sample_user):
                 json={"workout_sheet_id": str(SHEET_ID), "session_date": session_date},
             )
             assert r.status_code == 201
-            session_ids.append(r.json()["id"])
+            session_id = r.json()["id"]
 
-        for idx, session_id in enumerate(session_ids):
             await client.post(
                 f"/api/v1/logbook/sessions/{session_id}/exercises",
                 json={
                     "exercise_id": str(EXERCISE_ID),
                     "actual_series": 3,
                     "actual_repetitions": 10,
-                    "actual_load_kg": 50.0 + (idx * 5),
+                    "actual_load_kg": 50.0 + (i * 5),
                     "status": "completed",
                 },
             )

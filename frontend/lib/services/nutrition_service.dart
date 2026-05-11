@@ -12,11 +12,27 @@ class NutritionService {
   // ---------------------------------------------------------------------------
 
   /// Busca alimentos na tabela TACO e alimentos personalizados do usuário
-  Future<PaginatedFoodCatalogDTO> searchFoodCatalog(String query) async {
+  Future<PaginatedFoodCatalogDTO> searchFoodCatalog(
+    String query, {
+    String? category,
+    String? source,
+    double? minProtein,
+    double? maxCarbohydrate,
+    double? maxLipid,
+  }) async {
     try {
+      final queryParameters = <String, dynamic>{
+        'search': query,
+        if (category != null) 'category': category,
+        if (source != null) 'source': source,
+        if (minProtein != null) 'min_protein': minProtein.toString(),
+        if (maxCarbohydrate != null) 'max_carbohydrate': maxCarbohydrate.toString(),
+        if (maxLipid != null) 'max_lipid': maxLipid.toString(),
+      };
+      
       final response = await _apiClient.get<PaginatedFoodCatalogDTO>(
         '/food-catalog',
-        queryParameters: {'search': query},
+        queryParameters: queryParameters,
         fromJson: (data) => PaginatedFoodCatalogDTO.fromJson(data as Map<String, dynamic>),
       );
       return response;
@@ -35,6 +51,20 @@ class NutritionService {
       final dateString = date.toIso8601String().split('T')[0];
       final response = await _apiClient.get<DietLogbook>(
         '/diet-logbook/$dateString',
+        fromJson: (data) => DietLogbook.fromJson(data as Map<String, dynamic>),
+      );
+      return response;
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  /// Busca o diário alimentar de um estudante específico por data (personal/admin)
+  Future<DietLogbook> getStudentLogbookByDate({required String userId, required DateTime date}) async {
+    try {
+      final dateString = date.toIso8601String().split('T')[0];
+      final response = await _apiClient.get<DietLogbook>(
+        '/diet-logbook/student/$userId/$dateString',
         fromJson: (data) => DietLogbook.fromJson(data as Map<String, dynamic>),
       );
       return response;
@@ -119,18 +149,20 @@ class NutritionService {
     }
   }
 
-  /// Atualiza dieta (nome/objetivo/refeições).
+  /// Atualiza dieta (nome/objetivo/refeições/água).
   Future<Diet> updateDiet({
     required String dietId,
     String? name,
     String? goal,
     required List<Map<String, dynamic>> meals,
+    int? waterTargetMl,
   }) async {
     try {
       final body = <String, dynamic>{
         if (name != null) 'name': name,
         if (goal != null) 'goal': goal,
         'meals': meals,
+        if (waterTargetMl != null) 'water_target_ml': waterTargetMl,
       };
       final response = await _apiClient.put<Diet>(
         '/diets/$dietId',
@@ -146,6 +178,60 @@ class NutritionService {
   /// Compatibilidade com chamadas antigas.
   Future<List<Diet>> getMyDiets() async {
     return getDiets();
+  }
+
+  /// Busca a Taxa Metabólica Basal (TMB) do usuário logado
+  Future<int?> getUserTmb() async {
+    try {
+      final userResponse = await _apiClient.get<Map<String, dynamic>>(
+        '/users/me',
+        fromJson: (data) => data as Map<String, dynamic>,
+      );
+      final weight = (userResponse['weight'] as num?)?.toDouble();
+      final height = (userResponse['height'] as num?)?.toDouble();
+      final age = userResponse['age'] as int?;
+      final gender = userResponse['gender'] as String?;
+      
+      if (weight != null && weight > 0 && height != null && height > 0 && age != null && age > 0) {
+        if (gender == 'male') {
+            return (88.362 + (13.397 * weight) + (4.799 * height) - (5.677 * age)).toInt();
+        }
+        return (447.593 + (9.247 * weight) + (3.098 * height) - (4.330 * age)).toInt();
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Cria um alimento personalizado para o usuário
+  Future<CustomFood> createCustomFood({
+    required String name,
+    String? category,
+    required double energyKcal,
+    required double proteinG,
+    required double carbohydrateG,
+    required double lipidG,
+    double fiberG = 0.0,
+  }) async {
+    try {
+      final response = await _apiClient.post<CustomFood>(
+        '/custom-foods',
+        body: {
+          'name': name,
+          if (category != null && category.trim().isNotEmpty) 'category': category,
+          'energy_kcal': energyKcal,
+          'protein_g': proteinG,
+          'carbohydrate_g': carbohydrateG,
+          'lipid_g': lipidG,
+          'fiber_g': fiberG,
+        },
+        fromJson: (data) => CustomFood.fromJson(data as Map<String, dynamic>),
+      );
+      return response;
+    } catch (e) {
+      rethrow;
+    }
   }
 }
 

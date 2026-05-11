@@ -84,6 +84,18 @@ async def search_food_catalog(
         None,
         description="Filtrar por fonte: 'taco' ou 'custom'",
     ),
+    min_protein: Optional[float] = Query(
+        None,
+        description="Filtrar por mínimo de proteína em 100g",
+    ),
+    max_carbohydrate: Optional[float] = Query(
+        None,
+        description="Filtrar por máximo de carboidrato em 100g",
+    ),
+    max_lipid: Optional[float] = Query(
+        None,
+        description="Filtrar por máximo de gordura em 100g",
+    ),
     page: int = Query(1, ge=1, description="Número da página"),
     limit: int = Query(20, ge=1, le=100, description="Itens por página (máx. 100)"),
     current_user: User = Depends(get_current_user),
@@ -99,6 +111,9 @@ async def search_food_catalog(
     - **search**: Filtra por nome (case-insensitive, parcial).
     - **category**: Filtra por categoria exata.
     - **source**: `taco` para apenas TACO, `custom` para apenas personalizados.
+    - **min_protein**: Filtra por quantidade mínima de proteína.
+    - **max_carbohydrate**: Filtra por quantidade máxima de carboidrato.
+    - **max_lipid**: Filtra por quantidade máxima de gordura.
     - **page/limit**: Paginação.
     """
     try:
@@ -116,6 +131,12 @@ async def search_food_catalog(
                 taco_stmt = taco_stmt.where(FoodCatalog.name.ilike(f"%{search}%"))
             if category:
                 taco_stmt = taco_stmt.where(FoodCatalog.category == category)
+            if min_protein is not None:
+                taco_stmt = taco_stmt.where(FoodCatalog.protein_g >= min_protein)
+            if max_carbohydrate is not None:
+                taco_stmt = taco_stmt.where(FoodCatalog.carbohydrate_g <= max_carbohydrate)
+            if max_lipid is not None:
+                taco_stmt = taco_stmt.where(FoodCatalog.lipid_g <= max_lipid)
 
             taco_count_stmt = select(func.count()).select_from(taco_stmt.subquery())
             taco_count_result = await db.execute(taco_count_stmt)
@@ -131,6 +152,12 @@ async def search_food_catalog(
                 custom_stmt = custom_stmt.where(CustomFood.name.ilike(f"%{search}%"))
             if category:
                 custom_stmt = custom_stmt.where(CustomFood.category == category)
+            if min_protein is not None:
+                custom_stmt = custom_stmt.where(CustomFood.protein_g >= min_protein)
+            if max_carbohydrate is not None:
+                custom_stmt = custom_stmt.where(CustomFood.carbohydrate_g <= max_carbohydrate)
+            if max_lipid is not None:
+                custom_stmt = custom_stmt.where(CustomFood.lipid_g <= max_lipid)
 
             custom_count_stmt = select(func.count()).select_from(custom_stmt.subquery())
             custom_count_result = await db.execute(custom_count_stmt)

@@ -139,6 +139,7 @@ class CreateDietDTO(BaseModel):
     meals: List[DietMealCreateDTO] = Field(
         default_factory=list, description="Refeições da dieta"
     )
+    water_target_ml: Optional[int] = Field(None, ge=0, description="Meta diária de água em ml")
 
 
 class UpdateDietDTO(BaseModel):
@@ -150,6 +151,7 @@ class UpdateDietDTO(BaseModel):
         None,
         description="Se fornecido, substitui TODAS as refeições"
     )
+    water_target_ml: Optional[int] = Field(None, ge=0)
 
 
 class DuplicateDietDTO(BaseModel):
@@ -179,6 +181,7 @@ class DietResponseDTO(BaseModel):
     total_protein: float = 0.0
     total_carbs: float = 0.0
     total_fats: float = 0.0
+    water_target_ml: Optional[int] = None
 
 
 class DietListItemDTO(BaseModel):
@@ -194,6 +197,7 @@ class DietListItemDTO(BaseModel):
     meal_count: int = 0
     total_kcal: float = 0.0
     created_at: datetime
+    water_target_ml: Optional[int] = None
 
     model_config = {"from_attributes": True}
 
