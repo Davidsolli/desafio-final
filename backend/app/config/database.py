@@ -59,6 +59,7 @@ async def init_db() -> None:
     """
     import logging
     from app.models.user import Base  # noqa: F401 — registra User
+    import app.models.password_reset_token  # noqa: F401 — registra PasswordResetToken
     from app.models.goal import Goal, GoalProgressEntry  # noqa: F401 — registra Goals
     import app.models.logbook  # noqa: F401 — registra WorkoutSession e SessionExercise no Base
     import app.models.food_catalog  # noqa: F401 — registra FoodCatalog no Base
@@ -91,13 +92,27 @@ async def init_db() -> None:
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_whatsapp VARCHAR(20)",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS goal_type VARCHAR(50)",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS theme_preference VARCHAR(20) DEFAULT NULL",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0",
         ]
         for alter in alters:
             try:
                 await conn.execute(text(alter))
             except Exception as exc:
                 logger.warning("Erro ao executar ALTER TABLE: %s", exc)
-        logger.info("✓ Colunas de dados corporais verificadas/adicionadas em users")
+        logger.info("✓ Colunas de users verificadas/adicionadas")
+
+        # Migração: converter colunas de password_reset_tokens para TIMESTAMPTZ
+        # Necessário em ambientes onde a tabela foi criada com DateTime (sem timezone)
+        token_col_alters = [
+            "ALTER TABLE password_reset_tokens ALTER COLUMN expires_at TYPE TIMESTAMPTZ USING expires_at AT TIME ZONE 'UTC'",
+            "ALTER TABLE password_reset_tokens ALTER COLUMN used_at TYPE TIMESTAMPTZ USING used_at AT TIME ZONE 'UTC'",
+            "ALTER TABLE password_reset_tokens ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at AT TIME ZONE 'UTC'",
+        ]
+        for alter in token_col_alters:
+            try:
+                await conn.execute(text(alter))
+            except Exception:
+                pass  # tabela ainda não existe ou coluna já é TIMESTAMPTZ
 
     # 4. Migração manual: Adicionar food_name ao logbook entries se não existir
     # (feita APÓS criar as tabelas, em transação separada)

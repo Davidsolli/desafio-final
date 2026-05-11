@@ -94,5 +94,7 @@ class User(Base):
         comment="Preferência de tema: 'light', 'dark', 'system', ou NULL para padrão do dispositivo"
     )
 
+    token_version = Column(Integer, nullable=False, default=0)
+
     def __repr__(self) -> str:
         return f"<User(id={self.id}, name={self.name}, email={self.email}, role={self.role})>"
