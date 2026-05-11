@@ -96,5 +96,7 @@ class User(Base):
 
     token_version = Column(Integer, nullable=False, default=0)
 
+    fcm_token = Column(String(500), nullable=True)
+
     def __repr__(self) -> str:
         return f"<User(id={self.id}, name={self.name}, email={self.email}, role={self.role})>"

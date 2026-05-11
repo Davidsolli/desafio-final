@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
+
 import 'package:provider/provider.dart';
-import 'package:animate_do/animate_do.dart';
+
 import '../../theme/app_colors.dart';
 import '../../theme/theme_colors.dart';
 import '../../providers/nutrition_provider.dart';

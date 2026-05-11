@@ -43,6 +43,11 @@ def _get_async_session_local():
     return _AsyncSessionLocal
 
 
+def SessionLocal():
+    """Context manager de sessão para uso em tasks/schedulers (fora do ciclo de request)."""
+    return _get_async_session_local()()
+
+
 async def get_db() -> AsyncSession:
     """Dependency injection para obter sessão de banco."""
     session_local = _get_async_session_local()
@@ -67,6 +72,7 @@ async def init_db() -> None:
     import app.models.diet_logbook  # noqa: F401 — registra DietLogbook, DietLogbookEntry
     from app.models.invitation import Invitation  # noqa: F401 — registra Invitation
     from app.models.whatsapp_pre_registration import WhatsAppPreRegistration  # noqa: F401
+    import app.models.notification  # noqa: F401 — registra NotificationPreference, NotificationLog, WorkoutReminderSchedule
 
     logger = logging.getLogger(__name__)
 
@@ -93,6 +99,7 @@ async def init_db() -> None:
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS goal_type VARCHAR(50)",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS theme_preference VARCHAR(20) DEFAULT NULL",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS fcm_token VARCHAR(500)",
         ]
         for alter in alters:
             try:
