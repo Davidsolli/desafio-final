@@ -67,4 +67,17 @@ class NotificationService {
       return false;
     }
   }
+
+  Future<bool> updateTimezone(String tz) async {
+    try {
+      await apiClient.put<Map<String, dynamic>>(
+        '/api/v1/users/me/timezone',
+        body: {'timezone': tz},
+        fromJson: (json) => json is Map<String, dynamic> ? json : {},
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
 }
