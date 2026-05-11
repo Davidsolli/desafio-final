@@ -331,9 +331,9 @@ class _ChatScreenState extends State<ChatScreen> {
                 color: AppColors.primary.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(8),
               ),
-              // favorite (coração) remete a vitalidade/saúde, alinhado
-              // ao nome "Vitali" e ao escopo treino+nutrição do bot.
-              child: const Icon(Icons.favorite, color: AppColors.primary, size: 20),
+              // Halter como identidade visual da academia (Vitali =
+              // assistente fitness). Leitura imediata para o aluno.
+              child: const Icon(Icons.fitness_center, color: AppColors.primary, size: 20),
             ),
             const SizedBox(width: 10),
             Column(
