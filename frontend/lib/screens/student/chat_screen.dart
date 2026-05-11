@@ -132,7 +132,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 if (_messages.isEmpty) {
                   _messages.add({
                     'role': 'assistant',
-                    'text': 'Olá! Sou seu assistente fitness. Como posso te ajudar hoje?',
+                    'text': 'Olá! Eu sou o Vitali, assistente da FitLoop. Como posso te ajudar hoje?',
                     'time': _formatTime(),
                   });
                 }
@@ -331,13 +331,15 @@ class _ChatScreenState extends State<ChatScreen> {
                 color: AppColors.primary.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(Icons.android, color: AppColors.primary, size: 20),
+              // favorite (coração) remete a vitalidade/saúde, alinhado
+              // ao nome "Vitali" e ao escopo treino+nutrição do bot.
+              child: const Icon(Icons.favorite, color: AppColors.primary, size: 20),
             ),
             const SizedBox(width: 10),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Assistente IA',
+                Text('Vitali',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
                 Text(
                   _isConnected ? 'Online' : 'Desconectado',

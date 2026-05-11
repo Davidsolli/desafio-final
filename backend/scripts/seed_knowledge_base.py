@@ -376,7 +376,7 @@ KNOWLEDGE_DOCUMENTS: list[dict[str, Any]] = [
             "atingir meta de proteína), creatina monohidratada (3-5 g/dia, "
             "ganhos de força e hipertrofia) e cafeína (3-6 mg/kg pré-treino, "
             "efeito ergogênico). BCAA, glutamina e queimadores têm evidência "
-            "fraca. O OmniConnect não prescreve suplementos com dosagem "
+            "fraca. A FitLoop não prescreve suplementos com dosagem "
             "individualizada — consulte um nutricionista esportivo."
         ),
         "category": "nutricao",
@@ -411,7 +411,7 @@ KNOWLEDGE_DOCUMENTS: list[dict[str, Any]] = [
     {
         "title": "Sistema: Horário de funcionamento",
         "content": (
-            "A academia OmniConnect funciona de segunda a sexta-feira das "
+            "A academia FitLoop funciona de segunda a sexta-feira das "
             "06:00 às 23:00 e aos sábados das 08:00 às 18:00. Aos domingos "
             "e feriados o atendimento é fechado. Reservas de aulas coletivas "
             "e avaliações podem ser feitas pelo aplicativo até 24 horas antes."
