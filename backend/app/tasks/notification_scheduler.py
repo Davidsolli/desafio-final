@@ -47,8 +47,15 @@ class NotificationScheduler:
                 replace_existing=True,
             )
 
+            cls._scheduler.add_job(
+                cls.replenish_workout_schedules,
+                CronTrigger(hour=0, minute=30),
+                id="replenish_workout_schedules_job",
+                replace_existing=True,
+            )
+
             cls._scheduler.start()
-            logger.info("Notification Scheduler started (3 jobs registrados).")
+            logger.info("Notification Scheduler started (4 jobs registrados).")
 
     @classmethod
     def stop(cls):
@@ -162,6 +169,47 @@ class NotificationScheduler:
 
             except Exception as e:
                 logger.error(f"Erro no check_and_send_meal_reminders: {e}")
+                await session.rollback()
+
+    @staticmethod
+    async def replenish_workout_schedules():
+        """
+        Job diário (00:30 UTC): mantém o horizonte de 7 dias de
+        WorkoutReminderSchedule para todos os usuários com lembrete habilitado.
+
+        Para cada NotificationPreference com workout_reminder_enabled=True
+        e workout_reminder_time definido, chama
+        NotificationService.regenerate_workout_schedules.
+        """
+        async with SessionLocal() as session:
+            try:
+                query = select(NotificationPreference).where(
+                    and_(
+                        NotificationPreference.notifications_enabled == True,  # noqa: E712
+                        NotificationPreference.workout_reminder_enabled == True,  # noqa: E712
+                        NotificationPreference.workout_reminder_time.isnot(None),
+                    )
+                )
+                result = await session.execute(query)
+                prefs = list(result.scalars().all())
+
+                if not prefs:
+                    return
+
+                logger.info(f"Repondo horizonte de schedules para {len(prefs)} usuários.")
+                notification_service = NotificationService(session)
+
+                for pref in prefs:
+                    await notification_service.regenerate_workout_schedules(
+                        user_id=pref.user_id,
+                        workout_reminder_time=pref.workout_reminder_time,
+                        silent_days=pref.silent_days or [],
+                    )
+
+                await session.commit()
+
+            except Exception as e:
+                logger.error(f"Erro no replenish_workout_schedules: {e}")
                 await session.rollback()
 
     @staticmethod
