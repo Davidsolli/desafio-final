@@ -10,12 +10,31 @@ class NotificationsSettingsScreen extends StatefulWidget {
   State<NotificationsSettingsScreen> createState() => _NotificationsSettingsScreenState();
 }
 
+/// Lista curta de fusos brasileiros suportados pelo dropdown.
+/// O label é o que o usuário vê; o value é o IANA enviado ao backend.
+const _availableTimezones = <_TimezoneOption>[
+  _TimezoneOption('America/Sao_Paulo', 'São Paulo (UTC-3)'),
+  _TimezoneOption('America/Belem', 'Belém (UTC-3)'),
+  _TimezoneOption('America/Recife', 'Recife (UTC-3)'),
+  _TimezoneOption('America/Cuiaba', 'Cuiabá (UTC-4)'),
+  _TimezoneOption('America/Manaus', 'Manaus (UTC-4)'),
+  _TimezoneOption('America/Rio_Branco', 'Rio Branco (UTC-5)'),
+  _TimezoneOption('America/Noronha', 'Fernando de Noronha (UTC-2)'),
+];
+
+class _TimezoneOption {
+  final String value;
+  final String label;
+  const _TimezoneOption(this.value, this.label);
+}
+
 class _NotificationsSettingsScreenState extends State<NotificationsSettingsScreen> {
   bool isLoading = true;
   bool notificationsEnabled = true;
   bool workoutReminderEnabled = true;
   bool mealReminderEnabled = false;
   bool newWorkoutSheetEnabled = true;
+  String selectedTimezone = 'America/Sao_Paulo';
 
   @override
   void initState() {
@@ -26,18 +45,40 @@ class _NotificationsSettingsScreenState extends State<NotificationsSettingsScree
   Future<void> _loadPreferences() async {
     final service = context.read<NotificationService>();
     final prefs = await service.getPreferences();
-    
+
     if (prefs.isNotEmpty) {
       setState(() {
         notificationsEnabled = prefs['notifications_enabled'] ?? true;
         workoutReminderEnabled = prefs['workout_reminder_enabled'] ?? true;
         mealReminderEnabled = prefs['meal_reminder_enabled'] ?? false;
         newWorkoutSheetEnabled = prefs['new_workout_sheet_enabled'] ?? true;
+        final tzFromPrefs = prefs['timezone'];
+        if (tzFromPrefs is String && tzFromPrefs.isNotEmpty) {
+          selectedTimezone = tzFromPrefs;
+        }
       });
     }
     setState(() {
       isLoading = false;
     });
+  }
+
+  Future<void> _onTimezoneChanged(String? tz) async {
+    if (tz == null || tz == selectedTimezone) return;
+    final previous = selectedTimezone;
+    setState(() => selectedTimezone = tz);
+
+    final service = context.read<NotificationService>();
+    final ok = await service.updateTimezone(tz);
+    if (!mounted) return;
+    if (!ok) {
+      setState(() => selectedTimezone = previous);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Falha ao atualizar fuso horário'),
+        ),
+      );
+    }
   }
 
   Future<void> _updatePreference(String key, dynamic value) async {
@@ -81,6 +122,8 @@ class _NotificationsSettingsScreenState extends State<NotificationsSettingsScree
         children: [
           _buildMasterSwitch(),
           const SizedBox(height: 20),
+          _buildTimezoneSelector(),
+          const SizedBox(height: 20),
           if (notificationsEnabled) ...[
             Text(
               'Lembretes',
@@ -122,6 +165,55 @@ class _NotificationsSettingsScreenState extends State<NotificationsSettingsScree
               ),
             )
           ]
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTimezoneSelector() {
+    // Garantir que o timezone atual está na lista; senão, agrega como fallback.
+    final values = _availableTimezones.map((o) => o.value).toList();
+    if (!values.contains(selectedTimezone)) {
+      values.insert(0, selectedTimezone);
+    }
+    String labelOf(String value) {
+      final option =
+          _availableTimezones.where((o) => o.value == value).cast<_TimezoneOption?>().firstWhere(
+                (_) => true,
+                orElse: () => null,
+              );
+      return option?.label ?? value;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.grey.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.public, color: AppColors.primary),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Text(
+              'Fuso horário',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+          DropdownButton<String>(
+            value: selectedTimezone,
+            underline: const SizedBox.shrink(),
+            items: values
+                .map(
+                  (v) => DropdownMenuItem<String>(
+                    value: v,
+                    child: Text(labelOf(v)),
+                  ),
+                )
+                .toList(),
+            onChanged: _onTimezoneChanged,
+          ),
         ],
       ),
     );
