@@ -4,7 +4,7 @@ import '../services/notification_service.dart';
 import '../theme/app_colors.dart';
 
 class NotificationsSettingsScreen extends StatefulWidget {
-  const NotificationsSettingsScreen({Key? key}) : super(key: key);
+  const NotificationsSettingsScreen({super.key});
 
   @override
   State<NotificationsSettingsScreen> createState() => _NotificationsSettingsScreenState();
@@ -155,7 +155,7 @@ class _NotificationsSettingsScreenState extends State<NotificationsSettingsScree
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.grey.withOpacity(0.1),
+                color: Colors.grey.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Text(
@@ -252,7 +252,7 @@ class _NotificationsSettingsScreenState extends State<NotificationsSettingsScree
       elevation: 0,
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      color: Colors.grey.withOpacity(0.05),
+      color: Colors.grey.withValues(alpha: 0.05),
       child: SwitchListTile(
         secondary: Container(
           padding: const EdgeInsets.all(8),
