@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/notification_service.dart';
 import '../theme/app_colors.dart';
+import '../utils/available_timezones.dart';
 import 'widgets/notification_toggle_tile.dart';
 
 /// Tela de configurações de notificação do personal trainer.
@@ -20,22 +21,6 @@ class NotificationsSettingsTrainerScreen extends StatefulWidget {
   @override
   State<NotificationsSettingsTrainerScreen> createState() =>
       _NotificationsSettingsTrainerScreenState();
-}
-
-const _availableTimezones = <_TimezoneOption>[
-  _TimezoneOption('America/Sao_Paulo', 'São Paulo (UTC-3)'),
-  _TimezoneOption('America/Belem', 'Belém (UTC-3)'),
-  _TimezoneOption('America/Recife', 'Recife (UTC-3)'),
-  _TimezoneOption('America/Cuiaba', 'Cuiabá (UTC-4)'),
-  _TimezoneOption('America/Manaus', 'Manaus (UTC-4)'),
-  _TimezoneOption('America/Rio_Branco', 'Rio Branco (UTC-5)'),
-  _TimezoneOption('America/Noronha', 'Fernando de Noronha (UTC-2)'),
-];
-
-class _TimezoneOption {
-  final String value;
-  final String label;
-  const _TimezoneOption(this.value, this.label);
 }
 
 class _NotificationsSettingsTrainerScreenState
@@ -174,14 +159,14 @@ class _NotificationsSettingsTrainerScreenState
   }
 
   Widget _buildTimezoneSelector() {
-    final values = _availableTimezones.map((o) => o.value).toList();
+    final values = availableTimezones.map((o) => o.value).toList();
     if (!values.contains(selectedTimezone)) {
       values.insert(0, selectedTimezone);
     }
     String labelOf(String value) {
-      final option = _availableTimezones
+      final option = availableTimezones
           .where((o) => o.value == value)
-          .cast<_TimezoneOption?>()
+          .cast<TimezoneOption?>()
           .firstWhere((_) => true, orElse: () => null);
       return option?.label ?? value;
     }

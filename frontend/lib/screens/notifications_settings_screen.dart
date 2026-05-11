@@ -30,6 +30,8 @@ class _NotificationsSettingsScreenState
   void _scheduleAdminRedirect() {
     if (_redirectScheduled) return;
     _redirectScheduled = true;
+    // Admin não recebe push hoje. Quando aparecer um tipo destinado a
+    // admins (ex: "system_alert"), criar tela própria em vez de redirect.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       context.go(AppRoutes.adminDashboard);
