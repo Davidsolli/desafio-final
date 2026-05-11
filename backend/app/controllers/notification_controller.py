@@ -42,13 +42,16 @@ class NotificationController:
 
     @staticmethod
     async def get_history(
-        type: Optional[str] = Query(None, description="Filtro opcional pelo tipo de notificação"),
+        notification_type: Optional[str] = Query(
+            None,
+            description="Filtro opcional pelo tipo de notificação",
+        ),
         limit: int = Query(20, ge=1, le=100),
         db: AsyncSession = Depends(get_db),
         current_user: User = Depends(get_current_user)
     ) -> dict:
         service = NotificationService(db)
-        logs = await service.get_history(current_user.id, type, limit)
+        logs = await service.get_history(current_user.id, notification_type, limit)
         data = [NotificationLogResponseDTO.model_validate(log) for log in logs]
         return {
             "total": len(data),

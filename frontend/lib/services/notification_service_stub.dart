@@ -40,7 +40,7 @@ class NotificationService {
       final response = await apiClient.get<Map<String, dynamic>>(
         '/api/v1/notifications/history',
         queryParameters: {
-          if (type != null) 'type': type,
+          if (type != null) 'notification_type': type,
           'limit': limit,
         },
         fromJson: (json) => json is Map<String, dynamic> ? json : {},
