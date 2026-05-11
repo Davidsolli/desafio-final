@@ -66,34 +66,52 @@ ESCALATION_KEYWORDS = HEALTH_RISK_KEYWORDS + EXPLICIT_REQUEST_KEYWORDS
 ESCALATION_MESSAGES: dict[str, str] = {
     "user_requested": (
         "Entendi! Vou encaminhar sua dúvida para o seu Personal Trainer. "
-        "Ele receberá uma notificação e poderá te responder em breve! 🎯"
+        "Ele receberá uma notificação e poderá te responder em breve."
     ),
     "health_risk": (
-        "⚠️ Por segurança, como sua mensagem pode envolver risco à saúde, "
+        "Por segurança, como sua mensagem pode envolver risco à saúde, "
         "recomendo consultar um profissional. Já notifiquei seu Personal "
         "Trainer para que ele possa orientar você adequadamente."
     ),
     "low_confidence": (
         "Essa é uma ótima pergunta! Para garantir a melhor resposta, "
-        "estou encaminhando para o seu Personal Trainer. 💪"
+        "estou encaminhando para o seu Personal Trainer."
     ),
     "too_complex": (
         "Essa dúvida requer atenção especializada. Seu Personal Trainer "
-        "será notificado para te ajudar pessoalmente! 📋"
+        "será notificado para te ajudar pessoalmente."
     ),
     "validation_failed": (
         "Não encontrei informações suficientes na base para responder com "
-        "segurança. Seu Personal poderá te ajudar melhor! 🤝"
+        "segurança. Seu Personal poderá te ajudar melhor."
     ),
     "timeout": (
         "Estamos com lentidão na resposta. Encaminhei sua pergunta ao seu "
-        "Personal para garantir uma resposta correta! ⏳"
+        "Personal para garantir uma resposta correta."
     ),
     "generation_error": (
         "Tive um problema técnico ao gerar a resposta. Seu Personal foi "
-        "notificado e te ajudará em breve! 🛠️"
+        "notificado e te ajudará em breve."
     ),
 }
+
+# Saudações comuns — respondidas direto, sem chamar LLM. Evita o caso em que
+# uma simples "olá" entra no pipeline RAG, não casa documento e ainda precisa
+# bater no Groq, podendo estourar o timeout em cold start.
+GREETING_PATTERNS: tuple[str, ...] = (
+    r"^\s*(ol[áa]|oi+|e[ai])\s*[!?\.]*\s*$",
+    r"^\s*(bom\s*dia|boa\s*tarde|boa\s*noite)\s*[!?\.]*\s*$",
+    r"^\s*(tudo\s*bem|tudo\s*bom|como\s*vai|como\s*est[áa])\s*[!?\.]*\s*$",
+    r"^\s*(obrigad[oa]|valeu|brigad[oa])\s*[!?\.]*\s*$",
+    r"^\s*(tchau|at[eé]\s*mais|at[eé]\s*logo)\s*[!?\.]*\s*$",
+)
+_GREETING_REGEX = re.compile("|".join(GREETING_PATTERNS), flags=re.IGNORECASE)
+
+GREETING_RESPONSE = (
+    "Olá! Sou o assistente do OmniConnect Fitness. Posso ajudar com dúvidas "
+    "sobre execução de exercícios, sua ficha de treino, nutrição básica e "
+    "informações operacionais da academia. O que você gostaria de saber?"
+)
 
 # System prompt base do chatbot
 SYSTEM_PROMPT_TEMPLATE = """\
@@ -606,6 +624,20 @@ class RAGChain:
         _ = on_status
 
         logger.info("RAG pipeline iniciado | query=%r", query[:100])
+
+        # ── 0. FAST-PATH SAUDAÇÕES ────────────────────────────────────────
+        # Saudações curtas ("olá", "oi", "bom dia") não precisam do RAG nem do
+        # LLM. Respondemos direto para evitar timeout em cold start.
+        if _GREETING_REGEX.match(query):
+            latency_ms = int((time.monotonic() - start_time) * 1000)
+            return RAGResult(
+                answer=GREETING_RESPONSE,
+                retrieved_documents=[],
+                should_escalate=False,
+                latency_ms=latency_ms,
+                confidence_score=1.0,
+                model_used="greeting_fallback",
+            )
 
         # ── 1. RETRIEVE ────────────────────────────────────────────────────
         retrieved_docs = await self.retrieve(query, session, academy_id)

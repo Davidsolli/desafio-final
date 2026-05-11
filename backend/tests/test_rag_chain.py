@@ -416,6 +416,58 @@ class TestGenerate:
 
 # ── Testes: run() — Pipeline Completo ─────────────────────────────────────────
 
+class TestGreetingFastPath:
+    """Saudações curtas devem retornar resposta direta sem chamar LLM nem retrieve."""
+
+    @pytest.mark.parametrize(
+        "greeting",
+        [
+            "olá",
+            "Olá!",
+            "oi",
+            "Oi!",
+            "Bom dia",
+            "boa tarde",
+            "Boa noite!",
+            "tudo bem?",
+            "tudo bom",
+            "obrigado",
+            "obrigada",
+            "valeu",
+            "tchau",
+            "até mais",
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_greeting_returns_direct_response(self, chain, mock_session, greeting):
+        """Saudações conhecidas devolvem resposta amigável sem ir ao LLM ou retrieve."""
+        chain.retrieve = AsyncMock()
+        chain.generate = AsyncMock()
+
+        result = await chain.run(query=greeting, session=mock_session)
+
+        assert isinstance(result, RAGResult)
+        assert result.should_escalate is False
+        assert result.model_used == "greeting_fallback"
+        assert "OmniConnect" in result.answer or "assistente" in result.answer.lower()
+        # Nem retrieve nem generate devem ter sido chamados
+        chain.retrieve.assert_not_called()
+        chain.generate.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_non_greeting_does_not_use_fast_path(self, chain, mock_session, sample_docs):
+        """Pergunta normal não deve cair no fast-path de saudação."""
+        chain.retrieve = AsyncMock(return_value=sample_docs)
+        chain.generate = AsyncMock(return_value=(
+            "Resposta sobre o exercício.", 50, "llama-3.3-70b-versatile",
+        ))
+
+        result = await chain.run(query="Como faço supino reto?", session=mock_session)
+
+        assert result.model_used != "greeting_fallback"
+        chain.retrieve.assert_called_once()
+
+
 class TestRunPipeline:
     """Testa o pipeline RAG completo (run())."""
 
