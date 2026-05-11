@@ -59,6 +59,20 @@ class NutritionService {
     }
   }
 
+  /// Busca o diário alimentar de um estudante específico por data (personal/admin)
+  Future<DietLogbook> getStudentLogbookByDate({required String userId, required DateTime date}) async {
+    try {
+      final dateString = date.toIso8601String().split('T')[0];
+      final response = await _apiClient.get<DietLogbook>(
+        '/diet-logbook/student/$userId/$dateString',
+        fromJson: (data) => DietLogbook.fromJson(data as Map<String, dynamic>),
+      );
+      return response;
+    } catch (e) {
+      rethrow;
+    }
+  }
+
   /// Adiciona uma entrada no diário alimentar (consumo de alimento)
   Future<DietLogbookEntry> addLogbookEntry(CreateDietLogbookEntryDTO dto) async {
     try {
