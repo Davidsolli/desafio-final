@@ -56,11 +56,14 @@ class _ChatScreenState extends State<ChatScreen> {
 
     final prefs = await SharedPreferences.getInstance();
     final storedId = prefs.getString(_kConversationIdPrefsKey);
+    debugPrint('[chat] _loadStoredConversation lido: $storedId');
     if (storedId == null || storedId.isEmpty) return;
 
     try {
       final detail = await chatService.getConversation(storedId);
       if (!mounted) return;
+      debugPrint(
+          '[chat] historico carregado: id=${detail.id}, msgs=${detail.messages.length}');
       setState(() {
         _conversationId = detail.id;
         _messages.addAll(detail.messages.map((m) => {
@@ -71,18 +74,20 @@ class _ChatScreenState extends State<ChatScreen> {
       });
       _scrollToBottom();
     } on NotFoundException {
-      // Conversa apagada/expirada no backend — limpar para começar nova
+      debugPrint('[chat] conversa $storedId 404 — limpando id salvo');
       await prefs.remove(_kConversationIdPrefsKey);
     } on UnauthorizedException {
+      debugPrint('[chat] conversa $storedId 401 — limpando id salvo');
       await prefs.remove(_kConversationIdPrefsKey);
-    } catch (_) {
-      // Falha de rede etc.: não derruba a tela, só ignora o histórico
+    } catch (e, st) {
+      debugPrint('[chat] erro ao carregar historico: $e\n$st');
     }
   }
 
   Future<void> _persistConversationId(String id) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_kConversationIdPrefsKey, id);
+    debugPrint('[chat] conversation_id salvo: $id');
   }
 
   Future<void> _connectWebSocket() async {
@@ -157,10 +162,13 @@ class _ChatScreenState extends State<ChatScreen> {
             }
           } else if (data['type'] == 'response') {
             final newId = data['conversation_id'] as String?;
+            debugPrint('[chat] response recebida com conversation_id=$newId');
             if (newId != null) {
               _conversationId = newId;
-              // Persiste para sobreviver entre saídas/retornos da tela
-              unawaited(_persistConversationId(newId));
+              // Save sincrono (await) para garantir flush em disco antes
+              // do dispose; unawaited podia perder a corrida se o usuario
+              // saisse da tela imediatamente apos receber a resposta.
+              await _persistConversationId(newId);
             }
             if (mounted) {
               setState(() {
