@@ -163,5 +163,66 @@ void main() {
       expect(find.byType(AppBar), findsOneWidget);
       expect(find.byType(Scaffold), findsOneWidget);
     });
+
+    // ---- Fase 2: Timezone dropdown ----
+
+    testWidgets('exibe dropdown de timezone com fusos brasileiros',
+        (WidgetTester tester) async {
+      fake.preferencesToReturn = <String, dynamic>{
+        'notifications_enabled': true,
+        'workout_reminder_enabled': true,
+        'timezone': 'America/Sao_Paulo',
+      };
+
+      await tester.pumpWidget(wrap(const NotificationsSettingsScreen()));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Fuso horário'), findsOneWidget);
+      expect(find.byType(DropdownButton<String>), findsOneWidget);
+    });
+
+    testWidgets('selecionar novo fuso chama updateTimezone',
+        (WidgetTester tester) async {
+      fake.preferencesToReturn = <String, dynamic>{
+        'notifications_enabled': true,
+        'workout_reminder_enabled': true,
+        'timezone': 'America/Sao_Paulo',
+      };
+      fake.updateTimezoneOk = true;
+
+      await tester.pumpWidget(wrap(const NotificationsSettingsScreen()));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(DropdownButton<String>));
+      await tester.pumpAndSettle();
+
+      // Seleciona Manaus na lista de opções
+      await tester.tap(find.text('Manaus (UTC-4)').last);
+      await tester.pumpAndSettle();
+
+      expect(fake.updateTimezoneCalls, contains('America/Manaus'));
+    });
+
+    testWidgets('exibe SnackBar de erro quando updateTimezone falha',
+        (WidgetTester tester) async {
+      fake.preferencesToReturn = <String, dynamic>{
+        'notifications_enabled': true,
+        'workout_reminder_enabled': true,
+        'timezone': 'America/Sao_Paulo',
+      };
+      fake.updateTimezoneOk = false;
+
+      await tester.pumpWidget(wrap(const NotificationsSettingsScreen()));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(DropdownButton<String>));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Manaus (UTC-4)').last);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(find.text('Falha ao atualizar fuso horário'), findsOneWidget);
+    });
   });
 }
