@@ -1,8 +1,8 @@
 """
 Testes unitários para o pipeline RAG (app/ai/rag_chain.py).
 
-Todos os testes usam mocks para as chamadas ao Gemini (embeddings + LLM),
-garantindo que nenhuma requisição real seja feita durante a execução.
+Todos os testes usam mocks para as chamadas ao Groq (LLM) e ao HuggingFace
+(embeddings), garantindo que nenhuma requisição real seja feita durante a execução.
 """
 
 from __future__ import annotations
@@ -81,16 +81,15 @@ def user_context() -> dict:
     }
 
 
-# ── Testes: _get_embeddings e _get_llm (lazy init) ────────────────────────────
+# ── Testes: Lazy Init (Groq + HuggingFace) ────────────────────────────────────
+
 
 class TestLazyInit:
-    """Testa inicialização lazy das dependências."""
+    """Inicialização lazy dos clients Groq e HuggingFace."""
 
-    @patch("app.ai.rag_chain.GoogleGenerativeAIEmbeddings")
-    @patch("app.ai.rag_chain.settings")
-    def test_get_embeddings_creates_once(self, mock_settings, mock_embed_cls, chain):
+    @patch("app.ai.rag_chain.HuggingFaceEmbeddings")
+    def test_get_embeddings_creates_once(self, mock_embed_cls, chain):
         """_get_embeddings() deve criar instância apenas na primeira chamada."""
-        mock_settings.GOOGLE_API_KEY = "fake-key"
         mock_embed_cls.return_value = MagicMock()
 
         emb1 = chain._get_embeddings()
@@ -98,13 +97,16 @@ class TestLazyInit:
 
         assert emb1 is emb2
         mock_embed_cls.assert_called_once()
+        # Verifica que usa o modelo correto da HuggingFace
+        kwargs = mock_embed_cls.call_args.kwargs
+        assert "all-MiniLM-L6-v2" in kwargs.get("model_name", "")
 
-    @patch("app.ai.rag_chain.ChatGoogleGenerativeAI")
+    @patch("app.ai.rag_chain.ChatGroq")
     @patch("app.ai.rag_chain.settings")
     def test_get_llm_creates_once(self, mock_settings, mock_llm_cls, chain):
-        """_get_llm() deve criar instância apenas na primeira chamada."""
-        mock_settings.GOOGLE_API_KEY = "fake-key"
-        mock_settings.GEMINI_MODEL = "gemini-1.5-flash"
+        """_get_llm() deve criar instância apenas na primeira chamada usando ChatGroq."""
+        mock_settings.GROQ_API_KEY = "fake-key"
+        mock_settings.GROQ_MODEL = "llama-3.3-70b-versatile"
         mock_llm_cls.return_value = MagicMock()
 
         llm1 = chain._get_llm()
@@ -126,7 +128,7 @@ class TestRetrieve:
 
         # Mock embedding
         mock_embed = AsyncMock()
-        mock_embed.aembed_query = AsyncMock(return_value=[0.1] * 768)
+        mock_embed.aembed_query = AsyncMock(return_value=[0.1] * 384)
         chain._embeddings = mock_embed
 
         # Mock resultado do banco — dois docs, scores 0.85 e 0.50
@@ -160,7 +162,7 @@ class TestRetrieve:
     async def test_retrieve_returns_empty_when_no_match(self, chain, mock_session):
         """Deve retornar lista vazia quando nenhum doc atinge score mínimo (RN-07)."""
         mock_embed = AsyncMock()
-        mock_embed.aembed_query = AsyncMock(return_value=[0.1] * 768)
+        mock_embed.aembed_query = AsyncMock(return_value=[0.1] * 384)
         chain._embeddings = mock_embed
 
         row_low = MagicMock()
@@ -194,7 +196,7 @@ class TestRetrieve:
     async def test_retrieve_handles_db_error(self, chain, mock_session):
         """Deve retornar lista vazia em caso de erro no banco."""
         mock_embed = AsyncMock()
-        mock_embed.aembed_query = AsyncMock(return_value=[0.1] * 768)
+        mock_embed.aembed_query = AsyncMock(return_value=[0.1] * 384)
         chain._embeddings = mock_embed
 
         mock_session.execute = AsyncMock(side_effect=Exception("DB error"))
@@ -207,7 +209,7 @@ class TestRetrieve:
     async def test_retrieve_filters_by_academy_id(self, chain, mock_session):
         """Deve passar academy_id como parâmetro ao banco quando fornecido."""
         mock_embed = AsyncMock()
-        mock_embed.aembed_query = AsyncMock(return_value=[0.1] * 768)
+        mock_embed.aembed_query = AsyncMock(return_value=[0.1] * 384)
         chain._embeddings = mock_embed
 
         mock_result = MagicMock()
@@ -299,10 +301,10 @@ class TestShouldEscalate:
         assert reason == "user_requested"
 
     def test_escalate_on_health_risk(self, chain, sample_docs):
-        """Deve escalar em menção a risco de saúde (RN-17)."""
+        """Deve escalar em menção a risco de saúde com reason='health_risk' (RN-17, Etapa 3)."""
         should, reason = chain._should_escalate("estou com dor no peito", sample_docs)
         assert should is True
-        assert reason == "user_requested"
+        assert reason == "health_risk"
 
     def test_escalate_on_no_docs(self, chain):
         """Deve escalar quando não há documentos relevantes (RN-07)."""
@@ -414,6 +416,127 @@ class TestGenerate:
 
 # ── Testes: run() — Pipeline Completo ─────────────────────────────────────────
 
+class TestGreetingFastPath:
+    """Saudações curtas devem retornar resposta direta sem chamar LLM nem retrieve."""
+
+    @pytest.mark.parametrize(
+        "greeting",
+        [
+            "olá",
+            "Olá!",
+            "oi",
+            "Oi!",
+            "Bom dia",
+            "boa tarde",
+            "Boa noite!",
+            "tudo bem?",
+            "tudo bom",
+            "obrigado",
+            "obrigada",
+            "valeu",
+            "tchau",
+            "até mais",
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_greeting_returns_direct_response(self, chain, mock_session, greeting):
+        """Saudações conhecidas devolvem resposta amigável sem ir ao LLM ou retrieve."""
+        chain.retrieve = AsyncMock()
+        chain.generate = AsyncMock()
+
+        result = await chain.run(query=greeting, session=mock_session)
+
+        assert isinstance(result, RAGResult)
+        assert result.should_escalate is False
+        assert result.model_used == "greeting_fallback"
+        assert "OmniConnect" in result.answer or "assistente" in result.answer.lower()
+        # Nem retrieve nem generate devem ter sido chamados
+        chain.retrieve.assert_not_called()
+        chain.generate.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_non_greeting_does_not_use_fast_path(self, chain, mock_session, sample_docs):
+        """Pergunta normal não deve cair no fast-path de saudação."""
+        chain.retrieve = AsyncMock(return_value=sample_docs)
+        chain.generate = AsyncMock(return_value=(
+            "Resposta sobre o exercício.", 50, "llama-3.3-70b-versatile",
+        ))
+
+        result = await chain.run(query="Como faço supino reto?", session=mock_session)
+
+        assert result.model_used != "greeting_fallback"
+        chain.retrieve.assert_called_once()
+
+
+class TestTrainerLookupFastPath:
+    """Perguntas sobre "quem é meu personal" são respondidas a partir do user_context."""
+
+    @pytest.mark.parametrize(
+        "query",
+        [
+            "Quem é meu personal?",
+            "quem e o meu personal trainer?",
+            "qual o meu personal?",
+            "qual o nome do meu personal?",
+            "como se chama meu personal?",
+            "meu personal trainer?",
+            "Quem é meu treinador?",
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_trainer_lookup_returns_name_from_context(self, chain, mock_session, query):
+        """Quando há trainer no user_context, devolve o nome direto."""
+        chain.retrieve = AsyncMock()
+        chain.generate = AsyncMock()
+        ctx = {
+            "user_profile": {"name": "Aluno", "role": "client"},
+            "personal_trainer": {"id": "abc", "name": "Lucas Silva", "email": "l@x.com"},
+        }
+
+        result = await chain.run(query=query, session=mock_session, user_context=ctx)
+
+        assert result.model_used == "trainer_lookup"
+        assert result.should_escalate is False
+        assert "Lucas Silva" in result.answer
+        chain.retrieve.assert_not_called()
+        chain.generate.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_trainer_lookup_no_trainer_linked(self, chain, mock_session):
+        """Sem trainer vinculado, devolve mensagem orientando o aluno."""
+        chain.retrieve = AsyncMock()
+        chain.generate = AsyncMock()
+        ctx = {
+            "user_profile": {"name": "Aluno"},
+            "personal_trainer": None,
+        }
+
+        result = await chain.run(
+            query="quem é meu personal?", session=mock_session, user_context=ctx,
+        )
+
+        assert result.model_used == "trainer_lookup"
+        assert "ainda não tem" in result.answer.lower() or "não vinculado" in result.answer.lower()
+
+    @pytest.mark.asyncio
+    async def test_trainer_lookup_does_not_escalate(self, chain, mock_session):
+        """Pergunta sobre personal NÃO deve escalar — antes a keyword 'personal trainer'
+        em EXPLICIT_REQUEST_KEYWORDS sequestrava esse fluxo."""
+        chain.retrieve = AsyncMock()
+        chain.generate = AsyncMock()
+        ctx = {"personal_trainer": {"name": "Joana"}}
+
+        result = await chain.run(
+            query="quem é meu personal trainer?",
+            session=mock_session,
+            user_context=ctx,
+        )
+
+        assert result.should_escalate is False
+        assert result.escalation_reason == ""
+        assert "Joana" in result.answer
+
+
 class TestRunPipeline:
     """Testa o pipeline RAG completo (run())."""
 
@@ -426,7 +549,7 @@ class TestRunPipeline:
         chain.generate = AsyncMock(return_value=(
             "O supino reto deve ser executado com as escápulas retraídas...",
             120,
-            "gemini-1.5-flash",
+            "llama-3.3-70b-versatile",
         ))
 
         result = await chain.run(
@@ -439,7 +562,7 @@ class TestRunPipeline:
         assert result.should_escalate is False
         assert "supino" in result.answer.lower()
         assert len(result.retrieved_documents) == 2
-        assert result.model_used == "gemini-1.5-flash"
+        assert result.model_used == "llama-3.3-70b-versatile"
         assert result.tokens_used == 120
         assert result.latency_ms >= 0
         assert result.confidence_score > 0
@@ -448,7 +571,7 @@ class TestRunPipeline:
     async def test_run_escalates_when_no_docs(self, chain, mock_session):
         """Deve escalar imediatamente quando retrieve retorna lista vazia e a IA não sabe responder."""
         chain.retrieve = AsyncMock(return_value=[])
-        chain.generate = AsyncMock(return_value=("Não sei informar", 10, "gemini"))
+        chain.generate = AsyncMock(return_value=("Não sei informar", 10, "llama-3.3-70b-versatile"))
 
         result = await chain.run(
             query="pergunta sem match na base",
@@ -499,14 +622,15 @@ class TestRunPipeline:
 
         assert result.should_escalate is True
         assert result.escalation_reason == "generation_error"
-        assert "Desculpe" in result.answer or "instantes" in result.answer
+        # Nova mensagem contextualizada por reason (Etapa 3, ESCALATION_MESSAGES)
+        assert "Personal" in result.answer or "técnico" in result.answer
 
     @pytest.mark.asyncio
     async def test_run_calculates_confidence_score(self, chain, mock_session, user_context, sample_docs):
         """confidence_score deve ser a média dos scores dos documentos recuperados."""
         chain.retrieve = AsyncMock(return_value=sample_docs)
         chain.generate = AsyncMock(return_value=(
-            "Resposta adequada sobre o exercício solicitado...", 80, "gemini-1.5-flash"
+            "Resposta adequada sobre o exercício solicitado...", 80, "llama-3.3-70b-versatile"
         ))
 
         result = await chain.run("Como faço supino?", mock_session, user_context=user_context)

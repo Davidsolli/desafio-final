@@ -86,14 +86,13 @@ class ExerciseResponseDTO(BaseModel):
 
 
 class CreateWorkoutSheetDTO(BaseModel):
-    """DTO para criar uma nova ficha de treino."""
+    """DTO para criar uma nova rotina (ficha) de treino."""
 
-    user_id: UUID = Field(..., description="UUID do aluno que receberá a ficha")
+    workout_program_id: Optional[UUID] = Field(None, description="Programa ao qual a ficha pertence")
     name: str = Field(..., max_length=255, description="Nome da ficha (ex: 'Treino A - Peito')")
     description: Optional[str] = Field(None, description="Descrição opcional da ficha")
-    day_of_week: int = Field(
-        ..., ge=0, le=6, description="Dia da semana (0=seg, 1=ter, ..., 6=dom)"
-    )
+    day_of_week: Optional[int] = Field(None, ge=0, le=6, description="Dia sugerido da semana (0=seg, ..., 6=dom)")
+    order: int = Field(1, description="Ordem de execução dentro do programa")
     exercises: List[ExerciseCreateDTO] = Field(
         default_factory=list, description="Lista de exercícios da ficha"
     )
@@ -105,6 +104,7 @@ class UpdateWorkoutSheetDTO(BaseModel):
     name: Optional[str] = Field(None, max_length=255)
     description: Optional[str] = None
     day_of_week: Optional[int] = Field(None, ge=0, le=6)
+    order: Optional[int] = None
     exercises: Optional[List[ExerciseCreateDTO]] = Field(
         None,
         description="Se fornecido, substitui todos os exercícios da ficha"
@@ -115,8 +115,8 @@ class DuplicateWorkoutSheetDTO(BaseModel):
     """DTO para duplicar uma ficha de treino."""
 
     name: Optional[str] = Field(None, max_length=255, description="Novo nome (opcional)")
-    user_id: Optional[UUID] = Field(
-        None, description="Atribuir a outro aluno (opcional, padrão: mesmo aluno)"
+    workout_program_id: Optional[UUID] = Field(
+        None, description="Atribuir a outro programa (opcional, padrão: mesmo programa)"
     )
 
 
@@ -124,11 +124,11 @@ class WorkoutSheetResponseDTO(BaseModel):
     """Resposta completa de uma ficha de treino (com exercícios)."""
 
     id: UUID
-    user_id: UUID
-    personal_trainer_id: Optional[UUID] = None
+    workout_program_id: UUID
     name: str
     description: Optional[str] = None
-    day_of_week: int
+    day_of_week: Optional[int] = None
+    order: int
     is_active: bool
     created_at: datetime
     updated_at: datetime
@@ -141,10 +141,10 @@ class WorkoutSheetListItemDTO(BaseModel):
     """Item de ficha na listagem (sem exercícios completos, com contagem)."""
 
     id: UUID
-    user_id: UUID
-    personal_trainer_id: Optional[UUID] = None
+    workout_program_id: UUID
     name: str
-    day_of_week: int
+    day_of_week: Optional[int] = None
+    order: int
     is_active: bool
     exercise_count: int = 0
     created_at: datetime
@@ -159,6 +159,44 @@ class PaginatedWorkoutSheetsDTO(BaseModel):
     page: int
     limit: int
     data: List[WorkoutSheetListItemDTO]
+
+
+# ---------------------------------------------------------------------------
+# DTOs de Workout Program (Programa de Treino)
+# ---------------------------------------------------------------------------
+
+class CreateWorkoutProgramDTO(BaseModel):
+    user_id: UUID = Field(..., description="UUID do aluno que receberá o programa")
+    name: str = Field(..., max_length=255, description="Nome do programa")
+    description: Optional[str] = None
+    goal: Optional[str] = None
+    workout_sheets: List[CreateWorkoutSheetDTO] = []
+
+class UpdateWorkoutProgramDTO(BaseModel):
+    name: Optional[str] = Field(None, max_length=255)
+    description: Optional[str] = None
+    goal: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class WorkoutProgramResponseDTO(BaseModel):
+    id: UUID
+    user_id: UUID
+    personal_trainer_id: Optional[UUID] = None
+    name: str
+    description: Optional[str] = None
+    goal: Optional[str] = None
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+    workout_sheets: List[WorkoutSheetResponseDTO] = []
+
+    model_config = {"from_attributes": True}
+
+class PaginatedWorkoutProgramsDTO(BaseModel):
+    total: int
+    page: int
+    limit: int
+    data: List[WorkoutProgramResponseDTO]
 
 
 # ---------------------------------------------------------------------------

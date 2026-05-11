@@ -89,7 +89,7 @@ async def init_db() -> None:
         await conn.run_sync(Base.metadata.create_all)
         logger.info("✓ Todas as tabelas criadas/verificadas com sucesso")
 
-        # 3. Migração manual: Adicionar colunas de dados corporais à tabela users
+        # 3. Migração manual: Adicionar colunas de dados corporais e FCM à tabela users
         alters = [
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS weight DOUBLE PRECISION",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS height DOUBLE PRECISION",
@@ -105,11 +105,36 @@ async def init_db() -> None:
             try:
                 await conn.execute(text(alter))
             except Exception as exc:
-                logger.warning("Erro ao executar ALTER TABLE: %s", exc)
-        logger.info("✓ Colunas de users verificadas/adicionadas")
+                logger.warning("Erro ao executar ALTER TABLE users: %s", exc)
+        logger.info("✓ Colunas de dados corporais e FCM verificadas/adicionadas em users")
 
-        # Migração: converter colunas de password_reset_tokens para TIMESTAMPTZ
-        # Necessário em ambientes onde a tabela foi criada com DateTime (sem timezone)
+        # 4. Migração: Adaptar WorkoutSheets para usar WorkoutProgram
+        alters_workout = [
+            "ALTER TABLE workout_sheets ADD COLUMN IF NOT EXISTS workout_program_id UUID",
+            "ALTER TABLE workout_sheets ADD COLUMN IF NOT EXISTS \"order\" INTEGER DEFAULT 1",
+            "ALTER TABLE workout_sheets ALTER COLUMN day_of_week DROP NOT NULL",
+            "ALTER TABLE workout_sheets ALTER COLUMN user_id DROP NOT NULL",
+            "ALTER TABLE workout_sheets ALTER COLUMN personal_trainer_id DROP NOT NULL",
+        ]
+        for alter in alters_workout:
+            try:
+                await conn.execute(text(alter))
+            except Exception as exc:
+                logger.warning("Erro ao executar ALTER TABLE workout_sheets: %s", exc)
+        logger.info("✓ Colunas atualizadas em workout_sheets para suportar WorkoutProgram")
+
+        # 5. Migração: Adicionar water_target_ml ao diets se não existir
+        alters_diets = [
+            "ALTER TABLE diets ADD COLUMN IF NOT EXISTS water_target_ml INTEGER DEFAULT NULL",
+        ]
+        for alter in alters_diets:
+            try:
+                await conn.execute(text(alter))
+            except Exception as exc:
+                logger.warning("Erro ao executar ALTER TABLE diets: %s", exc)
+        logger.info("✓ Colunas atualizadas em diets para suportar water_target_ml")
+
+        # 6. Migração: converter colunas de password_reset_tokens para TIMESTAMPTZ
         token_col_alters = [
             "ALTER TABLE password_reset_tokens ALTER COLUMN expires_at TYPE TIMESTAMPTZ USING expires_at AT TIME ZONE 'UTC'",
             "ALTER TABLE password_reset_tokens ALTER COLUMN used_at TYPE TIMESTAMPTZ USING used_at AT TIME ZONE 'UTC'",
@@ -120,6 +145,20 @@ async def init_db() -> None:
                 await conn.execute(text(alter))
             except Exception:
                 pass  # tabela ainda não existe ou coluna já é TIMESTAMPTZ
+
+        # Migração: contexto da escalação na conversa de chat (chatbot Etapa 3)
+        try:
+            await conn.execute(
+                text(
+                    "ALTER TABLE chat_conversations "
+                    "ADD COLUMN IF NOT EXISTS escalation_data JSON"
+                )
+            )
+            logger.info("✓ Coluna escalation_data verificada/adicionada em chat_conversations")
+        except Exception as exc:
+            logger.warning(
+                "Erro ao adicionar escalation_data em chat_conversations: %s", exc
+            )
 
     # 4. Migração manual: Adicionar food_name ao logbook entries se não existir
     # (feita APÓS criar as tabelas, em transação separada)
@@ -159,3 +198,13 @@ async def init_db() -> None:
         logger.info("✓ Seed de usuários e dados de domínio concluída")
     except Exception as exc:
         logger.warning("Erro ao popular dados de domínio iniciais: %s", exc)
+
+    try:
+        from scripts.seed_knowledge_base import seed as seed_knowledge_base
+        inserted = await seed_knowledge_base(force=False)
+        logger.info(
+            "✓ Verificação/Seed da base de conhecimento concluída (%d novos docs)",
+            inserted,
+        )
+    except Exception as exc:
+        logger.warning("Erro ao popular base de conhecimento: %s", exc)

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:animate_do/animate_do.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/theme_colors.dart';
 import '../../models/workout_sheet_model.dart';
@@ -10,9 +11,14 @@ import '../../providers/workout_sheet_provider.dart';
 import '../../services/nutrition_service.dart';
 import '../../services/user_service.dart';
 import '../../services/workout_sheet_service.dart';
+import '../../services/dashboard_service.dart';
+import '../../services/api_client.dart';
+import '../../widgets/frequency_bar_chart.dart';
+import '../../widgets/progression_line_chart.dart';
 import '../../shared/widgets/index.dart';
 import 'widgets/create_workout_sheet_dialog.dart';
 import 'widgets/edit_workout_sheet_dialog.dart';
+import '../student/widgets/create_custom_food_dialog.dart';
 
 class TrainerStudentDetail extends StatefulWidget {
   final String studentId;
@@ -31,16 +37,37 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
 
   // Estado local para fichas do aluno (carregadas via API)
   List<WorkoutSheetListItem> _studentSheets = [];
-  bool _sheetsLoading = false;
+  WorkoutProgramResponse? _activeProgram;
+  bool _sheetsLoading = true;
   String? _sheetsError;
   List<Diet> _studentDiets = [];
   bool _nutritionLoading = false;
   String? _nutritionError;
 
+  // Estado local para a aba de Evolução
+  bool _evolutionLoading = false;
+  String? _evolutionError;
+  List<Map<String, dynamic>> _frequencyData = [];
+  String _frequencyPeriod = 'weekly';
+  List<Map<String, dynamic>> _progressionData = [];
+  String? _selectedExerciseId;
+  String? _selectedExerciseName;
+  List<Map<String, dynamic>> _muscleGroupData = [];
+  List<ExerciseResponse> _studentExercises = [];
+
+  // Estado local para o Diário do Aluno (Aba Nutrição Avançada)
+  int _nutritionSubTabIndex = 0; // 0 para Diário do Aluno, 1 para Plano Alimentar
+  DietLogbook? _studentLogbook;
+  bool _studentLogbookLoading = false;
+  DateTime _selectedLogbookDate = DateTime.now();
+  List<double> _studentLast7DaysCalories = List.filled(7, 0.0);
+  List<bool> _studentLast7DaysLogged = List.filled(7, false);
+  int _studentWaterToday = 0;
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _tabController.addListener(_handleTabChanged);
 
     // Carrega dados do aluno e fichas via API
@@ -48,13 +75,21 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
       _loadStudentData();
       _loadStudentSheets();
       _loadStudentNutrition();
+      _loadStudentLogbook();
     });
   }
 
   void _handleTabChanged() {
     // Garante recarga quando a aba Nutrição for selecionada, inclusive após hot reload.
-    if (_tabController.index == 2 && !_nutritionLoading && _studentDiets.isEmpty) {
-      _loadStudentNutrition();
+    if (_tabController.index == 2) {
+      if (!_nutritionLoading && _studentDiets.isEmpty) {
+        _loadStudentNutrition();
+      }
+      _loadStudentLogbook();
+    }
+    // Garante recarga quando a aba de Evolução for selecionada
+    if (_tabController.index == 3 && !_evolutionLoading && _frequencyData.isEmpty) {
+      _loadEvolutionData();
     }
   }
 
@@ -106,6 +141,83 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
     }
   }
 
+  Future<void> _loadStudentLogbook() async {
+    if (_studentLogbookLoading) return;
+    setState(() {
+      _studentLogbookLoading = true;
+    });
+    try {
+      final nutritionService = context.read<NutritionService>();
+      final logbook = await nutritionService.getStudentLogbookByDate(
+        userId: widget.studentId,
+        date: _selectedLogbookDate,
+      );
+
+      // Carrega histórico dos últimos 7 dias para o Grid de Consistência
+      final List<double> last7Calories = List.filled(7, 0.0);
+      final List<bool> last7Logged = List.filled(7, false);
+      
+      for (int i = 0; i < 7; i++) {
+        final targetDate = _selectedLogbookDate.subtract(Duration(days: 6 - i));
+        try {
+          final dailyLog = await nutritionService.getStudentLogbookByDate(
+            userId: widget.studentId,
+            date: targetDate,
+          );
+          last7Calories[i] = dailyLog.totalKcal;
+          last7Logged[i] = dailyLog.entries.isNotEmpty;
+        } catch (_) {
+          // Trata falha silenciosamente
+        }
+      }
+
+      // Carrega o diário de água do SharedPreferences local e isolado por estudante
+      final prefs = await SharedPreferences.getInstance();
+      final dateStr = _selectedLogbookDate.toIso8601String().split('T')[0];
+      final savedWater = prefs.getInt('water_log_${widget.studentId}_$dateStr') ?? 0;
+
+      if (mounted) {
+        setState(() {
+          _studentLogbook = logbook;
+          _studentLast7DaysCalories = last7Calories;
+          _studentLast7DaysLogged = last7Logged;
+          _studentWaterToday = savedWater;
+          _studentLogbookLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _studentLogbookLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _updateStudentWater(int amountMl) async {
+    final prefs = await SharedPreferences.getInstance();
+    final dateStr = _selectedLogbookDate.toIso8601String().split('T')[0];
+    final current = prefs.getInt('water_log_${widget.studentId}_$dateStr') ?? 0;
+    final updated = current + amountMl;
+    await prefs.setInt('water_log_${widget.studentId}_$dateStr', updated);
+    if (mounted) {
+      setState(() {
+        _studentWaterToday = updated;
+      });
+    }
+  }
+
+  Future<void> _resetStudentWater() async {
+    final prefs = await SharedPreferences.getInstance();
+    final dateStr = _selectedLogbookDate.toIso8601String().split('T')[0];
+    await prefs.remove('water_log_${widget.studentId}_$dateStr');
+    if (mounted) {
+      setState(() {
+        _studentWaterToday = 0;
+      });
+    }
+  }
+
   Future<void> _loadStudentSheets() async {
     setState(() {
       _sheetsLoading = true;
@@ -113,12 +225,49 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
     });
     try {
       final provider = context.read<WorkoutSheetProvider>();
-      await provider.loadSheets(userId: widget.studentId);
-      if (mounted) {
-        setState(() {
-          _studentSheets = provider.sheets;
-          _sheetsLoading = false;
-        });
+      await provider.loadPrograms(userId: widget.studentId);
+      
+      if (provider.programs.isNotEmpty) {
+        final active = provider.programs.firstWhere((p) => p.isActive, orElse: () => provider.programs.first);
+        await provider.loadSheets(workoutProgramId: active.id);
+        
+        final List<ExerciseResponse> exercises = [];
+        final sheetService = provider.service;
+        for (final s in provider.sheets) {
+          try {
+            final detailedSheet = await sheetService.getWorkoutSheet(s.id);
+            exercises.addAll(detailedSheet.exercises);
+          } catch (_) {}
+        }
+        
+        final uniqueExercises = <String, ExerciseResponse>{};
+        for (final ex in exercises) {
+          uniqueExercises[ex.name] = ex;
+        }
+
+        if (mounted) {
+          setState(() {
+            _activeProgram = active;
+            _studentSheets = provider.sheets;
+            _studentExercises = uniqueExercises.values.toList();
+            if (_studentExercises.isNotEmpty && _selectedExerciseId == null) {
+              _selectedExerciseId = _studentExercises.first.id;
+              _selectedExerciseName = _studentExercises.first.name;
+            }
+            _sheetsLoading = false;
+          });
+          _loadEvolutionData();
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _activeProgram = null;
+            _studentSheets = [];
+            _studentExercises = [];
+            _sheetsLoading = false;
+          });
+          _loadEvolutionData();
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -128,6 +277,485 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
         });
       }
     }
+  }
+
+  Future<void> _loadEvolutionData() async {
+    setState(() {
+      _evolutionLoading = true;
+      _evolutionError = null;
+    });
+
+    try {
+      final apiClient = context.read<ApiClient>();
+      final dashboardService = DashboardService(apiClient);
+
+      // 1. Carrega frequência de treino
+      final freqRes = await dashboardService.getFrequency(
+        period: _frequencyPeriod,
+        userId: widget.studentId,
+      );
+      final List<dynamic> freqDataList = freqRes != null && freqRes['data_points'] != null 
+          ? freqRes['data_points'] as List<dynamic> 
+          : [];
+
+      // 2. Carrega foco muscular nos últimos 30 dias
+      final muscleRes = await dashboardService.getMuscleGroupDistribution(
+        days: 30,
+        userId: widget.studentId,
+      );
+      final List<dynamic> muscleDataList = muscleRes != null && muscleRes['distribution'] != null 
+          ? muscleRes['distribution'] as List<dynamic> 
+          : [];
+
+      // 3. Carrega progressão de carga do exercício selecionado se houver
+      List<dynamic> progressionDataList = [];
+      if (_selectedExerciseId != null) {
+        final progRes = await dashboardService.getExerciseProgression(
+          exerciseId: _selectedExerciseId!,
+          userId: widget.studentId,
+        );
+        progressionDataList = progRes != null && progRes['data_points'] != null 
+            ? progRes['data_points'] as List<dynamic> 
+            : [];
+      }
+
+      if (mounted) {
+        setState(() {
+          _frequencyData = freqDataList.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+          _muscleGroupData = muscleDataList.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+          _progressionData = progressionDataList.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+          _evolutionLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _evolutionError = 'Erro ao carregar dados de evolução';
+          _evolutionLoading = false;
+        });
+      }
+    }
+  }
+
+  Widget _buildEvolutionTab() {
+    if (_sheetsLoading || (_evolutionLoading && _frequencyData.isEmpty)) {
+      return const OmniLoader();
+    }
+
+    if (_evolutionError != null) {
+      return OmniErrorState(
+        message: _evolutionError!,
+        onRetry: _loadEvolutionData,
+      );
+    }
+
+    final totalExercisesCount = _muscleGroupData.fold<int>(0, (sum, item) => sum + ((item['count'] as num?)?.toInt() ?? 0));
+
+    int currentWeekWorkoutsCount = 0;
+    if (_frequencyData.isNotEmpty) {
+      currentWeekWorkoutsCount = (_frequencyData.last['count'] as num?)?.toInt() ?? 0;
+    }
+
+    Color badgeColor;
+    String badgeText;
+    IconData badgeIcon;
+    String badgeDesc;
+
+    if (currentWeekWorkoutsCount >= 3) {
+      badgeColor = AppColors.accentSuccess;
+      badgeText = 'Foco Total 🔥';
+      badgeIcon = Icons.local_fire_department_rounded;
+      badgeDesc = 'O aluno está super active e consistente esta semana!';
+    } else if (currentWeekWorkoutsCount > 0) {
+      badgeColor = AppColors.accentWarning;
+      badgeText = 'Consistente 💪';
+      badgeIcon = Icons.trending_up_rounded;
+      badgeDesc = 'Bom ritmo! Falta pouco para atingir a meta semanal ideal.';
+    } else {
+      badgeColor = AppColors.accentError;
+      badgeText = 'Alerta de Inatividade ⚠️';
+      badgeIcon = Icons.warning_amber_rounded;
+      badgeDesc = 'O aluno não registrou treinos nos últimos 7 dias.';
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          FadeInDown(
+            duration: const Duration(milliseconds: 400),
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    badgeColor.withOpacity(0.12),
+                    badgeColor.withOpacity(0.04),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: badgeColor.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: badgeColor.withOpacity(0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(badgeIcon, color: badgeColor, size: 32),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          badgeText,
+                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: badgeColor,
+                              ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          badgeDesc,
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                color: context.colors.textSecondary,
+                              ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Treinos finalizados esta semana: $currentWeekWorkoutsCount',
+                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                color: context.colors.textMuted,
+                                fontWeight: FontWeight.w600,
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          FadeInUp(
+            duration: const Duration(milliseconds: 400),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Frequência de Treinos',
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                    ),
+                    Container(
+                      height: 36,
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        color: context.colors.surface,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: context.colors.border),
+                      ),
+                      child: Row(
+                        children: [
+                          GestureDetector(
+                            onTap: () {
+                              if (_frequencyPeriod != 'weekly') {
+                                setState(() {
+                                  _frequencyPeriod = 'weekly';
+                                });
+                                _loadEvolutionData();
+                              }
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              decoration: BoxDecoration(
+                                color: _frequencyPeriod == 'weekly'
+                                    ? AppColors.primary
+                                    : Colors.transparent,
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                'Semanal',
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: _frequencyPeriod == 'weekly'
+                                          ? Colors.white
+                                          : context.colors.textMuted,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                              ),
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () {
+                              if (_frequencyPeriod != 'monthly') {
+                                setState(() {
+                                  _frequencyPeriod = 'monthly';
+                                });
+                                _loadEvolutionData();
+                              }
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              decoration: BoxDecoration(
+                                color: _frequencyPeriod == 'monthly'
+                                    ? AppColors.primary
+                                    : Colors.transparent,
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                'Mensal',
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: _frequencyPeriod == 'monthly'
+                                          ? Colors.white
+                                          : context.colors.textMuted,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  height: 200,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: context.colors.surface,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: context.colors.border),
+                  ),
+                  child: FrequencyBarChart(
+                    dataPoints: _frequencyData,
+                    period: _frequencyPeriod,
+                    isLoading: _evolutionLoading,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          FadeInUp(
+            duration: const Duration(milliseconds: 400),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Progressão de Carga',
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                    ),
+                    if (_selectedExerciseName != null)
+                      Text(
+                        _selectedExerciseName!,
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              color: context.colors.textMuted,
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                if (_studentExercises.isEmpty) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: context.colors.surface,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: context.colors.border),
+                    ),
+                    child: Column(
+                      children: [
+                        const Icon(Icons.fitness_center, color: Colors.grey, size: 40),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Sem exercícios cadastrados',
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                color: context.colors.textSecondary,
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ] else ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: context.colors.surface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: context.colors.border),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: _selectedExerciseId,
+                        isExpanded: true,
+                        icon: const Icon(Icons.arrow_drop_down, color: AppColors.primary),
+                        dropdownColor: context.colors.surface,
+                        items: _studentExercises.map((ex) {
+                          return DropdownMenuItem<String>(
+                            value: ex.id,
+                            child: Text(
+                              ex.name,
+                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            final selected = _studentExercises.firstWhere((e) => e.id == val);
+                            setState(() {
+                              _selectedExerciseId = val;
+                              _selectedExerciseName = selected.name;
+                            });
+                            _loadEvolutionData();
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    height: 240,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: context.colors.surface,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: context.colors.border),
+                    ),
+                    child: ProgressionLineChart(
+                      dataPoints: _progressionData,
+                      isLoading: _evolutionLoading,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          FadeInUp(
+            duration: const Duration(milliseconds: 400),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Foco Muscular (Últimos 30 dias)',
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+                const SizedBox(height: 16),
+                if (_muscleGroupData.isEmpty) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: context.colors.surface,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: context.colors.border),
+                    ),
+                    child: Column(
+                      children: [
+                        const Icon(Icons.pie_chart_outline_rounded, color: Colors.grey, size: 40),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Ainda sem treinos finalizados neste período',
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                color: context.colors.textSecondary,
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ] else ...[
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: context.colors.surface,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: context.colors.border),
+                    ),
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: _muscleGroupData.length,
+                      separatorBuilder: (context, index) => const SizedBox(height: 14),
+                      itemBuilder: (context, index) {
+                        final item = _muscleGroupData[index];
+                        final muscleName = item['muscle_group'] as String? ?? 'Outros';
+                        final count = (item['count'] as num?)?.toInt() ?? 0;
+                        final percent = totalExercisesCount > 0 ? count / totalExercisesCount : 0.0;
+
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  muscleName.toUpperCase(),
+                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                        fontWeight: FontWeight.bold,
+                                        color: context.colors.textSecondary,
+                                        letterSpacing: 1.1,
+                                      ),
+                                ),
+                                Text(
+                                  '$count séries (${(percent * 100).toStringAsFixed(0)}%)',
+                                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.primary,
+                                      ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: LinearProgressIndicator(
+                                value: percent,
+                                backgroundColor: context.colors.border.withOpacity(0.5),
+                                valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
+                                minHeight: 8,
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 32),
+        ],
+      ),
+    );
   }
 
   @override
@@ -171,6 +799,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                   Tab(icon: Icon(Icons.info_outline), text: 'Info'),
                   Tab(icon: Icon(Icons.fitness_center), text: 'Treinos'),
                   Tab(icon: Icon(Icons.restaurant_outlined), text: 'Nutrição'),
+                  Tab(icon: Icon(Icons.trending_up), text: 'Evolução'),
                 ],
                 labelColor: AppColors.primary,
                 unselectedLabelColor: context.colors.textMuted,
@@ -184,6 +813,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                   _buildInfoTab(),
                   _buildWorkoutsTab(),
                   _buildNutritionTab(),
+                  _buildEvolutionTab(),
                 ],
               ),
             ),
@@ -405,7 +1035,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
     try {
       final dto = DuplicateWorkoutSheetDTO(
         name: '${sheet.name} (Cópia)',
-        userId: widget.studentId,
+        workoutProgramId: _activeProgram!.id,
       );
       await context.read<WorkoutSheetProvider>().duplicateSheet(sheet.id, dto);
       await _loadStudentSheets();
@@ -504,8 +1134,95 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
     }
 
     final activeDiet = _studentDiets.first;
+
+    return Column(
+      children: [
+        // Premium Sub-tab Sliding Segment Switcher
+        Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          height: 44,
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: context.colors.surface,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: context.colors.border),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _nutritionSubTabIndex = 0;
+                    });
+                    _loadStudentLogbook();
+                  },
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: _nutritionSubTabIndex == 0
+                          ? AppColors.primary
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      'Diário do Aluno',
+                      style: TextStyle(
+                        color: _nutritionSubTabIndex == 0
+                            ? Colors.white
+                            : context.colors.textMuted,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _nutritionSubTabIndex = 1;
+                    });
+                  },
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: _nutritionSubTabIndex == 1
+                          ? AppColors.primary
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      'Plano de Dieta',
+                      style: TextStyle(
+                        color: _nutritionSubTabIndex == 1
+                            ? Colors.white
+                            : context.colors.textMuted,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Sub-tab content view
+        Expanded(
+          child: _nutritionSubTabIndex == 0
+              ? _buildStudentLogbookView(activeDiet)
+              : _buildDietPrescriptionView(activeDiet),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDietPrescriptionView(Diet activeDiet) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -523,6 +1240,8 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
             ],
           ),
           const SizedBox(height: 12),
+          _buildWaterTargetPrescriberCard(activeDiet),
+          const SizedBox(height: 16),
           ...activeDiet.meals.map((m) {
             return FadeInUp(
               child: Container(
@@ -582,6 +1301,1035 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
     );
   }
 
+  Widget _buildStudentLogbookView(Diet activeDiet) {
+    if (_studentLogbookLoading && _studentLogbook == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final totalTargetKcal = activeDiet.totalKcal;
+    final totalTargetProtein = activeDiet.totalProtein;
+    final totalTargetCarbs = activeDiet.totalCarbs;
+    final totalTargetFats = activeDiet.totalFats;
+    final waterTargetMl = activeDiet.waterTargetMl;
+
+    final currentKcal = _studentLogbook?.totalKcal ?? 0.0;
+    final currentProtein = _studentLogbook?.totalProtein ?? 0.0;
+    final currentCarbs = _studentLogbook?.totalCarbs ?? 0.0;
+    final currentFats = _studentLogbook?.totalFats ?? 0.0;
+
+    // Agrupar entradas por refeição
+    final Map<String, List<DietLogbookEntry>> groupedEntries = {};
+    if (_studentLogbook != null) {
+      for (final entry in _studentLogbook!.entries) {
+        groupedEntries.putIfAbsent(entry.mealName, () => []).add(entry);
+      }
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadStudentLogbook,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 1. Navegador de Datas
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                IconButton(
+                  icon: Icon(Icons.chevron_left, color: context.colors.textPrimary),
+                  onPressed: () {
+                    setState(() {
+                      _selectedLogbookDate = _selectedLogbookDate.subtract(const Duration(days: 1));
+                    });
+                    _loadStudentLogbook();
+                  },
+                ),
+                Text(
+                  _getFormattedDateLabel(_selectedLogbookDate),
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+                IconButton(
+                  icon: Icon(Icons.chevron_right, color: context.colors.textPrimary),
+                  onPressed: () {
+                    setState(() {
+                      _selectedLogbookDate = _selectedLogbookDate.add(const Duration(days: 1));
+                    });
+                    _loadStudentLogbook();
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // 2. Grid de Consistência Semanal (Últimos 7 dias)
+            _buildWeeklyConsistencyGrid(totalTargetKcal),
+            const SizedBox(height: 20),
+
+            // 3. Progresso Nutricional Diário (Macronutrientes)
+            _buildMacronutrientsProgressCard(
+              currentKcal: currentKcal,
+              targetKcal: totalTargetKcal,
+              currentProtein: currentProtein,
+              targetProtein: totalTargetProtein,
+              currentCarbs: currentCarbs,
+              targetCarbs: totalTargetCarbs,
+              currentFats: currentFats,
+              targetFats: totalTargetFats,
+            ),
+            const SizedBox(height: 20),
+
+            // 4. OmniAI Smart Coach Card
+            _buildOmniAICoachCard(
+              currentKcal: currentKcal,
+              targetKcal: totalTargetKcal,
+              currentProtein: currentProtein,
+              targetProtein: totalTargetProtein,
+              currentWater: _studentWaterToday,
+              targetWater: waterTargetMl,
+            ),
+            const SizedBox(height: 20),
+
+            // 5. Card de Hidratação Interativo
+            _buildHydrationInteractiveCard(waterTargetMl),
+            const SizedBox(height: 20),
+
+            // 6. Lista de Refeições Logadas
+            Text(
+              'Alimentos Consumidos',
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            const SizedBox(height: 12),
+            if (groupedEntries.isEmpty)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 16),
+                decoration: BoxDecoration(
+                  color: context.colors.surface,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: context.colors.border),
+                ),
+                child: Column(
+                  children: [
+                    const Icon(Icons.restaurant_outlined, size: 48, color: Colors.grey),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Nenhum alimento registrado hoje.',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: context.colors.textSecondary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Os registros que o aluno realizar no aplicativo aparecerão aqui.',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: context.colors.textMuted,
+                          ),
+                    ),
+                  ],
+                ),
+              )
+            else
+              ...groupedEntries.entries.map((mealGroup) {
+                final mealName = mealGroup.key;
+                final entriesList = mealGroup.value;
+                final mealKcal = entriesList.fold<double>(0, (sum, item) => sum + item.kcal);
+                final mealProtein = entriesList.fold<double>(0, (sum, item) => sum + item.protein);
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: context.colors.surface,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: context.colors.border),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            mealName,
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                          ),
+                          Text(
+                            '${mealKcal.toStringAsFixed(0)} kcal • P: ${mealProtein.toStringAsFixed(1)}g',
+                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                  color: context.colors.textSecondary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                        ],
+                      ),
+                      const Divider(height: 16),
+                      ...entriesList.map((entry) {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      entry.foodName,
+                                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                    ),
+                                    Text(
+                                      '${entry.quantityG.toStringAsFixed(0)}g • P:${entry.protein.toStringAsFixed(0)}g C:${entry.carbs.toStringAsFixed(0)}g G:${entry.fats.toStringAsFixed(0)}g',
+                                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                            color: context.colors.textMuted,
+                                          ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Text(
+                                '${entry.kcal.toStringAsFixed(0)} kcal',
+                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.primary,
+                                    ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                    ],
+                  ),
+                );
+              }).toList(),
+            const SizedBox(height: 32),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _getFormattedDateLabel(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final target = DateTime(date.year, date.month, date.day);
+    final diff = target.difference(today).inDays;
+
+    if (diff == 0) return 'Hoje 📅';
+    if (diff == -1) return 'Ontem ⬅️';
+    if (diff == 1) return 'Amanhã ➡️';
+
+    final List<String> weekdays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+    final List<String> months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+    
+    return '${weekdays[date.weekday % 7]}, ${date.day} de ${months[date.month - 1]}';
+  }
+
+  Widget _buildWeeklyConsistencyGrid(double targetKcal) {
+    final weekdays = ['S', 'T', 'Q', 'Q', 'S', 'S', 'D'];
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: context.colors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: context.colors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Consistência Semanal (Calorias)',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: List.generate(7, (index) {
+              final date = _selectedLogbookDate.subtract(Duration(days: 6 - index));
+              final weekdayName = weekdays[(date.weekday - 1) % 7];
+              final kcal = _studentLast7DaysCalories[index];
+              final logged = _studentLast7DaysLogged[index];
+
+              Color circleColor = Colors.grey.withOpacity(0.3);
+              Widget innerWidget = Text(
+                weekdayName,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: context.colors.textSecondary,
+                    ),
+              );
+
+              if (logged) {
+                final diffRatio = (kcal - targetKcal).abs() / targetKcal;
+                if (diffRatio <= 0.15) {
+                  circleColor = AppColors.accentSuccess; // Perfeita consistência
+                  innerWidget = const Icon(Icons.check, size: 14, color: Colors.white);
+                } else {
+                  circleColor = AppColors.accentWarning; // Logou mas variou
+                  innerWidget = const Icon(Icons.local_fire_department, size: 14, color: Colors.white);
+                }
+              }
+
+              final isToday = date.day == DateTime.now().day && date.month == DateTime.now().month && date.year == DateTime.now().year;
+
+              return Column(
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: logged ? circleColor : Colors.transparent,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: isToday ? AppColors.primary : circleColor,
+                        width: isToday ? 2.5 : 1.5,
+                      ),
+                    ),
+                    alignment: Alignment.center,
+                    child: innerWidget,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '${date.day}/${date.month}',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: isToday ? AppColors.primary : context.colors.textMuted,
+                          fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
+                          fontSize: 9,
+                        ),
+                  ),
+                ],
+              );
+            }),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMacronutrientsProgressCard({
+    required double currentKcal,
+    required double targetKcal,
+    required double currentProtein,
+    required double targetProtein,
+    required double currentCarbs,
+    required double targetCarbs,
+    required double currentFats,
+    required double targetFats,
+  }) {
+    final kcalPercent = targetKcal > 0 ? (currentKcal / targetKcal) : 0.0;
+    final proteinPercent = targetProtein > 0 ? (currentProtein / targetProtein) : 0.0;
+    final carbsPercent = targetCarbs > 0 ? (currentCarbs / targetCarbs) : 0.0;
+    final fatsPercent = targetFats > 0 ? (currentFats / targetFats) : 0.0;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: context.colors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: context.colors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Macronutrientes Logados',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
+              Text(
+                '${(kcalPercent * 100).toStringAsFixed(0)}% da meta',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: kcalPercent > 1.1 ? AppColors.accentWarning : AppColors.primary,
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Progresso de Calorias
+          _buildMacProgressBar(
+            label: 'Calorias',
+            current: currentKcal,
+            target: targetKcal,
+            percent: kcalPercent,
+            color: AppColors.primary,
+            unit: 'kcal',
+          ),
+          const SizedBox(height: 12),
+
+          // Proteínas
+          _buildMacProgressBar(
+            label: 'Proteínas',
+            current: currentProtein,
+            target: targetProtein,
+            percent: proteinPercent,
+            color: const Color(0xFF4CAF50),
+            unit: 'g',
+          ),
+          const SizedBox(height: 12),
+
+          // Carboidratos
+          _buildMacProgressBar(
+            label: 'Carboidratos',
+            current: currentCarbs,
+            target: targetCarbs,
+            percent: carbsPercent,
+            color: const Color(0xFFFFC107),
+            unit: 'g',
+          ),
+          const SizedBox(height: 12),
+
+          // Gorduras
+          _buildMacProgressBar(
+            label: 'Gorduras',
+            current: currentFats,
+            target: targetFats,
+            percent: fatsPercent,
+            color: const Color(0xFFE91E63),
+            unit: 'g',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMacProgressBar({
+    required String label,
+    required double current,
+    required double target,
+    required double percent,
+    required Color color,
+    required String unit,
+  }) {
+    final limitedPercent = percent.clamp(0.0, 1.0);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              label,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+            Text(
+              '${current.toStringAsFixed(0)} / ${target.toStringAsFixed(0)} $unit',
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: context.colors.textSecondary,
+                  ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(
+            value: limitedPercent,
+            backgroundColor: color.withOpacity(0.1),
+            valueColor: AlwaysStoppedAnimation<Color>(color),
+            minHeight: 8,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildOmniAICoachCard({
+    required double currentKcal,
+    required double targetKcal,
+    required double currentProtein,
+    required double targetProtein,
+    required int currentWater,
+    required int targetWater,
+  }) {
+    final kcalPercent = targetKcal > 0 ? (currentKcal / targetKcal) : 0.0;
+    final proteinPercent = targetProtein > 0 ? (currentProtein / targetProtein) : 0.0;
+    final waterPercent = targetWater > 0 ? (currentWater / targetWater) : 0.0;
+
+    String advice;
+    Color cardColor;
+    IconData adviceIcon;
+
+    if (kcalPercent == 0 && proteinPercent == 0) {
+      advice = 'O aluno ainda não logou refeições nesta data. Envie um lembrete amigável!';
+      cardColor = Colors.blueGrey;
+      adviceIcon = Icons.notifications_active_outlined;
+    } else if (proteinPercent < 0.8) {
+      advice = 'Ingestão proteica baixa hoje (${(proteinPercent * 100).toStringAsFixed(0)}%). Oriente o aluno a reforçar carnes, ovos ou whey nas próximas refeições para suporte de síntese muscular.';
+      cardColor = AppColors.accentWarning;
+      adviceIcon = Icons.trending_down_rounded;
+    } else if (kcalPercent > 1.15) {
+      advice = 'Superávit calórico acima do planejado hoje (+${(kcalPercent * 100 - 100).toStringAsFixed(0)}%). Avalie se houve episódios de indisciplina ou se o plano precisa ser ajustado.';
+      cardColor = AppColors.accentWarning;
+      adviceIcon = Icons.error_outline_rounded;
+    } else if (waterPercent < 0.6) {
+      advice = 'Ingestão hídrica muito baixa. Recomende ao aluno manter uma garrafa sempre por perto para evitar fadiga durante os treinos.';
+      cardColor = const Color(0xFF2196F3);
+      adviceIcon = Icons.local_drink_rounded;
+    } else {
+      advice = 'Excelente adesão hoje! Calorias e proteínas estão perfeitamente alinhadas com o objetivo planejado. Excelente trabalho!';
+      cardColor = AppColors.accentSuccess;
+      adviceIcon = Icons.verified_rounded;
+    }
+
+    return FadeInDown(
+      duration: const Duration(milliseconds: 400),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: cardColor.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: cardColor.withOpacity(0.3)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: cardColor.withOpacity(0.2),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(adviceIcon, color: cardColor, size: 24),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Análise OmniAI Coach',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: cardColor,
+                        ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    advice,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: context.colors.textPrimary,
+                          height: 1.35,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHydrationInteractiveCard(int targetMl) {
+    final percent = targetMl > 0 ? (_studentWaterToday / targetMl).clamp(0.0, 1.0) : 0.0;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1E3C72), Color(0xFF2A5298)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF2A5298).withOpacity(0.3),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: const [
+                  Icon(Icons.local_drink_rounded, color: Colors.white, size: 24),
+                  SizedBox(width: 8),
+                  Text(
+                    'Controle de Hidratação',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                ],
+              ),
+              Text(
+                '${(_studentWaterToday)} / $targetMl ml',
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: percent,
+              backgroundColor: Colors.white.withOpacity(0.15),
+              valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF4FC3F7)),
+              minHeight: 10,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              TextButton.icon(
+                onPressed: _resetStudentWater,
+                icon: const Icon(Icons.refresh, color: Colors.white70, size: 16),
+                label: const Text(
+                  'Zerar',
+                  style: TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ),
+              Row(
+                children: [
+                  ElevatedButton(
+                    onPressed: () => _updateStudentWater(250),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white.withOpacity(0.2),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text('+250ml', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: () => _updateStudentWater(500),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white.withOpacity(0.2),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text('+500ml', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWaterTargetPrescriberCard(Diet activeDiet) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF0F2027), Color(0xFF203A43), Color(0xFF2C5364)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF16C1F3).withOpacity(0.15),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: const Color(0xFF16C1F3).withOpacity(0.3),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF16C1F3).withOpacity(0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.local_drink_rounded,
+                  color: Color(0xFF26C6DA),
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Meta de Hidratação',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Prescrita individualmente para o aluno',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: Colors.white.withOpacity(0.7),
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+              ElevatedButton.icon(
+                onPressed: () => _showEditWaterTargetDialog(activeDiet),
+                icon: const Icon(Icons.edit, size: 14, color: Colors.white),
+                label: const Text('Prescrever'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF16C1F3).withOpacity(0.4),
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    side: BorderSide(color: const Color(0xFF16C1F3).withOpacity(0.5)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Meta Atual',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: Colors.white.withOpacity(0.6),
+                        ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      Text(
+                        '${activeDiet.waterTargetMl}',
+                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                      ),
+                      const SizedBox(width: 2),
+                      Text(
+                        'ml',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Colors.white.withOpacity(0.7),
+                            ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              Container(
+                height: 40,
+                width: 1,
+                color: Colors.white.withOpacity(0.2),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Fórmula Padrão',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: Colors.white.withOpacity(0.6),
+                        ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      Text(
+                        _student != null && _student!.weight > 0
+                            ? '${(_student!.weight * 35).toInt()}'
+                            : '2500',
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                              color: Colors.white.withOpacity(0.9),
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                      const SizedBox(width: 2),
+                      Text(
+                        'ml',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Colors.white.withOpacity(0.7),
+                            ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              Container(
+                height: 40,
+                width: 1,
+                color: Colors.white.withOpacity(0.2),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Equivale a',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: Colors.white.withOpacity(0.6),
+                        ),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      Text(
+                        '${(activeDiet.waterTargetMl / 250).toStringAsFixed(1)}',
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                              color: const Color(0xFF26C6DA),
+                              fontWeight: FontWeight.bold,
+                            ),
+                      ),
+                      const SizedBox(width: 2),
+                      Text(
+                        'copos',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Colors.white.withOpacity(0.7),
+                            ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showEditWaterTargetDialog(Diet activeDiet) async {
+    final controller = TextEditingController(text: '${activeDiet.waterTargetMl}');
+    final formKey = GlobalKey<FormState>();
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+          child: Container(
+            decoration: BoxDecoration(
+              color: context.colors.background,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(20),
+                topRight: Radius.circular(20),
+              ),
+            ),
+            padding: const EdgeInsets.all(20),
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Prescrever Meta de Água',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Defina uma meta diária personalizada de hidratação em mililitros (ml) para o aluno. Caso queira reverter para a fórmula automática de 35ml por kg de peso, defina como zero ou limpe o campo.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: context.colors.textMuted,
+                        ),
+                  ),
+                  const SizedBox(height: 20),
+                  TextFormField(
+                    controller: controller,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: 'Meta Diária de Água (ml)',
+                      hintText: 'Ex: 3000',
+                      suffixText: 'ml',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      prefixIcon: const Icon(Icons.local_drink_rounded),
+                    ),
+                    validator: (value) {
+                      if (value != null && value.isNotEmpty) {
+                        final val = int.tryParse(value);
+                        if (val == null || val < 0) {
+                          return 'Digite um valor inteiro válido';
+                        }
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () {
+                            // Define o valor calculado padrão baseado na fórmula
+                            if (_student != null && _student!.weight > 0) {
+                              controller.text = '${(_student!.weight * 35).toInt()}';
+                            } else {
+                              controller.text = '2500';
+                            }
+                          },
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          child: const Text('Calcular Fórmula (35ml/kg)'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () async {
+                            if (!formKey.currentState!.validate()) return;
+                            
+                            final targetValStr = controller.text.trim();
+                            // Se estiver em branco ou for 0, mandamos 0 para reverter para o padrão do backend
+                            final targetVal = targetValStr.isEmpty ? 0 : int.parse(targetValStr);
+
+                            Navigator.pop(context); // fecha bottom sheet
+                            
+                            setState(() {
+                              _nutritionLoading = true;
+                            });
+
+                            try {
+                              final nutritionService = context.read<NutritionService>();
+                              
+                              // Para atualizar a dieta ativa mantendo todas as suas refeições originais,
+                              // mapeamos as refeições para o formato de input esperado pelo DTO do backend.
+                              final mealsPayload = activeDiet.meals.map((m) {
+                                return {
+                                  'name': m.name,
+                                  'time': m.time,
+                                  'order': m.order,
+                                  'items': m.items.map((it) {
+                                    return {
+                                      'food_id': it.foodId,
+                                      'quantity_g': it.quantityG,
+                                      'observations': it.observations,
+                                    };
+                                  }).toList(),
+                                };
+                              }).toList();
+
+                              await nutritionService.updateDiet(
+                                dietId: activeDiet.id,
+                                meals: mealsPayload,
+                                waterTargetMl: targetVal,
+                              );
+
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Meta de hidratação atualizada com sucesso!'),
+                                  backgroundColor: AppColors.accentSuccess,
+                                ),
+                              );
+
+                              // Recarrega
+                              _loadStudentNutrition();
+                            } catch (e) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Erro ao atualizar meta: ${e.toString()}'),
+                                  backgroundColor: AppColors.accentError,
+                                ),
+                              );
+                              setState(() {
+                                _nutritionLoading = false;
+                              });
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          child: const Text('Salvar Prescrição'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildQuestionRow(String question, String answer) {
     return Container(
       padding: const EdgeInsets.all(12),
@@ -632,10 +2380,30 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
   }
 
   Future<void> _showCreateWorkoutDialog() async {
+    if (_activeProgram == null) {
+      // Cria um programa padrão automaticamente se não existir
+      try {
+        final provider = context.read<WorkoutSheetProvider>();
+        final newProgram = await provider.createProgram(CreateWorkoutProgramDTO(
+          userId: widget.studentId,
+          name: 'Programa Padrão',
+          goal: 'Geral',
+        ));
+        setState(() => _activeProgram = newProgram);
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Erro ao criar programa inicial.'), backgroundColor: AppColors.accentError),
+          );
+        }
+        return;
+      }
+    }
+
     final result = await showDialog<bool>(
       context: context,
       builder: (_) => CreateWorkoutSheetDialog(
-        targetUserId: widget.studentId,
+        workoutProgramId: _activeProgram!.id,
       ),
     );
     if (result == true && mounted) {
@@ -727,6 +2495,37 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                       ),
                     ),
                   ),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: TextButton.icon(
+                        icon: const Icon(Icons.add_circle_outline, size: 14, color: AppColors.primary),
+                        label: const Text(
+                          'Criar Alimento Personalizado',
+                          style: TextStyle(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.bold),
+                        ),
+                        onPressed: () async {
+                          final newFood = await showDialog<CustomFood?>(
+                            context: context,
+                            builder: (ctx) => const CreateCustomFoodDialog(),
+                          );
+                          if (newFood != null) {
+                            setModalState(() {
+                              editableItems.add(
+                                _EditableDietItem(
+                                  foodId: null,
+                                  customFoodId: newFood.id,
+                                  foodName: newFood.name,
+                                  quantityG: 100,
+                                ),
+                              );
+                            });
+                          }
+                        },
+                      ),
+                    ),
+                  ),
                   if (searching)
                     const Padding(
                       padding: EdgeInsets.all(8.0),
@@ -742,8 +2541,8 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                         setModalState(() {
                           editableItems.add(
                             _EditableDietItem(
-                              foodId: int.tryParse(food.id),
-                              customFoodId: null,
+                              foodId: food.source == 'taco' ? int.tryParse(food.id) : null,
+                              customFoodId: food.source == 'custom' ? food.id : null,
                               foodName: food.name,
                               quantityG: 100,
                             ),
@@ -862,7 +2661,6 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
 
   Widget _buildBottomNav() {
     final trainerNavItems = [
-      {'icon': Icons.dashboard_outlined, 'label': 'Dashboard'},
       {'icon': Icons.people_outlined, 'label': 'Alunos'},
       {'icon': Icons.fitness_center_outlined, 'label': 'Fichas'},
       {'icon': Icons.person_outline, 'label': 'Perfil'},
@@ -874,10 +2672,9 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
         border: Border(top: BorderSide(color: context.colors.border, width: 1)),
       ),
       child: BottomNavigationBar(
-        currentIndex: 1,
+        currentIndex: 0,
         onTap: (index) {
           final routes = [
-            '/trainer/dashboard',
             '/trainer/students',
             '/trainer/sheets',
             '/trainer/profile',

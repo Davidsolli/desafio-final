@@ -11,8 +11,9 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
-from app.models.workout_sheet import Exercise, WorkoutSheet
+from app.models.workout_sheet import Exercise, WorkoutSheet, WorkoutProgram
 from app.models.exercise_catalog import ExerciseCatalog
 
 
@@ -23,7 +24,62 @@ class WorkoutSheetRepository:
         self.session = session
 
     # ------------------------------------------------------------------
-    # Fichas de Treino
+    # Programas de Treino (Workout Programs)
+    # ------------------------------------------------------------------
+
+    async def create_workout_program(self, program: WorkoutProgram) -> WorkoutProgram:
+        self.session.add(program)
+        await self.session.flush()
+        # Força o retorno do programa com eager loading completo para evitar erros de lazy loading pós-commit
+        return await self.get_workout_program_by_id(program.id)
+
+    async def get_workout_program_by_id(self, program_id: UUID) -> Optional[WorkoutProgram]:
+        stmt = select(WorkoutProgram).where(
+            WorkoutProgram.id == program_id,
+            WorkoutProgram.is_active.is_(True),
+        ).options(
+            selectinload(WorkoutProgram.workout_sheets).selectinload(WorkoutSheet.exercises)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalars().first()
+
+    async def list_workout_programs(
+        self,
+        user_id: Optional[UUID],
+        page: int,
+        limit: int,
+    ) -> Tuple[List[WorkoutProgram], int]:
+        base_stmt = select(WorkoutProgram).where(WorkoutProgram.is_active.is_(True))
+
+        if user_id is not None:
+            base_stmt = base_stmt.where(WorkoutProgram.user_id == user_id)
+
+        count_stmt = select(func.count()).select_from(base_stmt.subquery())
+        total = (await self.session.execute(count_stmt)).scalar() or 0
+
+        offset = (page - 1) * limit
+        paged_stmt = base_stmt.order_by(WorkoutProgram.created_at.desc()).offset(offset).limit(limit)
+        result = await self.session.execute(paged_stmt)
+        
+        return list(result.scalars().all()), total
+
+    async def update_workout_program(self, program: WorkoutProgram) -> WorkoutProgram:
+        program.updated_at = datetime.utcnow()
+        await self.session.flush()
+        await self.session.refresh(program)
+        return program
+
+    async def soft_delete_workout_program(self, program_id: UUID) -> bool:
+        program = await self.get_workout_program_by_id(program_id)
+        if not program:
+            return False
+        program.is_active = False
+        program.updated_at = datetime.utcnow()
+        await self.session.flush()
+        return True
+
+    # ------------------------------------------------------------------
+    # Fichas de Treino (Workout Sheets)
     # ------------------------------------------------------------------
 
     async def create_workout_sheet(self, sheet: WorkoutSheet) -> WorkoutSheet:
@@ -48,47 +104,24 @@ class WorkoutSheetRepository:
         result = await self.session.execute(stmt)
         return result.scalars().first()
 
-    async def count_active_sheets_for_day(
-        self, user_id: UUID, day_of_week: int, exclude_id: Optional[UUID] = None
-    ) -> int:
-        """
-        Conta fichas ativas do aluno para um dado dia da semana.
-        Usado para validar RN-01: uma ficha ativa por dia.
-        """
-        stmt = select(func.count()).where(
-            WorkoutSheet.user_id == user_id,
-            WorkoutSheet.day_of_week == day_of_week,
-            WorkoutSheet.is_active.is_(True),
-        )
-        if exclude_id is not None:
-            stmt = stmt.where(WorkoutSheet.id != exclude_id)
-        result = await self.session.execute(stmt)
-        return result.scalar() or 0
+    # (Removido count_active_sheets_for_day, não há limite por dia na nova arquitetura)
 
     async def list_workout_sheets(
         self,
-        user_id: Optional[UUID],
-        personal_trainer_id: Optional[UUID],
-        day_of_week: Optional[int],
+        workout_program_id: Optional[UUID],
         page: int,
         limit: int,
     ) -> Tuple[List[WorkoutSheet], int]:
         """
-        Lista fichas ativas com filtros e paginação.
+        Lista fichas ativas.
 
         Returns:
             Tuple[List[WorkoutSheet], int]: Fichas da página e total.
         """
         base_stmt = select(WorkoutSheet).where(WorkoutSheet.is_active.is_(True))
 
-        if user_id is not None:
-            base_stmt = base_stmt.where(WorkoutSheet.user_id == user_id)
-        if personal_trainer_id is not None:
-            base_stmt = base_stmt.where(
-                WorkoutSheet.personal_trainer_id == personal_trainer_id
-            )
-        if day_of_week is not None:
-            base_stmt = base_stmt.where(WorkoutSheet.day_of_week == day_of_week)
+        if workout_program_id is not None:
+            base_stmt = base_stmt.where(WorkoutSheet.workout_program_id == workout_program_id)
 
         # Total
         count_stmt = select(func.count()).select_from(base_stmt.subquery())
@@ -98,7 +131,7 @@ class WorkoutSheetRepository:
         # Página
         offset = (page - 1) * limit
         paged_stmt = (
-            base_stmt.order_by(WorkoutSheet.created_at.desc())
+            base_stmt.order_by(WorkoutSheet.order.asc(), WorkoutSheet.created_at.desc())
             .offset(offset)
             .limit(limit)
         )

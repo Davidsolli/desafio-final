@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:provider/provider.dart';
 import 'theme/app_theme.dart';
@@ -13,6 +14,7 @@ import 'services/nutrition_service.dart';
 import 'services/workout_sheet_service.dart';
 import 'services/invitation_service.dart';
 import 'services/admin_service.dart';
+import 'services/chat_service.dart';
 import 'providers/auth_provider.dart';
 import 'providers/user_provider.dart';
 import 'providers/goal_provider.dart';
@@ -118,6 +120,11 @@ class OmniConnectApp extends StatelessWidget {
           update: (_, apiClient, _) => AdminService(apiClient: apiClient),
         ),
 
+        // Chat Service (depende de ApiClient)
+        ProxyProvider<ApiClient, ChatService>(
+          update: (_, apiClient, _) => ChatService(apiClient: apiClient),
+        ),
+
         // Auth Provider (depende de AuthService)
         ChangeNotifierProxyProvider<AuthService, AuthProvider>(
           create: (context) => AuthProvider(
@@ -208,6 +215,15 @@ class OmniConnectApp extends StatelessWidget {
             themeMode: provider.themeMode,
             routerConfig: AppRoutes.router,
             debugShowCheckedModeBanner: false,
+            localizationsDelegates: const [
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            supportedLocales: const [
+              Locale('pt', 'BR'),
+              Locale('en', 'US'),
+            ],
           ),
         ),
       ),

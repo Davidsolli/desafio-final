@@ -13,7 +13,7 @@ from app.models.notification import (
     NotificationLog,
     WorkoutReminderSchedule,
 )
-from app.models.workout_sheet import WorkoutSheet
+from app.models.workout_sheet import WorkoutSheet, WorkoutProgram
 from app.dtos.notification_dto import UpdateNotificationPreferenceDTO, NotificationPreferenceResponseDTO
 
 from app.models.user import User
@@ -210,6 +210,10 @@ class NotificationService:
           dia da semana correspondente; se não houver, escolhe qualquer ficha
           ativa do usuário; se ainda não houver ficha ativa, pula o dia.
 
+        WorkoutSheet pertence a um WorkoutProgram (que detém o user_id);
+        a query faz JOIN para filtrar por aluno e considera apenas programas
+        e fichas ativos.
+
         Retorna o número de schedules criados.
         """
         silent_set = set(silent_days or [])
@@ -225,11 +229,19 @@ class NotificationService:
         )
         await self.session.execute(del_stmt)
 
-        # 2. Lista fichas ativas do usuário (para escolher workout_sheet_id)
-        ws_stmt = select(WorkoutSheet).where(
-            and_(
-                WorkoutSheet.user_id == user_id,
-                WorkoutSheet.is_active.is_(True),
+        # 2. Lista fichas ativas do usuário (via WorkoutProgram)
+        ws_stmt = (
+            select(WorkoutSheet)
+            .join(
+                WorkoutProgram,
+                WorkoutSheet.workout_program_id == WorkoutProgram.id,
+            )
+            .where(
+                and_(
+                    WorkoutProgram.user_id == user_id,
+                    WorkoutProgram.is_active.is_(True),
+                    WorkoutSheet.is_active.is_(True),
+                )
             )
         )
         ws_result = await self.session.execute(ws_stmt)

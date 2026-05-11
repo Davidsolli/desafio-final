@@ -3,6 +3,7 @@ Endpoints HTTP do Chatbot de Dúvidas.
 
 Rotas:
     POST   /api/v1/chat/send-message
+    WS     /api/v1/chat/ws
     GET    /api/v1/chat/conversations
     GET    /api/v1/chat/conversations/{id}
     POST   /api/v1/chat/conversations/{id}/rate
@@ -10,6 +11,9 @@ Rotas:
     GET    /api/v1/chat/admin/escalated
     POST   /api/v1/chat/admin/knowledge-base
     GET    /api/v1/chat/admin/knowledge-base
+
+Camada de roteamento: apenas valida payload, autentica e delega ao ChatController.
+Toda lógica de negócio fica no ChatService (consumido pelo controller).
 """
 
 from __future__ import annotations
@@ -23,8 +27,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.database import get_db
 from app.config.settings import settings
+from app.controllers.chat_controller import ChatController
 from app.dependencies.auth import get_current_user, get_user_from_token
-from app.models.user import User
 from app.dtos.chat_dto import (
     ConversationDetailDTO,
     ConversationListResponseDTO,
@@ -36,6 +40,7 @@ from app.dtos.chat_dto import (
     SendMessageDTO,
     SendMessageResponseDTO,
 )
+from app.models.user import User
 from app.services.chat_service import (
     ChatService,
     ConversationNotFoundError,
@@ -49,10 +54,13 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/chat", tags=["Chatbot"])
 
 
-# ── Dependency: obter ChatService ─────────────────────────────────────────────
+# ── Dependency: obter ChatController ─────────────────────────────────────────
 
-async def get_chat_service(session: AsyncSession = Depends(get_db)) -> ChatService:
-    return ChatService(session)
+async def get_chat_controller(
+    session: AsyncSession = Depends(get_db),
+) -> ChatController:
+    """Cria controller a cada request, injetando service com sessão atual."""
+    return ChatController(ChatService(session))
 
 
 async def get_current_user_id(
@@ -76,11 +84,11 @@ async def get_current_user_id(
 )
 async def send_message(
     payload: SendMessageDTO,
-    service: ChatService = Depends(get_chat_service),
+    controller: ChatController = Depends(get_chat_controller),
     user_id: UUID = Depends(get_current_user_id),
 ) -> SendMessageResponseDTO:
     try:
-        result = await service.send_message(
+        result = await controller.send_message(
             user_id=user_id,
             message=payload.message,
             conversation_id=payload.conversation_id,
@@ -108,20 +116,24 @@ async def chat_websocket(
 ):
     """
     Endpoint de WebSocket para chat in-app.
-    Autenticação via JWT na primeira mensagem (tipo 'auth').
-    Cliente deve enviar:
-      1. { "type": "auth", "token": "<jwt>" } (obrigatório primeiro)
-      2. { "type": "message", "content": "...", "conversation_id": "uuid" (opcional) }
+
+    Protocolo:
+        cliente → { "type": "auth", "token": "<jwt>" }
+        servidor → { "type": "auth_success", ... } | { "type": "auth_error", ... }
+        cliente → { "type": "message", "content": "...", "conversation_id": "<uuid>" (opcional) }
+        servidor → { "type": "status", "status": "thinking", "message": "..." }
+        servidor → { "type": "status", "status": "searching", "message": "..." }
+        servidor → { "type": "status", "status": "generating", "message": "..." }
+        servidor → { "type": "response", ... } (resposta final do chatbot)
     """
     await websocket.accept()
 
     user = None
-    service = ChatService(session)
+    controller = ChatController(ChatService(session))
     auth_timeout = 5  # segundos para enviar auth
     inactivity_timeout = 300  # 5 minutos
 
     try:
-        # Espera autenticação (com timeout)
         try:
             first_msg = await asyncio.wait_for(
                 websocket.receive_json(),
@@ -152,7 +164,6 @@ async def chat_websocket(
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
 
-        # Autentica usuário via JWT token (reutiliza função de auth.py)
         user = await get_user_from_token(token, session)
 
         if not user:
@@ -163,13 +174,18 @@ async def chat_websocket(
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
 
-        # Confirma autenticação
         await websocket.send_json({
             "type": "auth_success",
             "message": "Autenticado com sucesso",
         })
 
-        # Loop de mensagens (com timeout de inatividade)
+        async def forward_status(event: dict) -> None:
+            """Repassa cada evento de status do service para o cliente."""
+            try:
+                await websocket.send_json(event)
+            except Exception:
+                logger.debug("Falha ao enviar status pelo WebSocket — ignorando")
+
         while True:
             try:
                 data = await asyncio.wait_for(
@@ -191,7 +207,6 @@ async def chat_websocket(
                 content = data.get("content", "").strip()
                 conversation_id_str = data.get("conversation_id")
 
-                # Valida tamanho da mensagem (usando settings)
                 if len(content) > settings.CHAT_MAX_MESSAGE_LENGTH:
                     await websocket.send_json({
                         "error": f"Mensagem muito longa (máx {settings.CHAT_MAX_MESSAGE_LENGTH} caracteres)",
@@ -218,10 +233,11 @@ async def chat_websocket(
                             })
                             continue
 
-                    result = await service.send_message(
+                    result = await controller.send_message(
                         user_id=user.id,
                         message=content,
                         conversation_id=conv_id,
+                        on_status=forward_status,
                     )
                     result["type"] = "response"
                     await websocket.send_json(result)
@@ -256,10 +272,10 @@ async def chat_websocket(
 async def list_conversations(
     page: int = 1,
     limit: int = 20,
-    service: ChatService = Depends(get_chat_service),
+    controller: ChatController = Depends(get_chat_controller),
     user_id: UUID = Depends(get_current_user_id),
 ) -> ConversationListResponseDTO:
-    result = await service.list_conversations(user_id=user_id, page=page, limit=limit)
+    result = await controller.list_conversations(user_id=user_id, page=page, limit=limit)
     return ConversationListResponseDTO(**result)
 
 
@@ -270,11 +286,11 @@ async def list_conversations(
 )
 async def get_conversation(
     conversation_id: UUID,
-    service: ChatService = Depends(get_chat_service),
+    controller: ChatController = Depends(get_chat_controller),
     user_id: UUID = Depends(get_current_user_id),
 ) -> ConversationDetailDTO:
     try:
-        result = await service.get_conversation(user_id=user_id, conversation_id=conversation_id)
+        result = await controller.get_conversation(user_id=user_id, conversation_id=conversation_id)
         return ConversationDetailDTO(**result)
     except ConversationNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
@@ -287,11 +303,11 @@ async def get_conversation(
 async def rate_conversation(
     conversation_id: UUID,
     payload: RateConversationDTO,
-    service: ChatService = Depends(get_chat_service),
+    controller: ChatController = Depends(get_chat_controller),
     user_id: UUID = Depends(get_current_user_id),
 ) -> dict:
     try:
-        return await service.rate_conversation(
+        return await controller.rate_conversation(
             user_id=user_id,
             conversation_id=conversation_id,
             rating=payload.rating,
@@ -308,11 +324,11 @@ async def rate_conversation(
 async def message_feedback(
     message_id: UUID,
     payload: MessageFeedbackDTO,
-    service: ChatService = Depends(get_chat_service),
+    controller: ChatController = Depends(get_chat_controller),
     user_id: UUID = Depends(get_current_user_id),
 ) -> dict:
     try:
-        return await service.add_message_feedback(
+        return await controller.add_message_feedback(
             user_id=user_id,
             message_id=message_id,
             was_helpful=payload.was_helpful,
@@ -331,10 +347,10 @@ async def message_feedback(
     summary="Listar conversas escaladas (Personal)",
 )
 async def list_escalated(
-    service: ChatService = Depends(get_chat_service),
+    controller: ChatController = Depends(get_chat_controller),
     user_id: UUID = Depends(get_current_user_id),
 ) -> EscalatedListResponseDTO:
-    result = await service.list_escalated_conversations(personal_id=user_id)
+    result = await controller.list_escalated_conversations(personal_id=user_id)
     return EscalatedListResponseDTO(**result)
 
 
@@ -345,11 +361,11 @@ async def list_escalated(
 )
 async def create_knowledge_document(
     payload: CreateKnowledgeDocumentDTO,
-    service: ChatService = Depends(get_chat_service),
+    controller: ChatController = Depends(get_chat_controller),
     user_id: UUID = Depends(get_current_user_id),
 ) -> dict:
     try:
-        return await service.create_knowledge_document(
+        return await controller.create_knowledge_document(
             created_by_id=user_id,
             academy_id=None,
             title=payload.title,
@@ -372,8 +388,8 @@ async def create_knowledge_document(
     summary="Listar base de conhecimento com métricas",
 )
 async def list_knowledge_documents(
-    service: ChatService = Depends(get_chat_service),
+    controller: ChatController = Depends(get_chat_controller),
     user_id: UUID = Depends(get_current_user_id),
 ) -> KnowledgeListResponseDTO:
-    result = await service.list_knowledge_documents()
+    result = await controller.list_knowledge_documents()
     return KnowledgeListResponseDTO(**result)

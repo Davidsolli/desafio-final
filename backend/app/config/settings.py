@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     CHAT_RATE_LIMIT_WINDOW_HOURS: int = 1
     CHAT_MAX_MESSAGE_LENGTH: int = 500          # RN segurança: máximo de caracteres
     CHAT_INACTIVITY_CLOSE_HOURS: int = 24       # RN-02: fechar conversa após 24h inativa
+    CHAT_MAX_RESPONSE_LATENCY_MS: int = 10000   # Timeout máximo para o LLM (cold start + rede)
 
     # ── Firebase ──────────────────────────────────────────────────────────
     FIREBASE_CREDENTIALS_PATH: str = "./firebase-credentials.json"
@@ -49,7 +50,7 @@ class Settings(BaseSettings):
     # ── Recuperação de Senha ───────────────────────────────────────────────
     PASSWORD_RESET_TOKEN_EXPIRE_MINUTES: int = 60
     RESEND_API_KEY: str = ""
-    RESEND_FROM_EMAIL: str = "onboarding@resend.dev"
+    RESEND_FROM_EMAIL: str = "noreply@getfitloop.com"
     RESEND_FROM_NAME: str = "OmniConnect Fitness"
     FRONTEND_URL: str = "http://localhost:3000"
     FRONTEND_RESET_PASSWORD_ROUTE: str = "/reset-password"

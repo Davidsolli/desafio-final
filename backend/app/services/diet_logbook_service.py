@@ -16,7 +16,7 @@ from app.dtos.diet_logbook_dto import (
     DietLogbookResponseDTO,
     LogbookEntryResponseDTO,
 )
-from app.models.diet_logbook import DietLogbookEntry
+from app.models.diet_logbook import DietLogbook, DietLogbookEntry
 from app.repositories.diet_repository import DietRepository
 
 
@@ -134,11 +134,8 @@ class DietLogbookService:
             raise LogbookEntryNotFoundError("Registro não encontrado.")
 
         # Verificar que o logbook pertence ao usuário
-        logbook = await self.repository.get_logbook_by_date(
-            user_id=user_id,
-            log_date=entry.logbook.date if hasattr(entry, "logbook") else date.today(),
-        )
-        if not logbook or entry.logbook_id != logbook.id:
+        logbook = await self.repository.session.get(DietLogbook, entry.logbook_id)
+        if not logbook or logbook.user_id != user_id:
             raise LogbookForbiddenError(
                 "Você não tem permissão para remover este registro."
             )

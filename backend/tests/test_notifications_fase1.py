@@ -28,6 +28,7 @@ from app.models.notification import (
     WorkoutReminderSchedule,
 )
 from app.models.user import User
+from app.models.workout_sheet import WorkoutProgram, WorkoutSheet
 from app.services.goal_service import GoalService
 from app.services.notification_service import NotificationService
 from app.services.workout_sheet_service import WorkoutSheetService
@@ -42,6 +43,40 @@ def _make_user(user_id, *, role: str = "client", fcm_token: str = "tok") -> User
         role=role,
         fcm_token=fcm_token,
     )
+
+
+async def _create_program_with_sheets(
+    session: AsyncSession,
+    user_id,
+    *,
+    days_of_week=(0,),
+    program_active: bool = True,
+    sheet_active: bool = True,
+    personal_trainer_id=None,
+) -> WorkoutProgram:
+    """
+    Helper: cria um WorkoutProgram para o aluno com fichas em cada day_of_week
+    informado. Persiste via session e devolve o programa com sheets carregados.
+    """
+    program = WorkoutProgram(
+        user_id=user_id,
+        personal_trainer_id=personal_trainer_id or user_id,
+        name="Programa de Teste",
+        is_active=program_active,
+        workout_sheets=[
+            WorkoutSheet(
+                name=f"Treino dia {dow}",
+                day_of_week=dow,
+                order=i + 1,
+                is_active=sheet_active,
+            )
+            for i, dow in enumerate(days_of_week)
+        ],
+    )
+    session.add(program)
+    await session.commit()
+    await session.refresh(program)
+    return program
 
 
 # ---------------------------------------------------------------------------
@@ -115,29 +150,19 @@ class TestRegenerateWorkoutSchedules:
     ):
         """RN05: atualizar workout_reminder_time gera 7 schedules futuros."""
         user_id = uuid4()
-        sheet_id = uuid4()
-        # Schedule precisa de uma WorkoutSheet referenciável; usamos um stub
-        # mínimo via FK noop (em sqlite o constraint é leniente, mas o service
-        # deve aceitar user sem ficha — nesse caso não cria schedules).
-        # Para simplificar: criamos uma ficha mínima.
-        from app.models.workout_sheet import WorkoutSheet
 
-        sheet = WorkoutSheet(
-            id=sheet_id,
-            user_id=user_id,
-            personal_trainer_id=user_id,
-            name="Treino diário",
-            day_of_week=0,
-            is_active=True,
+        # Programa do aluno com uma ficha — regenerate precisa de pelo menos
+        # uma sheet ativa associada via WorkoutProgram.
+        await _create_program_with_sheets(
+            test_db_session, user_id, days_of_week=(0,)
         )
-        test_db_session.add(sheet)
 
         pref = NotificationPreference(
             user_id=user_id,
             notifications_enabled=True,
             workout_reminder_enabled=True,
             workout_reminder_time=None,
-            silent_days=[],  # nenhum dia silencioso
+            silent_days=[],
         )
         test_db_session.add(pref)
         await test_db_session.commit()
@@ -170,17 +195,9 @@ class TestRegenerateWorkoutSchedules:
     ):
         """RN06: dias em silent_days NÃO geram schedule."""
         user_id = uuid4()
-        from app.models.workout_sheet import WorkoutSheet
-
-        sheet = WorkoutSheet(
-            user_id=user_id,
-            personal_trainer_id=user_id,
-            name="Treino diário",
-            day_of_week=0,
-            is_active=True,
+        await _create_program_with_sheets(
+            test_db_session, user_id, days_of_week=(0,)
         )
-        test_db_session.add(sheet)
-        await test_db_session.commit()
 
         # Silent: segunda (0) e domingo (6). Sobram 5 dias.
         service = NotificationService(test_db_session)
@@ -216,17 +233,9 @@ class TestRegenerateWorkoutSchedules:
     ):
         """RN05 idempotência: segunda chamada NÃO duplica schedules pendentes."""
         user_id = uuid4()
-        from app.models.workout_sheet import WorkoutSheet
-
-        sheet = WorkoutSheet(
-            user_id=user_id,
-            personal_trainer_id=user_id,
-            name="Treino diário",
-            day_of_week=0,
-            is_active=True,
+        await _create_program_with_sheets(
+            test_db_session, user_id, days_of_week=(0,)
         )
-        test_db_session.add(sheet)
-        await test_db_session.commit()
 
         service = NotificationService(test_db_session)
 
@@ -280,16 +289,9 @@ class TestReplenishJob:
         gerado anteriormente).
         """
         user_id = uuid4()
-        from app.models.workout_sheet import WorkoutSheet
-
-        sheet = WorkoutSheet(
-            user_id=user_id,
-            personal_trainer_id=user_id,
-            name="Treino diário",
-            day_of_week=0,
-            is_active=True,
+        await _create_program_with_sheets(
+            test_db_session, user_id, days_of_week=(0,)
         )
-        test_db_session.add(sheet)
 
         pref = NotificationPreference(
             user_id=user_id,
@@ -361,8 +363,16 @@ class TestNotifyNewWorkoutSheet:
         test_db_session.add_all([student, trainer])
         await test_db_session.commit()
 
+        # Programa do aluno (a ficha é criada dentro dele)
+        program = await _create_program_with_sheets(
+            test_db_session,
+            student_id,
+            days_of_week=(),  # programa sem fichas iniciais
+            personal_trainer_id=trainer_id,
+        )
+
         dto = CreateWorkoutSheetDTO(
-            user_id=student_id,
+            workout_program_id=program.id,
             name="Treino A - Peito",
             description=None,
             day_of_week=0,
@@ -417,8 +427,15 @@ class TestNotifyNewWorkoutSheet:
         test_db_session.add_all([student, trainer])
         await test_db_session.commit()
 
+        program = await _create_program_with_sheets(
+            test_db_session,
+            student_id,
+            days_of_week=(),
+            personal_trainer_id=trainer_id,
+        )
+
         dto = CreateWorkoutSheetDTO(
-            user_id=student_id,
+            workout_program_id=program.id,
             name="Treino X",
             description=None,
             day_of_week=1,
@@ -622,16 +639,9 @@ class TestNotifyMethodsDirect:
     ):
         """update_preferences chama regenerate quando workout_reminder_time muda."""
         user_id = uuid4()
-        from app.models.workout_sheet import WorkoutSheet
-
-        sheet = WorkoutSheet(
-            user_id=user_id,
-            personal_trainer_id=user_id,
-            name="Treino diário",
-            day_of_week=0,
-            is_active=True,
+        await _create_program_with_sheets(
+            test_db_session, user_id, days_of_week=(0,)
         )
-        test_db_session.add(sheet)
         pref = NotificationPreference(
             user_id=user_id,
             notifications_enabled=True,
