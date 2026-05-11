@@ -3,8 +3,12 @@ import logging
 from uuid import UUID
 from typing import List, Optional, Dict, Tuple
 from datetime import datetime, date, time, timezone, timedelta
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException, status
+
+# Default usado quando o User não tem timezone configurado (RN03 da Fase 2)
+DEFAULT_USER_TIMEZONE = "America/Sao_Paulo"
 
 from app.repositories.notification_repository import NotificationRepository
 from app.services.fcm_service import FCMService
@@ -96,6 +100,20 @@ class NotificationService:
         else:
             raise HTTPException(status_code=404, detail="Usuário não encontrado")
 
+    @staticmethod
+    def _user_zone(user: Optional[User]) -> ZoneInfo:
+        """Retorna o ZoneInfo do usuário, com fallback para o default da Fase 2."""
+        tz_name = (getattr(user, "timezone", None) if user else None) or DEFAULT_USER_TIMEZONE
+        try:
+            return ZoneInfo(tz_name)
+        except ZoneInfoNotFoundError:
+            return ZoneInfo(DEFAULT_USER_TIMEZONE)
+
+    @classmethod
+    def _user_local_now(cls, user: Optional[User]) -> datetime:
+        """`datetime.now` no fuso do usuário (Fase 2 — RN01/RN02)."""
+        return datetime.now(cls._user_zone(user))
+
     async def send_notification(
         self,
         user_id: UUID,
@@ -109,8 +127,8 @@ class NotificationService:
         Aplica todos os guards de preferência antes de chamar o Firebase:
         - notifications_enabled
         - tipo específico (workout_reminder_enabled, meal_reminder_enabled, etc.)
-        - quiet hours
-        - silent days
+        - quiet hours (no fuso local do usuário)
+        - silent days (no weekday local do usuário)
         """
         log = NotificationLog(
             user_id=user_id,
@@ -134,9 +152,14 @@ class NotificationService:
             log.status = "cancelled_by_preference"
             return await self.repository.create_log(log)
 
-        # Guard 3: quiet hours
+        # Carrega o User uma vez — usado pelos guards locais e pelo envio FCM
+        query = select(User).where(User.id == user_id)
+        result = await self.session.execute(query)
+        user = result.scalars().first()
+
+        # Guard 3: quiet hours (RN01 - Fase 2: avaliado no fuso do usuário)
         if pref and pref.quiet_hours_start and pref.quiet_hours_end:
-            current_time = datetime.now(timezone.utc).time().replace(tzinfo=None)
+            current_time = self._user_local_now(user).time().replace(tzinfo=None)
             start = pref.quiet_hours_start
             end = pref.quiet_hours_end
             # overnight (ex: 22:00-07:00): start > end
@@ -149,16 +172,11 @@ class NotificationService:
                 log.status = "cancelled_by_quiet_hours"
                 return await self.repository.create_log(log)
 
-        # Guard 4: silent days
+        # Guard 4: silent days (RN01 - Fase 2: weekday no fuso do usuário)
         if pref and pref.silent_days:
-            if datetime.now(timezone.utc).weekday() in pref.silent_days:
+            if self._user_local_now(user).weekday() in pref.silent_days:
                 log.status = "cancelled_by_silent_day"
                 return await self.repository.create_log(log)
-
-        # Buscar FCM token do usuário
-        query = select(User).where(User.id == user_id)
-        result = await self.session.execute(query)
-        user = result.scalars().first()
 
         if not user or not user.fcm_token:
             log.status = "failed"
