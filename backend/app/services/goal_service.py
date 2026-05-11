@@ -157,13 +157,19 @@ class GoalService:
                     f"(atual: {goal.current_value}, informado: {new_value})"
                 )
 
-    def _maybe_complete(self, goal: Goal) -> None:
-        """Marca meta como concluída se progresso atingiu 100%. Idempotente."""
+    def _maybe_complete(self, goal: Goal) -> bool:
+        """
+        Marca meta como concluída se progresso atingiu 100%. Idempotente.
+
+        Retorna True se houve transição para 'completed' agora (gatilho
+        de notificação de conquista).
+        """
         if goal.progress_percentage >= 100.0 and goal.status != "completed":
             goal.status = "completed"
             goal.completed_at = datetime.utcnow()
-            # TODO: disparar notificação comemorativa via serviço de notificações
             logger.info("Meta concluída: goal_id=%s user_id=%s", goal.id, goal.user_id)
+            return True
+        return False
 
     async def update_goal(
         self,
@@ -180,13 +186,14 @@ class GoalService:
         self._assert_owner_or_privileged(goal, requesting_user_id, user_role)
         self._assert_not_completed(goal)
 
+        completed_now = False
         if dto.current_value is not None:
             self._assert_progress_direction(goal, dto.current_value)
             goal.current_value = dto.current_value
             goal.progress_percentage = self._calculate_progress(
                 goal.initial_value, goal.target_value, dto.current_value
             )
-            self._maybe_complete(goal)
+            completed_now = self._maybe_complete(goal)
 
             entry = GoalProgressEntry(
                 goal_id=goal.id,
@@ -203,7 +210,27 @@ class GoalService:
         updated = await self.repository.update(goal)
         await self.repository.commit()
 
+        # RN09/RN10: dispara notificação de conquista (falha silenciosa)
+        if completed_now:
+            await self._notify_achievement_safe(updated)
+
         return self._to_response(updated)
+
+    async def _notify_achievement_safe(self, goal: Goal) -> None:
+        """Dispara notify_achievement com isolamento de falha (RN10)."""
+        try:
+            from app.services.notification_service import NotificationService
+
+            service = NotificationService(self.session)
+            await service.notify_achievement(
+                user_id=goal.user_id,
+                goal_id=goal.id,
+                goal_title=goal.title,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Falha ao notificar conquista (goal_id=%s): %s", goal.id, exc
+            )
 
     async def delete_goal(
         self,

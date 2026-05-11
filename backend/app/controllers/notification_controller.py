@@ -23,7 +23,10 @@ class NotificationController:
         current_user: User = Depends(get_current_user)
     ) -> NotificationPreferenceResponseDTO:
         service = NotificationService(db)
-        pref = await service.get_or_create_preferences(current_user.id)
+        pref, created = await service.get_or_create_preferences_with_status(current_user.id)
+        # BUG-5: persistir a preferência criada (RN04)
+        if created:
+            await db.commit()
         return NotificationPreferenceResponseDTO.model_validate(pref)
 
     @staticmethod

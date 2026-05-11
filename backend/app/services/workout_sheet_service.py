@@ -5,11 +5,14 @@ Camada de lógica de negócio para criação, edição, deleção e duplicação
 de fichas de treino, bem como busca no catálogo de exercícios.
 """
 
+import logging
 from datetime import datetime
 from typing import List, Optional
 from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 from app.dtos.workout_sheet_dto import (
     CreateWorkoutSheetDTO,
@@ -108,6 +111,13 @@ class WorkoutSheetService:
 
         created = await self.repository.create_workout_sheet(sheet)
         await self.repository.commit()
+
+        # RN08/RN10: notifica o aluno (falha não derruba a criação)
+        await self._notify_new_sheet_safe(
+            user_id=created.user_id,
+            sheet_id=created.id,
+            sheet_name=created.name,
+        )
         return self._to_response(created)
 
     # ------------------------------------------------------------------
@@ -316,6 +326,13 @@ class WorkoutSheetService:
 
         created = await self.repository.create_workout_sheet(new_sheet)
         await self.repository.commit()
+
+        # RN08/RN10: notifica o aluno (idem create)
+        await self._notify_new_sheet_safe(
+            user_id=created.user_id,
+            sheet_id=created.id,
+            sheet_name=created.name,
+        )
         return self._to_response(created)
 
     # ------------------------------------------------------------------
@@ -362,6 +379,31 @@ class WorkoutSheetService:
     # ------------------------------------------------------------------
     # Helpers Privados
     # ------------------------------------------------------------------
+
+    async def _notify_new_sheet_safe(
+        self, user_id: UUID, sheet_id: UUID, sheet_name: str
+    ) -> None:
+        """
+        Dispara notify_new_workout_sheet com isolamento de falha (RN10).
+
+        Nunca propaga exceções: log e segue. Importação local para evitar
+        ciclo entre workout_sheet_service e notification_service.
+        """
+        try:
+            from app.services.notification_service import NotificationService
+
+            service = NotificationService(self.session)
+            await service.notify_new_workout_sheet(
+                user_id=user_id,
+                sheet_id=sheet_id,
+                sheet_name=sheet_name,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Falha ao notificar nova ficha de treino (sheet_id=%s): %s",
+                sheet_id,
+                exc,
+            )
 
     def _check_write_permission(self, role: str) -> None:
         """Verifica se o role tem permissão de escrita (RN-02)."""
