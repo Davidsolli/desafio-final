@@ -6,9 +6,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+import resend
 
 from app.config.database import init_db
 from app.config.limiter import limiter
+from app.config.settings import settings
 from app.routes import user, auth, chat, logbook, goal, invitation, webhooks
 from app.routes.pages import router as pages_router
 from app.routes.workout_sheet import router as workout_sheet_router, catalog_router as exercise_catalog_router, program_router as workout_program_router
@@ -28,6 +30,7 @@ async def lifespan(app: FastAPI):
     Inicializa o banco de dados e aquece o modelo de embeddings na startup
     para evitar latência adicional na primeira requisição do chatbot.
     """
+    resend.api_key = settings.RESEND_API_KEY
     await init_db()
 
     # Pré-aquece o modelo de embeddings local (HuggingFace)
