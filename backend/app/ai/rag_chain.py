@@ -2,14 +2,17 @@
 Pipeline RAG — Retrieve-Augment-Generate.
 
 Orquestra o fluxo completo de resposta do chatbot:
-  1. RETRIEVE  — busca vetorial no pgvector (score ≥ 0.7)
-  2. AUGMENT   — monta contexto com perfil do aluno e ficha ativa
-  3. GENERATE  — chama o LLM (Groq Llama 3.3 70B) com o prompt enriquecido
-  4. VALIDATE  — valida cobertura e detecta necessidade de escalação
+  1. RETRIEVE  — busca híbrida (pgvector + PostgreSQL FTS) com RRF
+  2. REWRITE   — LLM reformula a query antes do RETRIEVE (opcional)
+  3. RERANK    — cross-encoder reordena candidatos após RETRIEVE (opcional)
+  4. AUGMENT   — monta contexto com perfil do aluno e ficha ativa
+  5. GENERATE  — chama o LLM (Groq Llama 3.3 70B) com o prompt enriquecido
+  6. VALIDATE  — valida cobertura e detecta necessidade de escalação
 
 Dependências:
     langchain-groq          → ChatGroq (Llama 3.3 70B Versatile)
     langchain-huggingface   → HuggingFaceEmbeddings (all-MiniLM-L6-v2, 384 dims)
+    sentence-transformers   → CrossEncoder para re-ranking
     pgvector                → Busca por similaridade coseno no PostgreSQL
 """
 
@@ -20,12 +23,13 @@ import logging
 import re
 import time
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable
+from typing import Any, AsyncGenerator, Awaitable, Callable
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.output_parsers import StrOutputParser
 from langchain_groq import ChatGroq
 from langchain_huggingface import HuggingFaceEmbeddings
+from sentence_transformers import CrossEncoder
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -195,6 +199,16 @@ Histórico Recente da Conversa:
 {history}
 """
 
+# Prompt para reescrita de query antes do RETRIEVE
+_QUERY_REWRITE_PROMPT = """\
+Você é um sistema de busca para um chatbot de academia de ginástica. \
+Reformule a mensagem abaixo como uma query com palavras-chave técnicas de fitness. \
+Expanda abreviações, adicione sinônimos relevantes. \
+Retorne APENAS a query reformulada em português, sem explicações.
+
+Mensagem original: {query}
+Query de busca:"""
+
 
 @dataclass
 class RetrievedDocument:
@@ -203,9 +217,10 @@ class RetrievedDocument:
     id: str
     title: str
     content: str
-    relevance_score: float
+    relevance_score: float          # cosine similarity (usado na lógica de escalação)
     category: str = ""
     muscle_group: str = ""
+    rrf_score: float = 0.0          # Reciprocal Rank Fusion score (usado na ordenação)
 
 
 @dataclass
@@ -220,6 +235,7 @@ class RAGResult:
     tokens_used: int = 0
     latency_ms: int = 0
     confidence_score: float = 0.0
+    query_rewritten: str = ""       # Query reformulada pelo LLM (ou original)
 
 
 class RAGChain:
@@ -238,21 +254,14 @@ class RAGChain:
     """
 
     def __init__(self) -> None:
-        """
-        Inicializar RAG chain.
-
-        Side effects:
-            - Prepara embeddings (HuggingFace) e LLM (Groq) para uso lazy
-            - Não realiza chamadas externas até o primeiro uso
-        """
         self._embeddings: HuggingFaceEmbeddings | None = None
         self._llm: ChatGroq | None = None
+        self._cross_encoder: CrossEncoder | None = None
         self._last_model_name: str | None = None
 
     # ── Inicialização Lazy ─────────────────────────────────────────────────
 
     def _get_embeddings(self) -> HuggingFaceEmbeddings:
-        """Obter instância de embeddings (lazy init)."""
         if self._embeddings is None:
             self._embeddings = HuggingFaceEmbeddings(
                 model_name="sentence-transformers/all-MiniLM-L6-v2",
@@ -260,7 +269,6 @@ class RAGChain:
         return self._embeddings
 
     def _get_llm(self) -> ChatGroq:
-        """Obter instância do LLM Groq (lazy init)."""
         if self._llm is None:
             self._llm = ChatGroq(
                 model_name=settings.GROQ_MODEL,
@@ -270,50 +278,70 @@ class RAGChain:
             )
         return self._llm
 
+    def _get_cross_encoder(self) -> CrossEncoder:
+        if self._cross_encoder is None:
+            self._cross_encoder = CrossEncoder(settings.RAG_RERANK_MODEL)
+        return self._cross_encoder
+
     # ── Warm-up (chamado no startup da aplicação) ─────────────────────────
 
     async def warm_up(self) -> None:
         """
-        Pré-aquece o modelo de embeddings local para reduzir latência da
+        Pré-aquece embeddings e cross-encoder para reduzir latência da
         primeira requisição.
-
-        O HuggingFace baixa e carrega o modelo no primeiro `aembed_query`,
-        o que pode adicionar segundos a um cold start. Chamar warm_up() no
-        lifespan da FastAPI evita que o primeiro usuário pague essa conta.
-
-        Falhas de inicialização são logadas mas não derrubam a aplicação —
-        o lazy init original cobrirá quando vier a primeira request real.
         """
         try:
             embeddings = self._get_embeddings()
-            # Embedding curto é suficiente para forçar o download/load do modelo
             await embeddings.aembed_query("warmup")
             logger.info("RAGChain.warm_up: embeddings prontos para uso")
         except Exception as exc:
-            logger.warning("RAGChain.warm_up falhou (lazy init cobrirá): %s", exc)
+            logger.warning("RAGChain.warm_up (embeddings) falhou: %s", exc)
 
-    # ── Etapa 1: RETRIEVE ─────────────────────────────────────────────────
+        if settings.RAG_RERANK_ENABLED:
+            try:
+                loop = asyncio.get_event_loop()
+                cross_encoder = self._get_cross_encoder()
+                await loop.run_in_executor(
+                    None, cross_encoder.predict, [("warmup query", "warmup doc")]
+                )
+                logger.info("RAGChain.warm_up: cross-encoder pronto para uso")
+            except Exception as exc:
+                logger.warning("RAGChain.warm_up (cross-encoder) falhou: %s", exc)
 
-    async def retrieve(
+    # ── Etapa 0: QUERY REWRITE ─────────────────────────────────────────────
+
+    async def rewrite_query(self, query: str) -> str:
+        """
+        Reformula a query do usuário para melhorar o recall do RETRIEVE.
+
+        Expande abreviações, adiciona sinônimos técnicos e converte português
+        coloquial em termos de fitness precisos.
+
+        Falha silenciosamente: retorna a query original em caso de exceção.
+        """
+        llm = self._get_llm()
+        prompt = _QUERY_REWRITE_PROMPT.format(query=query)
+        messages = [HumanMessage(content=prompt)]
+        try:
+            response = await asyncio.wait_for(llm.ainvoke(messages), timeout=5.0)
+            rewritten = response.content.strip()
+            if rewritten and len(rewritten) < 300:
+                logger.debug("Query rewritten: %r → %r", query[:60], rewritten[:60])
+                return rewritten
+        except Exception as exc:
+            logger.debug("Query rewrite falhou, usando original: %s", exc)
+        return query
+
+    # ── Etapa 1a: RETRIEVE (vector puro — fallback) ───────────────────────
+
+    async def _retrieve_vector(
         self,
         query: str,
         session: AsyncSession,
         academy_id: str | None = None,
         top_k: int = TOP_K_DOCS,
     ) -> list[RetrievedDocument]:
-        """
-        Buscar documentos relevantes via similaridade coseno no pgvector.
-
-        Args:
-            query: Pergunta do usuário.
-            session: Sessão assíncrona do banco de dados.
-            academy_id: Filtrar por academia (opcional).
-            top_k: Número máximo de documentos a retornar.
-
-        Returns:
-            Lista de RetrievedDocument com score ≥ MIN_RELEVANCE_SCORE.
-        """
-        # Gerar embedding da query
+        """Busca vetorial pura por similaridade coseno (fallback do hybrid)."""
         embeddings_model = self._get_embeddings()
         try:
             query_vector: list[float] = await embeddings_model.aembed_query(query)
@@ -321,13 +349,8 @@ class RAGChain:
             logger.error("Erro ao gerar embedding da query: %s", exc)
             return []
 
-        # Montar cláusula de filtro de academia
-        academy_filter = (
-            "AND academy_id = :academy_id" if academy_id else ""
-        )
+        academy_filter = "AND academy_id = :academy_id" if academy_id else ""
 
-        # Busca por similaridade coseno — operador <=> do pgvector
-        # 1 - (embedding <=> query_vector) = cosine_similarity
         sql = text(
             f"""
             SELECT
@@ -359,12 +382,10 @@ class RAGChain:
             logger.error("Erro na busca vetorial: %s", exc)
             return []
 
-        # Filtrar apenas documentos com score ≥ MIN_RELEVANCE_SCORE (RN-06)
         docs: list[RetrievedDocument] = []
         for row in rows:
             score = float(row.relevance_score or 0)
             if score >= MIN_RELEVANCE_SCORE:
-                # Validação de conteúdo: truncar se muito longo (melhoria de segurança)
                 content = str(row.content)
                 if len(content) > MAX_DOC_CONTENT_LENGTH:
                     content = content[:MAX_DOC_CONTENT_LENGTH] + "..."
@@ -380,12 +401,202 @@ class RAGChain:
                 )
 
         logger.info(
-            "RETRIEVE: %d documentos recuperados (score ≥ %.2f) para query=%r",
+            "RETRIEVE (vector): %d docs (score ≥ %.2f) | query=%r",
             len(docs),
             MIN_RELEVANCE_SCORE,
             query[:80],
         )
         return docs
+
+    # ── Etapa 1b: RETRIEVE (híbrido = vetorial + BM25 + RRF) ──────────────
+
+    async def _retrieve_hybrid(
+        self,
+        query: str,
+        session: AsyncSession,
+        academy_id: str | None = None,
+        top_k: int = TOP_K_DOCS,
+    ) -> list[RetrievedDocument]:
+        """
+        Busca híbrida: combina pgvector (cosine) + PostgreSQL FTS (BM25-like)
+        usando Reciprocal Rank Fusion.
+
+        O rrf_score é usado apenas para ordenação; o relevance_score
+        preserva a cosine similarity original (necessário para escalation logic).
+        """
+        fetch_k = settings.RAG_HYBRID_FETCH_K  # candidatos extras para o reranker
+
+        embeddings_model = self._get_embeddings()
+        try:
+            query_vector: list[float] = await embeddings_model.aembed_query(query)
+        except Exception as exc:
+            logger.error("Erro ao gerar embedding (hybrid): %s", exc)
+            return []
+
+        academy_filter = "AND academy_id = :academy_id" if academy_id else ""
+
+        # RRF k=60 é o padrão amplamente usado na literatura
+        sql = text(
+            f"""
+            WITH vector_ranked AS (
+                SELECT
+                    id::text AS doc_id,
+                    ROW_NUMBER() OVER (
+                        ORDER BY embedding <=> CAST(:query_vector AS vector)
+                    ) AS vrank,
+                    1 - (embedding <=> CAST(:query_vector AS vector)) AS vscore
+                FROM knowledge_base
+                WHERE is_active = true {academy_filter}
+                ORDER BY embedding <=> CAST(:query_vector AS vector)
+                LIMIT :fetch_k
+            ),
+            text_ranked AS (
+                SELECT
+                    id::text AS doc_id,
+                    ROW_NUMBER() OVER (
+                        ORDER BY ts_rank(
+                            to_tsvector('simple', title || ' ' || content),
+                            plainto_tsquery('simple', :query_text)
+                        ) DESC
+                    ) AS trank
+                FROM knowledge_base
+                WHERE is_active = true {academy_filter}
+                  AND to_tsvector('simple', title || ' ' || content)
+                          @@ plainto_tsquery('simple', :query_text)
+                LIMIT :fetch_k
+            ),
+            rrf AS (
+                SELECT
+                    COALESCE(v.doc_id, t.doc_id) AS doc_id,
+                    COALESCE(v.vscore, 0)                      AS vscore,
+                    COALESCE(1.0 / (60.0 + v.vrank), 0)
+                        + COALESCE(1.0 / (60.0 + t.trank), 0) AS rrf_score
+                FROM vector_ranked v
+                FULL OUTER JOIN text_ranked t ON v.doc_id = t.doc_id
+            )
+            SELECT
+                kb.id::text,
+                kb.title,
+                kb.content,
+                kb.category,
+                kb.muscle_group,
+                rrf.vscore     AS relevance_score,
+                rrf.rrf_score
+            FROM knowledge_base kb
+            JOIN rrf ON kb.id::text = rrf.doc_id
+            ORDER BY rrf.rrf_score DESC
+            LIMIT :top_k
+            """
+        )
+
+        params: dict[str, Any] = {
+            "query_vector": str(query_vector),
+            "query_text": query,
+            "fetch_k": fetch_k,
+            "top_k": top_k,
+        }
+        if academy_id:
+            params["academy_id"] = academy_id
+
+        try:
+            result = await session.execute(sql, params)
+            rows = result.fetchall()
+        except Exception as exc:
+            # FTS pode falhar com queries muito curtas ou caracteres especiais
+            logger.warning("Hybrid search falhou, caindo para vector puro: %s", exc)
+            return await self._retrieve_vector(query, session, academy_id, top_k)
+
+        # Threshold mais permissivo que o vector puro para permitir que o
+        # reranker selecione candidatos de text-search com vscore baixo
+        min_vscore = MIN_RELEVANCE_SCORE / 2  # 0.35
+
+        docs: list[RetrievedDocument] = []
+        for row in rows:
+            vscore = float(row.relevance_score or 0)
+            rrf_score = float(row.rrf_score or 0)
+
+            # Inclui docs que passaram em pelo menos uma das buscas
+            if vscore >= min_vscore or rrf_score >= (1.0 / (60.0 + fetch_k)):
+                content = str(row.content)
+                if len(content) > MAX_DOC_CONTENT_LENGTH:
+                    content = content[:MAX_DOC_CONTENT_LENGTH] + "..."
+                docs.append(
+                    RetrievedDocument(
+                        id=str(row.id),
+                        title=str(row.title),
+                        content=content,
+                        relevance_score=round(vscore, 4),
+                        rrf_score=round(rrf_score, 6),
+                        category=str(row.category or ""),
+                        muscle_group=str(row.muscle_group or ""),
+                    )
+                )
+
+        logger.info(
+            "RETRIEVE (hybrid): %d docs | query=%r",
+            len(docs),
+            query[:80],
+        )
+        return docs
+
+    # ── Etapa 1: RETRIEVE (dispatcher) ────────────────────────────────────
+
+    async def retrieve(
+        self,
+        query: str,
+        session: AsyncSession,
+        academy_id: str | None = None,
+        top_k: int = TOP_K_DOCS,
+    ) -> list[RetrievedDocument]:
+        """Dispatcher: usa busca híbrida se habilitada, senão vetor puro."""
+        if settings.RAG_HYBRID_SEARCH:
+            return await self._retrieve_hybrid(query, session, academy_id, top_k)
+        return await self._retrieve_vector(query, session, academy_id, top_k)
+
+    # ── Etapa 1.5: RERANK ─────────────────────────────────────────────────
+
+    async def rerank(
+        self,
+        query: str,
+        docs: list[RetrievedDocument],
+        top_k: int = TOP_K_DOCS,
+    ) -> list[RetrievedDocument]:
+        """
+        Re-ordena docs recuperados usando um cross-encoder.
+
+        O cross-encoder avalia cada par (query, doc_content) de forma conjunta,
+        capturando interações semânticas que os bi-encoders (embeddings) perdem.
+        A relevance_score original (cosine similarity) é preservada para a
+        lógica de escalação.
+        """
+        if not docs or len(docs) <= 1:
+            return docs[:top_k]
+
+        cross_encoder = self._get_cross_encoder()
+        # Trunca conteúdo para o limite do cross-encoder (512 tokens ≈ 400 chars)
+        pairs = [(query, doc.content[:400]) for doc in docs]
+
+        try:
+            loop = asyncio.get_event_loop()
+            scores = await loop.run_in_executor(None, cross_encoder.predict, pairs)
+            scores_list: list[float] = (
+                scores.tolist() if hasattr(scores, "tolist") else list(scores)
+            )
+            sorted_pairs = sorted(
+                zip(docs, scores_list), key=lambda x: x[1], reverse=True
+            )
+            reranked = [doc for doc, _ in sorted_pairs[:top_k]]
+
+            logger.info(
+                "RERANK: %d → %d docs | top_score=%.3f",
+                len(docs),
+                len(reranked),
+                scores_list[0] if scores_list else 0,
+            )
+            return reranked
+        except Exception as exc:
+            logger.warning("RERANK falhou, usando ordem original: %s", exc)
+            return docs[:top_k]
 
     # ── Etapa 2: AUGMENT ──────────────────────────────────────────────────
 
@@ -406,7 +617,7 @@ class RAGChain:
             conversation_history: Últimas mensagens da conversa [{role, content}].
 
         Returns:
-            Prompt completo (system + user) pronto para o LLM.
+            Prompt completo (system) pronto para o LLM.
         """
         # Formatar perfil do aluno
         profile = user_context.get("user_profile", {})
@@ -490,7 +701,6 @@ class RAGChain:
         else:
             history_block = ""
 
-        # Anexa blocos extras à ficha (mantém estrutura do template)
         workout_sheet_str = workout_sheet_str + goals_block + diet_block + history_block
 
         # Formatar documentos recuperados
@@ -501,7 +711,7 @@ class RAGChain:
                     f"[Doc {i} | Score: {doc.relevance_score:.2f} | "
                     f"Categoria: {doc.category}]\n"
                     f"Título: {doc.title}\n"
-                    f"{doc.content[:800]}"  # truncar conteúdo longo
+                    f"{doc.content[:800]}"
                 )
             retrieved_docs_str = "\n\n---\n\n".join(docs_lines)
         else:
@@ -511,21 +721,18 @@ class RAGChain:
 
         # Formatar histórico (RN-05: limitado a ~80 tokens ≈ últimas 3 trocas)
         history_lines = []
-        recent = conversation_history[-6:]  # 3 trocas user/assistant
-        for msg in recent:
+        recent_msgs = conversation_history[-6:]
+        for msg in recent_msgs:
             role = "Aluno" if msg.get("role") == "user" else "Assistente"
             history_lines.append(f"{role}: {msg.get('content', '')[:200]}")
         history_str = "\n".join(history_lines) if history_lines else "Início da conversa."
 
-        # Montar system prompt preenchido
-        system_content = SYSTEM_PROMPT_TEMPLATE.format(
+        return SYSTEM_PROMPT_TEMPLATE.format(
             user_profile=user_profile_str,
             workout_sheet=workout_sheet_str,
             retrieved_docs=retrieved_docs_str,
             history=history_str,
         )
-
-        return system_content
 
     # ── Detecção de Escalação ─────────────────────────────────────────────
 
@@ -544,26 +751,18 @@ class RAGChain:
             3. low_confidence  — RN-07: nenhum documento recuperado
                 (exceto quando a pergunta é sobre dados pessoais do aluno)
             4. too_complex     — best score < ESCALATE_THRESHOLD
-
-        Returns:
-            Tuple (should_escalate: bool, reason: str)
         """
         query_lower = query.lower()
 
-        # 1. Risco à saúde tem precedência: nem chega a tentar gerar resposta
         for keyword in HEALTH_RISK_KEYWORDS:
             if keyword in query_lower:
                 return True, "health_risk"
 
-        # 2. Pedido explícito do usuário por atendimento humano
         for keyword in EXPLICIT_REQUEST_KEYWORDS:
             if keyword in query_lower:
                 return True, "user_requested"
 
-        # 3. RAG vazio
         if not retrieved_docs:
-            # Perguntas sobre dados pessoais (IMC, peso, metas...) não precisam
-            # da KB — o LLM responde usando o user_context do perfil do aluno.
             ctx = user_context or {}
             has_personal_data = bool(
                 ctx.get("user_profile") or ctx.get("active_goals") or ctx.get("recent_history")
@@ -572,30 +771,20 @@ class RAGChain:
                 return False, ""
             return True, "low_confidence"
 
-        # 4. Score insuficiente
         best_score = max(doc.relevance_score for doc in retrieved_docs)
         if best_score < ESCALATE_THRESHOLD:
             return True, "too_complex"
 
         return False, ""
 
-    # ── Etapa 3: GENERATE ─────────────────────────────────────────────────
+    # ── Etapa 3: GENERATE (blocking) ──────────────────────────────────────
 
     async def generate(
         self,
         system_prompt: str,
         query: str,
     ) -> tuple[str, int, str]:
-        """
-        Chamar o LLM Groq para gerar a resposta.
-
-        Args:
-            system_prompt: Prompt de sistema com contexto completo.
-            query: Pergunta do usuário.
-
-        Returns:
-            Tuple (answer: str, tokens_used: int, model_name: str)
-        """
+        """Chamar o LLM Groq para gerar a resposta completa (modo blocking)."""
         llm = self._get_llm()
         parser = StrOutputParser()
 
@@ -608,7 +797,6 @@ class RAGChain:
             response = await llm.ainvoke(messages)
             answer: str = await parser.ainvoke(response)
 
-            # Tentar extrair uso de tokens dos metadados
             tokens_used = 0
             if hasattr(response, "usage_metadata") and response.usage_metadata:
                 tokens_used = (
@@ -623,12 +811,34 @@ class RAGChain:
             logger.error("Erro de atributo (possível incompatibilidade LangChain): %s", exc)
             raise RuntimeError(f"LangChain compatibility error: {exc}") from exc
         except Exception as exc:
-            logger.error(
-                "Erro na geração LLM: %s | type=%s",
-                exc,
-                type(exc).__name__,
-            )
+            logger.error("Erro na geração LLM: %s | type=%s", exc, type(exc).__name__)
             raise RuntimeError(f"LLM generation failed: {exc}") from exc
+
+    # ── Etapa 3b: GENERATE (streaming) ────────────────────────────────────
+
+    async def generate_stream(
+        self,
+        system_prompt: str,
+        query: str,
+    ) -> AsyncGenerator[str, None]:
+        """
+        Chamar o LLM Groq e gerar tokens incrementalmente (modo streaming).
+
+        Yields:
+            Fragmentos de texto conforme o LLM gera.
+        """
+        llm = self._get_llm()
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=query),
+        ]
+        try:
+            async for chunk in llm.astream(messages):
+                if hasattr(chunk, "content") and chunk.content:
+                    yield chunk.content
+        except Exception as exc:
+            logger.error("Erro no streaming do LLM: %s", exc)
+            raise RuntimeError(f"LLM streaming failed: {exc}") from exc
 
     # ── Etapa 4: VALIDATE ─────────────────────────────────────────────────
 
@@ -640,19 +850,12 @@ class RAGChain:
         """
         Validar a resposta gerada.
 
-        Verifica:
-        - Resposta não é vazia
-        - Não contém marcadores de alucinação óbvia ("não sei", "não tenho certeza"
-          com mais de 50% do texto)
-        - Se há documentos recuperados, a resposta deve mencionar o tema
-
         Returns:
             Tuple (is_valid: bool, needs_human_review: bool)
         """
         if not answer or len(answer.strip()) < 20:
             return False, True
 
-        # Detectar frases de incerteza extrema que sugerem alucinação
         uncertainty_patterns = [
             r"não\s+posso\s+responder",
             r"não\s+sei\s+informar",
@@ -660,50 +863,30 @@ class RAGChain:
         ]
         for pattern in uncertainty_patterns:
             if re.search(pattern, answer, re.IGNORECASE):
-                return True, True  # válida mas precisa de review
+                return True, True
 
         return True, False
 
-    # ── Pipeline Principal ─────────────────────────────────────────────────
+    # ── Pipeline Interno Compartilhado ─────────────────────────────────────
 
-    async def run(
+    async def _run_pipeline_setup(
         self,
         query: str,
         session: AsyncSession,
-        academy_id: str | None = None,
-        user_context: dict[str, Any] | None = None,
-        conversation_history: list[dict[str, str]] | None = None,
-        on_status: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
-    ) -> RAGResult:
+        academy_id: str | None,
+        user_context: dict[str, Any],
+        conversation_history: list[dict[str, str]],
+        start_time: float,
+    ) -> dict[str, Any] | RAGResult:
         """
-        Executar o pipeline RAG completo (Retrieve → Augment → Generate → Validate).
-
-        Args:
-            query: Pergunta do aluno.
-            session: Sessão assíncrona do banco de dados.
-            academy_id: UUID da academia para filtrar a base de conhecimento.
-            user_context: Contexto do aluno {user_profile, active_workout_sheet}.
-            conversation_history: Histórico de mensagens [{role, content}].
-            on_status: callback opcional invocado entre etapas para informar
-                progresso ao cliente (searching / generating).
+        Executa os passos compartilhados entre run() e run_stream():
+        fast-paths, query rewrite, retrieve híbrido e rerank.
 
         Returns:
-            RAGResult com resposta, documentos, flags de escalação e métricas.
+            dict com campos intermediários para continuar o pipeline, OU
+            RAGResult pronto (fast-paths: greeting, trainer, escalação precoce).
         """
-        start_time = time.monotonic()
-        user_context = user_context or {}
-        conversation_history = conversation_history or []
-
-        # on_status é aceito por compatibilidade mas a emissão dos eventos
-        # de progresso fica na camada superior (ChatService) — single
-        # responsibility: rag_chain.run cuida apenas do pipeline.
-        _ = on_status
-
-        logger.info("RAG pipeline iniciado | query=%r", query[:100])
-
         # ── 0. FAST-PATH SAUDAÇÕES ────────────────────────────────────────
-        # Saudações curtas ("olá", "oi", "bom dia") não precisam do RAG nem do
-        # LLM. Respondemos direto para evitar timeout em cold start.
         if _GREETING_REGEX.match(query):
             latency_ms = int((time.monotonic() - start_time) * 1000)
             return RAGResult(
@@ -716,12 +899,8 @@ class RAGChain:
             )
 
         # ── 0.5. FAST-PATH "QUEM É MEU PERSONAL?" ─────────────────────────
-        # Pergunta direta sobre o personal trainer vinculado é respondida
-        # deterministicamente a partir do user_context (preenchido pelo
-        # ChatService a partir de User.trainer_id). Evita uma chamada
-        # desnecessária ao LLM e garante consistência.
         if _TRAINER_QUERY_REGEX.search(query):
-            trainer = (user_context or {}).get("personal_trainer")
+            trainer = user_context.get("personal_trainer")
             if trainer and trainer.get("name"):
                 answer = (
                     f"Seu Personal Trainer é o(a) {trainer['name']}. Você "
@@ -743,16 +922,20 @@ class RAGChain:
                 model_used="trainer_lookup",
             )
 
-        # ── 1. RETRIEVE ────────────────────────────────────────────────────
-        retrieved_docs = await self.retrieve(query, session, academy_id)
+        # ── 0.8. QUERY REWRITE ─────────────────────────────────────────────
+        effective_query = query
+        if settings.RAG_QUERY_REWRITE:
+            effective_query = await self.rewrite_query(query)
 
-        # ── Verificar necessidade de escalação explícita ANTES de gerar ──────────────
+        # ── 1. RETRIEVE HÍBRIDO ────────────────────────────────────────────
+        retrieved_docs = await self.retrieve(effective_query, session, academy_id)
+
+        # ── Escalação precoce (antes de chamar o LLM) ─────────────────────
         should_escalate, escalation_reason = self._should_escalate(
             query, retrieved_docs, user_context
         )
 
         if should_escalate and escalation_reason in {"user_requested", "health_risk"}:
-            # Pedido explícito ou risco de saúde → escalar antes de chamar o LLM
             latency_ms = int((time.monotonic() - start_time) * 1000)
             logger.warning(
                 "RAG: escalando conversa | reason=%s | latency_ms=%d",
@@ -766,9 +949,10 @@ class RAGChain:
                 escalation_reason=escalation_reason,
                 latency_ms=latency_ms,
                 confidence_score=0.0,
+                query_rewritten=effective_query,
             )
 
-        # ── 1.5. FAST-PATH FAQ (delegado ao FAQService dedicado) ───────────
+        # ── 1.5. FAST-PATH FAQ ────────────────────────────────────────────
         faq_response = faq_service.match(query)
         if faq_response is not None:
             latency_ms = int((time.monotonic() - start_time) * 1000)
@@ -779,7 +963,55 @@ class RAGChain:
                 latency_ms=latency_ms,
                 confidence_score=1.0,
                 model_used="faq_fallback",
+                query_rewritten=effective_query,
             )
+
+        # ── 1.8. RERANK ───────────────────────────────────────────────────
+        if settings.RAG_RERANK_ENABLED and retrieved_docs:
+            retrieved_docs = await self.rerank(query, retrieved_docs, TOP_K_DOCS)
+
+        # Retorna estado intermediário para os métodos run() e run_stream()
+        return {
+            "effective_query": effective_query,
+            "retrieved_docs": retrieved_docs,
+            "should_escalate": should_escalate,
+            "escalation_reason": escalation_reason,
+        }
+
+    # ── Pipeline Principal (blocking) ─────────────────────────────────────
+
+    async def run(
+        self,
+        query: str,
+        session: AsyncSession,
+        academy_id: str | None = None,
+        user_context: dict[str, Any] | None = None,
+        conversation_history: list[dict[str, str]] | None = None,
+        on_status: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
+    ) -> RAGResult:
+        """
+        Executar o pipeline RAG completo (Rewrite → Retrieve → Rerank →
+        Augment → Generate → Validate).
+        """
+        start_time = time.monotonic()
+        user_context = user_context or {}
+        conversation_history = conversation_history or []
+        _ = on_status  # mantido por compatibilidade; emissão fica no ChatService
+
+        logger.info("RAG pipeline iniciado | query=%r", query[:100])
+
+        setup = await self._run_pipeline_setup(
+            query, session, academy_id, user_context, conversation_history, start_time
+        )
+
+        # Se setup retornou um RAGResult já pronto (fast-path), devolve direto
+        if isinstance(setup, RAGResult):
+            return setup
+
+        effective_query: str = setup["effective_query"]
+        retrieved_docs: list[RetrievedDocument] = setup["retrieved_docs"]
+        should_escalate: bool = setup["should_escalate"]
+        escalation_reason: str = setup["escalation_reason"]
 
         # ── 2. AUGMENT ─────────────────────────────────────────────────────
         system_prompt = self.augment(
@@ -787,8 +1019,6 @@ class RAGChain:
         )
 
         # ── 3. GENERATE ────────────────────────────────────────────────────
-        # Aplica timeout duro: se o LLM exceder CHAT_MAX_RESPONSE_LATENCY_MS,
-        # cancelamos e devolvemos fallback amigável + escalação.
         timeout_seconds = settings.CHAT_MAX_RESPONSE_LATENCY_MS / 1000
         try:
             answer, tokens_used, model_name = await asyncio.wait_for(
@@ -806,6 +1036,7 @@ class RAGChain:
                 should_escalate=True,
                 escalation_reason="timeout",
                 latency_ms=latency_ms,
+                query_rewritten=effective_query,
             )
         except Exception as exc:
             logger.error("Falha na geração: %s", exc)
@@ -815,20 +1046,16 @@ class RAGChain:
                 should_escalate=True,
                 escalation_reason="generation_error",
                 latency_ms=latency_ms,
+                query_rewritten=effective_query,
             )
 
         # ── 4. VALIDATE ────────────────────────────────────────────────────
-        # Regra única e previsível: se a resposta gerada não passa na
-        # validação (vazia/curta demais), substituímos por mensagem segura
-        # de fallback e escalamos. Caso contrário, preservamos o estado de
-        # escalação já calculado em _should_escalate.
         is_valid, _needs_review = self.validate(answer, retrieved_docs)
         if not is_valid:
             answer = ESCALATION_MESSAGES["validation_failed"]
             should_escalate = True
             escalation_reason = "validation_failed"
 
-        # Calcular confidence como média dos scores recuperados
         confidence = (
             sum(d.relevance_score for d in retrieved_docs) / len(retrieved_docs)
             if retrieved_docs
@@ -839,11 +1066,12 @@ class RAGChain:
 
         logger.info(
             "RAG pipeline concluído | docs=%d | confidence=%.2f | "
-            "escalate=%s | latency_ms=%d",
+            "escalate=%s | latency_ms=%d | rewritten=%r",
             len(retrieved_docs),
             confidence,
             should_escalate,
             latency_ms,
+            effective_query[:60] if effective_query != query else "(same)",
         )
 
         return RAGResult(
@@ -855,7 +1083,123 @@ class RAGChain:
             tokens_used=tokens_used,
             latency_ms=latency_ms,
             confidence_score=round(confidence, 4),
+            query_rewritten=effective_query,
         )
+
+    # ── Pipeline Streaming ─────────────────────────────────────────────────
+
+    async def run_stream(
+        self,
+        query: str,
+        session: AsyncSession,
+        academy_id: str | None = None,
+        user_context: dict[str, Any] | None = None,
+        conversation_history: list[dict[str, str]] | None = None,
+    ) -> AsyncGenerator[dict[str, Any], None]:
+        """
+        Pipeline RAG com resposta streamada.
+
+        Yields dicts com campo 'type':
+            {"type": "status",  "status": "...", "message": "..."}
+            {"type": "chunk",   "content": "<token(s)>"}
+            {"type": "done",    "answer": "...", "should_escalate": bool, ...}
+        """
+        start_time = time.monotonic()
+        user_context = user_context or {}
+        conversation_history = conversation_history or []
+
+        logger.info("RAG stream iniciado | query=%r", query[:100])
+
+        yield {"type": "status", "status": "thinking", "message": "Analisando sua pergunta..."}
+
+        setup = await self._run_pipeline_setup(
+            query, session, academy_id, user_context, conversation_history, start_time
+        )
+
+        # Fast-path retornou RAGResult pronto — emite como "done" sem chunks
+        if isinstance(setup, RAGResult):
+            yield {
+                "type": "done",
+                "answer": setup.answer,
+                "retrieved_documents": setup.retrieved_documents,
+                "should_escalate": setup.should_escalate,
+                "escalation_reason": setup.escalation_reason,
+                "model_used": setup.model_used,
+                "tokens_used": setup.tokens_used,
+                "latency_ms": setup.latency_ms,
+                "confidence_score": setup.confidence_score,
+                "query_rewritten": setup.query_rewritten,
+            }
+            return
+
+        effective_query: str = setup["effective_query"]
+        retrieved_docs: list[RetrievedDocument] = setup["retrieved_docs"]
+        should_escalate: bool = setup["should_escalate"]
+        escalation_reason: str = setup["escalation_reason"]
+
+        yield {"type": "status", "status": "generating", "message": "Gerando resposta..."}
+
+        # ── 2. AUGMENT ─────────────────────────────────────────────────────
+        system_prompt = self.augment(
+            query, retrieved_docs, user_context, conversation_history
+        )
+
+        # ── 3. GENERATE STREAM ─────────────────────────────────────────────
+        full_answer = ""
+        try:
+            async for chunk in self.generate_stream(system_prompt, query):
+                full_answer += chunk
+                yield {"type": "chunk", "content": chunk}
+        except Exception as exc:
+            logger.error("Falha no streaming: %s", exc)
+            latency_ms = int((time.monotonic() - start_time) * 1000)
+            yield {
+                "type": "done",
+                "answer": ESCALATION_MESSAGES["generation_error"],
+                "retrieved_documents": [],
+                "should_escalate": True,
+                "escalation_reason": "generation_error",
+                "model_used": "",
+                "tokens_used": 0,
+                "latency_ms": latency_ms,
+                "confidence_score": 0.0,
+                "query_rewritten": effective_query,
+            }
+            return
+
+        # ── 4. VALIDATE ────────────────────────────────────────────────────
+        is_valid, _ = self.validate(full_answer, retrieved_docs)
+        if not is_valid:
+            full_answer = ESCALATION_MESSAGES["validation_failed"]
+            should_escalate = True
+            escalation_reason = "validation_failed"
+
+        confidence = (
+            sum(d.relevance_score for d in retrieved_docs) / len(retrieved_docs)
+            if retrieved_docs
+            else 0.0
+        )
+        latency_ms = int((time.monotonic() - start_time) * 1000)
+
+        logger.info(
+            "RAG stream concluído | docs=%d | escalate=%s | latency_ms=%d",
+            len(retrieved_docs),
+            should_escalate,
+            latency_ms,
+        )
+
+        yield {
+            "type": "done",
+            "answer": full_answer,
+            "retrieved_documents": retrieved_docs,
+            "should_escalate": should_escalate,
+            "escalation_reason": escalation_reason,
+            "model_used": settings.GROQ_MODEL,
+            "tokens_used": 0,  # streaming não expõe contagem de tokens
+            "latency_ms": latency_ms,
+            "confidence_score": round(confidence, 4),
+            "query_rewritten": effective_query,
+        }
 
 
 # Instância singleton reutilizável pelo serviço
