@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from uuid import UUID
-from typing import List, Optional, Dict, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from datetime import datetime, date, time, timezone, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -120,7 +120,7 @@ class NotificationService:
         type: str,
         title: str,
         body: str,
-        data: Optional[Dict[str, str]] = None,
+        data: Optional[Dict[str, Any]] = None,
     ) -> NotificationLog:
         """
         Envia push notification via FCM e registra o log.
