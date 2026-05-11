@@ -8,11 +8,16 @@ from app.models.chatbot import (  # noqa: F401
     ChatMessage,
     ChatFeedback,
 )
-from app.models.workout_sheet import WorkoutSheet, Exercise  # noqa: F401
+from app.models.workout_sheet import WorkoutProgram, WorkoutSheet, Exercise  # noqa: F401
 from app.models.exercise_catalog import ExerciseCatalog  # noqa: F401
 from app.models.food_catalog import FoodCatalog  # noqa: F401
 from app.models.diet import CustomFood, Diet, DietMeal, DietItem  # noqa: F401
 from app.models.diet_logbook import DietLogbook, DietLogbookEntry  # noqa: F401
+from app.models.notification import (  # noqa: F401
+    NotificationPreference,
+    NotificationLog,
+    WorkoutReminderSchedule,
+)
 
 __all__ = [
     "Base",
@@ -22,6 +27,7 @@ __all__ = [
     "ChatConversation",
     "ChatMessage",
     "ChatFeedback",
+    "WorkoutProgram",
     "WorkoutSheet",
     "Exercise",
     "ExerciseCatalog",
@@ -32,5 +38,8 @@ __all__ = [
     "DietItem",
     "DietLogbook",
     "DietLogbookEntry",
+    "NotificationPreference",
+    "NotificationLog",
+    "WorkoutReminderSchedule",
 ]
 

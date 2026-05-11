@@ -17,14 +17,14 @@ class FrequencyBarChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (isLoading) {
-      return Center(
+    if (isLoading && dataPoints.isEmpty) {
+      return const Center(
         child: CircularProgressIndicator(),
       );
     }
 
-    if (hasError || dataPoints.isEmpty) {
-      return Center(
+    if (hasError || (dataPoints.isEmpty && !isLoading)) {
+      return const Center(
         child: Padding(
           padding: EdgeInsets.all(16),
           child: Column(
@@ -33,7 +33,7 @@ class FrequencyBarChart extends StatelessWidget {
               Icon(Icons.info_outline, size: 48, color: Colors.grey),
               SizedBox(height: 16),
               Text(
-                'Complete este exercício mais vezes\npara ver seu progresso',
+                'Nenhum treino realizado neste período.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.grey, fontSize: 14),
               ),
@@ -46,58 +46,52 @@ class FrequencyBarChart extends StatelessWidget {
     // Preparar dados para o gráfico
     final chartData = _prepareChartData();
 
-    return Padding(
-      padding: EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            period == "weekly" ? "Frequência Semanal" : "Frequência Mensal",
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
-          SizedBox(height: 16),
-          SizedBox(
-            height: 300,
-            child: BarChart(
-              BarChartData(
-                barGroups: chartData,
-                titlesData: FlTitlesData(
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 28,
-                      getTitlesWidget: (value, meta) {
-                        final label = _formatPeriodLabel(value.toInt());
-                        return Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Text(label, style: const TextStyle(fontSize: 9)),
-                        );
-                      },
-                    ),
-                  ),
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      getTitlesWidget: (value, meta) {
-                        return Text(
-                          '${value.toInt()}',
-                          style: TextStyle(fontSize: 10),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                gridData: FlGridData(
-                  show: true,
-                  horizontalInterval: 1,
-                ),
-                borderData: FlBorderData(show: false),
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 200),
+      opacity: isLoading ? 0.6 : 1.0,
+      child: Padding(
+        padding: const EdgeInsets.only(top: 8, bottom: 8, right: 8),
+        child: BarChart(
+        BarChartData(
+          barGroups: chartData,
+          titlesData: FlTitlesData(
+            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            bottomTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                reservedSize: 28,
+                getTitlesWidget: (value, meta) {
+                  final label = _formatPeriodLabel(value.toInt());
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(label, style: const TextStyle(fontSize: 9)),
+                  );
+                },
+              ),
+            ),
+            leftTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                reservedSize: 28,
+                getTitlesWidget: (value, meta) {
+                  return Text(
+                    '${value.toInt()}',
+                    style: const TextStyle(fontSize: 10),
+                  );
+                },
               ),
             ),
           ),
-        ],
+          gridData: const FlGridData(
+            show: true,
+            horizontalInterval: 1,
+            drawVerticalLine: false,
+          ),
+          borderData: FlBorderData(show: false),
+        ),
       ),
-    );
+    ),);
   }
 
   static const _monthNames = [

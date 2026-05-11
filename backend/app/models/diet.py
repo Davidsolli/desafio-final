@@ -143,6 +143,8 @@ class Diet(Base):
         onupdate=datetime.utcnow,
     )
 
+    water_target_ml = Column(Integer, nullable=True, default=None)
+
     # Relação 1:N com refeições
     meals = relationship(
         "DietMeal",

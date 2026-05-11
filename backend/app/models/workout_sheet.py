@@ -25,25 +25,13 @@ from sqlalchemy.orm import relationship
 
 from app.models.user import Base
 
-
-class WorkoutSheet(Base):
+class WorkoutProgram(Base):
     """
-    Ficha de treino do aluno, criada por um personal/professor.
-
-    Atributos:
-        id: UUID único da ficha
-        user_id: Aluno que receberá a ficha (FK users.id)
-        personal_trainer_id: Personal que criou (FK users.id)
-        name: Nome descritivo da ficha (ex: "Treino A - Peito")
-        description: Descrição opcional
-        day_of_week: Dia da semana (0=seg … 6=dom)
-        is_active: True se a ficha está ativa (soft delete via False)
-        created_at: Data de criação
-        updated_at: Última atualização
-        exercises: Relação 1:N com Exercise (ordem por 'order')
+    Programa de treino (Divisão) associado a um aluno.
+    Exemplo: "Divisão ABC - Hipertrofia".
     """
 
-    __tablename__ = "workout_sheets"
+    __tablename__ = "workout_programs"
 
     id = Column(
         PG_UUID(as_uuid=True),
@@ -70,7 +58,75 @@ class WorkoutSheet(Base):
 
     description = Column(Text, nullable=True)
 
-    day_of_week = Column(Integer, nullable=False, index=True)  # 0=seg … 6=dom
+    goal = Column(String(255), nullable=True)
+
+    is_active = Column(Boolean, nullable=False, default=True, index=True)
+
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+    updated_at = Column(
+        DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+    # Relação 1:N com as fichas/rotinas desse programa
+    workout_sheets = relationship(
+        "WorkoutSheet",
+        back_populates="workout_program",
+        cascade="all, delete-orphan",
+        order_by="WorkoutSheet.order",
+        lazy="selectin",
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<WorkoutProgram(id={self.id}, name={self.name!r}, "
+            f"user_id={self.user_id}, is_active={self.is_active})>"
+        )
+
+
+class WorkoutSheet(Base):
+    """
+    Ficha de treino (Rotina), pertencente a um Programa (WorkoutProgram).
+
+    Atributos:
+        id: UUID único da ficha
+        workout_program_id: FK para WorkoutProgram
+        name: Nome descritivo da ficha (ex: "Treino A - Peito")
+        description: Descrição opcional
+        day_of_week: Dia da semana opcional (0=seg … 6=dom)
+        order: Ordem da ficha no programa (1, 2, 3...)
+        is_active: True se a ficha está ativa (soft delete via False)
+        created_at: Data de criação
+        updated_at: Última atualização
+        exercises: Relação 1:N com Exercise (ordem por 'order')
+    """
+
+    __tablename__ = "workout_sheets"
+
+    id = Column(
+        PG_UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+        nullable=False,
+    )
+
+    workout_program_id = Column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("workout_programs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    name = Column(String(255), nullable=False)
+
+    description = Column(Text, nullable=True)
+
+    day_of_week = Column(Integer, nullable=True, index=True)  # 0=seg … 6=dom
+
+    order = Column(Integer, nullable=False, default=1)
 
     is_active = Column(Boolean, nullable=False, default=True, index=True)
 
@@ -92,10 +148,13 @@ class WorkoutSheet(Base):
         lazy="selectin",
     )
 
+    # Relação reversa com o programa
+    workout_program = relationship("WorkoutProgram", back_populates="workout_sheets")
+
     def __repr__(self) -> str:
         return (
             f"<WorkoutSheet(id={self.id}, name={self.name!r}, "
-            f"user_id={self.user_id}, day_of_week={self.day_of_week})>"
+            f"workout_program_id={self.workout_program_id}, order={self.order})>"
         )
 
 

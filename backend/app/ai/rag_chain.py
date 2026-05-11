@@ -4,21 +4,23 @@ Pipeline RAG — Retrieve-Augment-Generate.
 Orquestra o fluxo completo de resposta do chatbot:
   1. RETRIEVE  — busca vetorial no pgvector (score ≥ 0.7)
   2. AUGMENT   — monta contexto com perfil do aluno e ficha ativa
-  3. GENERATE  — chama o LLM (Gemini) com o prompt enriquecido
+  3. GENERATE  — chama o LLM (Groq Llama 3.3 70B) com o prompt enriquecido
   4. VALIDATE  — valida cobertura e detecta necessidade de escalação
 
 Dependências:
-    langchain-google-genai  → GoogleGenerativeAIEmbeddings + ChatGoogleGenerativeAI
+    langchain-groq          → ChatGroq (Llama 3.3 70B Versatile)
+    langchain-huggingface   → HuggingFaceEmbeddings (all-MiniLM-L6-v2, 384 dims)
     pgvector                → Busca por similaridade coseno no PostgreSQL
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.output_parsers import StrOutputParser
@@ -28,6 +30,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.settings import settings
+from app.services.faq_service import faq_service
 
 logger = logging.getLogger(__name__)
 
@@ -41,19 +44,112 @@ LLM_MAX_TOKENS = settings.RAG_LLM_MAX_TOKENS
 LLM_TEMPERATURE = settings.RAG_LLM_TEMPERATURE
 HISTORY_MAX_TOKENS = settings.RAG_HISTORY_MAX_TOKENS
 
-# Palavras-chave que forçam escalação imediata (RN-12)
-ESCALATION_KEYWORDS = [
+# Palavras-chave que indicam pedido EXPLÍCITO de humano (RN-12).
+# IMPORTANTE: estas keywords são matched por substring, então não podem
+# ser ambíguas. "personal trainer" sozinho casava perguntas legítimas
+# como "quem é meu personal trainer?" e escalava indevidamente; foi
+# removido. "humano" também era genérico demais.
+EXPLICIT_REQUEST_KEYWORDS = [
     "falar com personal", "chamar personal", "quero personal",
+    "quero falar com personal", "falar com o personal",
+    "me ajuda pessoalmente", "suporte humano", "falar com humano",
+    "falar com profissional", "falar com atendente", "atendimento humano",
     "não entendi", "nao entendi", "ainda com dúvida", "ainda com duvida",
-    "me ajuda pessoalmente", "suporte humano", "personal trainer",
-    "lesão", "lesao", "dor no peito", "dor forte",
-    "médico", "medico", "emergência", "emergencia", "dor",
 ]
+
+# Palavras-chave que sinalizam RISCO À SAÚDE (RN-17) — prioridade máxima
+HEALTH_RISK_KEYWORDS = [
+    "dor no peito", "dor forte", "dor", "lesão", "lesao",
+    "fratura", "tontura", "desmaio", "passar mal",
+    "médico", "medico", "emergência", "emergencia",
+]
+
+# Mantido como alias para retrocompatibilidade (alguns testes externos consultam)
+ESCALATION_KEYWORDS = HEALTH_RISK_KEYWORDS + EXPLICIT_REQUEST_KEYWORDS
+
+# Padrões que indicam que o aluno está perguntando sobre seus próprios dados
+# (peso, altura, IMC, metas, progresso etc.). Quando a KB está vazia mas a
+# pergunta é pessoal, o LLM deve responder usando o user_context — não escalar.
+_PERSONAL_INTENT_RE = re.compile(
+    r"\b(meu|minha|meus|minhas)\s+"
+    r"(imc|peso|altura|meta|treino|ficha|dieta|hist[oó]rico|progresso|objetivo|idade)\b"
+    r"|\b(qual|como|quanto)\s+(est[áa]|[eé]|[eé])\s+(meu|minha|o\s+meu|a\s+minha)\b"
+    r"|\b(calcul[ae]|mostr[ae]|ver?|saber?|mostrar?)\s+.{0,20}"
+    r"\s*(imc|peso|altura|meta|progresso)\b"
+    r"|\b(imc|índice\s+de\s+massa\s+corporal)\b",
+    flags=re.IGNORECASE,
+)
+
+# Mensagens contextualizadas por motivo de escalação (Card 19.10)
+ESCALATION_MESSAGES: dict[str, str] = {
+    "user_requested": (
+        "Entendi! Vou encaminhar sua dúvida para o seu Personal Trainer. "
+        "Ele receberá uma notificação e poderá te responder em breve."
+    ),
+    "health_risk": (
+        "Por segurança, como sua mensagem pode envolver risco à saúde, "
+        "recomendo consultar um profissional. Já notifiquei seu Personal "
+        "Trainer para que ele possa orientar você adequadamente."
+    ),
+    "low_confidence": (
+        "Essa é uma ótima pergunta! Para garantir a melhor resposta, "
+        "estou encaminhando para o seu Personal Trainer."
+    ),
+    "too_complex": (
+        "Essa dúvida requer atenção especializada. Seu Personal Trainer "
+        "será notificado para te ajudar pessoalmente."
+    ),
+    "validation_failed": (
+        "Não encontrei informações suficientes na base para responder com "
+        "segurança. Seu Personal poderá te ajudar melhor."
+    ),
+    "timeout": (
+        "Estamos com lentidão na resposta. Encaminhei sua pergunta ao seu "
+        "Personal para garantir uma resposta correta."
+    ),
+    "generation_error": (
+        "Tive um problema técnico ao gerar a resposta. Seu Personal foi "
+        "notificado e te ajudará em breve."
+    ),
+}
+
+# Saudações comuns — respondidas direto, sem chamar LLM. Evita o caso em que
+# uma simples "olá" entra no pipeline RAG, não casa documento e ainda precisa
+# bater no Groq, podendo estourar o timeout em cold start.
+GREETING_PATTERNS: tuple[str, ...] = (
+    r"^\s*(ol[áa]|oi+|e[ai])\s*[!?\.]*\s*$",
+    r"^\s*(bom\s*dia|boa\s*tarde|boa\s*noite)\s*[!?\.]*\s*$",
+    r"^\s*(tudo\s*bem|tudo\s*bom|como\s*vai|como\s*est[áa])\s*[!?\.]*\s*$",
+    r"^\s*(obrigad[oa]|valeu|brigad[oa])\s*[!?\.]*\s*$",
+    r"^\s*(tchau|at[eé]\s*mais|at[eé]\s*logo)\s*[!?\.]*\s*$",
+)
+_GREETING_REGEX = re.compile("|".join(GREETING_PATTERNS), flags=re.IGNORECASE)
+
+GREETING_RESPONSE = (
+    "Olá! Eu sou o Vitali, assistente da FitLoop. Posso ajudar com dúvidas "
+    "sobre execução de exercícios, sua ficha de treino, nutrição básica e "
+    "informações operacionais da academia. O que você gostaria de saber?"
+)
+
+# Perguntas diretas sobre o personal trainer do aluno. Respondidas
+# deterministicamente a partir do user_context, sem chamar o LLM.
+TRAINER_QUERY_PATTERNS: tuple[str, ...] = (
+    r"\bquem\s+(é|e|seria|sera|será)\s+(o\s+)?meu\s+personal\b",
+    r"\bquem\s+(é|e)\s+(o\s+)?meu\s+(treinador|professor)\b",
+    r"\b(qual|nome)\s+(é\s+)?(o\s+)?(do\s+)?meu\s+personal\b",
+    r"\bcomo\s+(se\s+)?chama\s+(o\s+)?meu\s+personal\b",
+    r"\bmeu\s+personal\s+trainer\s*\??$",
+)
+_TRAINER_QUERY_REGEX = re.compile(
+    "|".join(TRAINER_QUERY_PATTERNS), flags=re.IGNORECASE
+)
 
 # System prompt base do chatbot
 SYSTEM_PROMPT_TEMPLATE = """\
-Você é o assistente de treinos do OmniConnect Fitness — um chatbot especializado em \
-exercícios, execução técnica e periodização.
+Você é o Vitali, assistente da FitLoop — um chatbot especializado em três \
+domínios: (1) treino e periodização, (2) execução técnica de exercícios, e \
+(3) nutrição básica voltada a esporte e atividade física. Seu nome remete \
+à vitalidade e saúde; mantenha um tom acolhedor e direto.
 
 Regras que você DEVE seguir:
 1. Responda SEMPRE em português brasileiro.
@@ -61,9 +157,23 @@ Regras que você DEVE seguir:
 Se a resposta não estiver nos documentos, diga claramente que não sabe.
 3. Seja específico, técnico e direto. Evite floreios.
 4. Máximo de 4 parágrafos curtos na resposta.
-5. Se identificar risco de saúde ("dor no peito", "lesão grave"), \
-responda: "Por segurança, recomendo consultar um profissional de saúde."
-6. Não invente exercícios, cargas ou recomendações que não estejam documentadas.
+5. Risco à saúde ("dor no peito", "lesão grave"): responda \
+"Por segurança, recomendo consultar um profissional de saúde."
+6. Não invente exercícios, cargas, dietas ou recomendações fora dos documentos.
+7. Sobre nutrição: forneça apenas orientações gerais (macronutrientes, \
+hidratação, janela anabólica). NÃO prescreva dietas individualizadas, \
+suplementos com dosagem ou recomendações médicas; encaminhe ao Nutricionista.
+8. Sobre execução: explique técnica, postura, respiração e erros comuns \
+com base nos documentos. Reforce a importância do acompanhamento do Personal Trainer.
+9. Quando precisar mencionar a academia, use sempre "FitLoop". Nunca use \
+outros nomes de marca.
+10. Você tem acesso aos dados REAIS do aluno na seção "Perfil do Aluno" abaixo. \
+USE esses dados para personalizar as respostas. Se o aluno perguntar sobre IMC, \
+peso, altura, metas ou histórico de treino — responda usando os dados do contexto. \
+NUNCA diga que não tem as informações se elas estiverem no perfil abaixo. Para \
+cálculos (ex.: IMC = peso / altura²), faça você mesmo usando os valores fornecidos.
+11. Ao final de cada resposta, sugira 1 pergunta relacionada que o aluno pode \
+fazer a seguir. Use o formato: "💡 Você também pode perguntar: [pergunta]"
 
 FAQ (Dúvidas Gerais e Operacionais):
 - Horário: Segunda a sexta, das 06:00 às 23:00, e sábados das 08:00 às 18:00.
@@ -132,8 +242,8 @@ class RAGChain:
         Inicializar RAG chain.
 
         Side effects:
-            - Inicializa clients do Gemini (lazy, apenas no primeiro uso)
-            - Prepara embeddings model e LLM para posterior utilização
+            - Prepara embeddings (HuggingFace) e LLM (Groq) para uso lazy
+            - Não realiza chamadas externas até o primeiro uso
         """
         self._embeddings: HuggingFaceEmbeddings | None = None
         self._llm: ChatGroq | None = None
@@ -159,6 +269,28 @@ class RAGChain:
                 max_tokens=LLM_MAX_TOKENS,
             )
         return self._llm
+
+    # ── Warm-up (chamado no startup da aplicação) ─────────────────────────
+
+    async def warm_up(self) -> None:
+        """
+        Pré-aquece o modelo de embeddings local para reduzir latência da
+        primeira requisição.
+
+        O HuggingFace baixa e carrega o modelo no primeiro `aembed_query`,
+        o que pode adicionar segundos a um cold start. Chamar warm_up() no
+        lifespan da FastAPI evita que o primeiro usuário pague essa conta.
+
+        Falhas de inicialização são logadas mas não derrubam a aplicação —
+        o lazy init original cobrirá quando vier a primeira request real.
+        """
+        try:
+            embeddings = self._get_embeddings()
+            # Embedding curto é suficiente para forçar o download/load do modelo
+            await embeddings.aembed_query("warmup")
+            logger.info("RAGChain.warm_up: embeddings prontos para uso")
+        except Exception as exc:
+            logger.warning("RAGChain.warm_up falhou (lazy init cobrirá): %s", exc)
 
     # ── Etapa 1: RETRIEVE ─────────────────────────────────────────────────
 
@@ -278,11 +410,36 @@ class RAGChain:
         """
         # Formatar perfil do aluno
         profile = user_context.get("user_profile", {})
+        trainer = user_context.get("personal_trainer")
+        trainer_line = (
+            f"\nPersonal Trainer: {trainer.get('name')}"
+            if trainer and trainer.get("name")
+            else "\nPersonal Trainer: ainda não vinculado"
+        )
+        weight = profile.get("weight")
+        height = profile.get("height")
+        age = profile.get("age")
+        gender = profile.get("gender", "não informado")
+        imc_line = ""
+        if weight and height:
+            imc = round(weight / ((height / 100) ** 2), 1)
+            imc_line = f"\nPeso: {weight} kg | Altura: {height} cm | IMC calculado: {imc}"
+        elif weight:
+            imc_line = f"\nPeso: {weight} kg"
+        elif height:
+            imc_line = f"\nAltura: {height} cm"
+        age_gender_line = ""
+        if age:
+            age_gender_line = f"\nIdade: {age} anos | Sexo: {gender}"
+
         user_profile_str = (
             f"Nome: {profile.get('name', 'Aluno')}\n"
             f"Nível: {profile.get('level', 'não informado')}\n"
             f"Objetivo: {profile.get('objective', 'não informado')}\n"
             f"Role: {profile.get('role', 'client')}"
+            f"{imc_line}"
+            f"{age_gender_line}"
+            f"{trainer_line}"
         ) if profile else "Nível e objetivo não informados."
 
         # Formatar ficha ativa
@@ -291,7 +448,7 @@ class RAGChain:
             exercises = sheet.get("exercises", [])
             ex_lines = "\n".join(
                 f"  - {ex.get('name', '?')}: {ex.get('sets', '?')}x{ex.get('reps', '?')}"
-                for ex in exercises[:10]  # limitar exibição
+                for ex in exercises[:10]
             )
             workout_sheet_str = (
                 f"Ficha: {sheet.get('name', 'Ficha Ativa')}\n"
@@ -299,6 +456,42 @@ class RAGChain:
             )
         else:
             workout_sheet_str = "Nenhuma ficha ativa encontrada."
+
+        # Metas em andamento (opcional)
+        active_goals = user_context.get("active_goals") or []
+        if active_goals:
+            goal_lines = "\n".join(
+                f"  - {g.get('title', '?')} "
+                f"({g.get('current_value', '?')}/{g.get('target_value', '?')} {g.get('unit', '')})"
+                for g in active_goals[:5]
+            )
+            goals_block = f"\n\nMetas em Andamento:\n{goal_lines}"
+        else:
+            goals_block = ""
+
+        # Dieta ativa (opcional)
+        diet = user_context.get("active_diet")
+        if diet:
+            diet_block = (
+                f"\n\nDieta Ativa: {diet.get('name', '?')}"
+                f" (objetivo: {diet.get('goal') or 'não informado'})"
+            )
+        else:
+            diet_block = ""
+
+        # Histórico recente de treinos completos (opcional)
+        recent = user_context.get("recent_history") or []
+        if recent:
+            hist_lines = "\n".join(
+                f"  - {item.get('session_date', '')} (esforço: {item.get('difficulty_level', '?')}, humor: {item.get('mood', '?')})"
+                for item in recent[:3]
+            )
+            history_block = f"\n\nÚltimos Treinos Concluídos:\n{hist_lines}"
+        else:
+            history_block = ""
+
+        # Anexa blocos extras à ficha (mantém estrutura do template)
+        workout_sheet_str = workout_sheet_str + goals_block + diet_block + history_block
 
         # Formatar documentos recuperados
         if retrieved_docs:
@@ -340,29 +533,46 @@ class RAGChain:
         self,
         query: str,
         retrieved_docs: list[RetrievedDocument],
+        user_context: dict[str, Any] | None = None,
     ) -> tuple[bool, str]:
         """
         Verificar se a pergunta deve ser escalada para Personal.
 
-        Critérios:
-        - RN-07: Nenhum documento com score ≥ ESCALATE_THRESHOLD
-        - RN-12: Usuário menciona palavras de escalação explícita
-        - RN-17: Menção a riscos de saúde (dor no peito, etc.)
+        Ordem de prioridade dos motivos (mais grave primeiro):
+            1. health_risk     — RN-17: menção a risco de saúde
+            2. user_requested  — RN-12: pedido explícito por humano
+            3. low_confidence  — RN-07: nenhum documento recuperado
+                (exceto quando a pergunta é sobre dados pessoais do aluno)
+            4. too_complex     — best score < ESCALATE_THRESHOLD
 
         Returns:
             Tuple (should_escalate: bool, reason: str)
         """
         query_lower = query.lower()
 
-        # RN-12 / RN-17: palavras-chave de escalação
-        for keyword in ESCALATION_KEYWORDS:
+        # 1. Risco à saúde tem precedência: nem chega a tentar gerar resposta
+        for keyword in HEALTH_RISK_KEYWORDS:
+            if keyword in query_lower:
+                return True, "health_risk"
+
+        # 2. Pedido explícito do usuário por atendimento humano
+        for keyword in EXPLICIT_REQUEST_KEYWORDS:
             if keyword in query_lower:
                 return True, "user_requested"
 
-        # RN-07: score insuficiente na base
+        # 3. RAG vazio
         if not retrieved_docs:
+            # Perguntas sobre dados pessoais (IMC, peso, metas...) não precisam
+            # da KB — o LLM responde usando o user_context do perfil do aluno.
+            ctx = user_context or {}
+            has_personal_data = bool(
+                ctx.get("user_profile") or ctx.get("active_goals") or ctx.get("recent_history")
+            )
+            if has_personal_data and _PERSONAL_INTENT_RE.search(query):
+                return False, ""
             return True, "low_confidence"
 
+        # 4. Score insuficiente
         best_score = max(doc.relevance_score for doc in retrieved_docs)
         if best_score < ESCALATE_THRESHOLD:
             return True, "too_complex"
@@ -377,7 +587,7 @@ class RAGChain:
         query: str,
     ) -> tuple[str, int, str]:
         """
-        Chamar o LLM Gemini para gerar a resposta.
+        Chamar o LLM Groq para gerar a resposta.
 
         Args:
             system_prompt: Prompt de sistema com contexto completo.
@@ -463,6 +673,7 @@ class RAGChain:
         academy_id: str | None = None,
         user_context: dict[str, Any] | None = None,
         conversation_history: list[dict[str, str]] | None = None,
+        on_status: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
     ) -> RAGResult:
         """
         Executar o pipeline RAG completo (Retrieve → Augment → Generate → Validate).
@@ -473,6 +684,8 @@ class RAGChain:
             academy_id: UUID da academia para filtrar a base de conhecimento.
             user_context: Contexto do aluno {user_profile, active_workout_sheet}.
             conversation_history: Histórico de mensagens [{role, content}].
+            on_status: callback opcional invocado entre etapas para informar
+                progresso ao cliente (searching / generating).
 
         Returns:
             RAGResult com resposta, documentos, flags de escalação e métricas.
@@ -481,18 +694,65 @@ class RAGChain:
         user_context = user_context or {}
         conversation_history = conversation_history or []
 
+        # on_status é aceito por compatibilidade mas a emissão dos eventos
+        # de progresso fica na camada superior (ChatService) — single
+        # responsibility: rag_chain.run cuida apenas do pipeline.
+        _ = on_status
+
         logger.info("RAG pipeline iniciado | query=%r", query[:100])
+
+        # ── 0. FAST-PATH SAUDAÇÕES ────────────────────────────────────────
+        # Saudações curtas ("olá", "oi", "bom dia") não precisam do RAG nem do
+        # LLM. Respondemos direto para evitar timeout em cold start.
+        if _GREETING_REGEX.match(query):
+            latency_ms = int((time.monotonic() - start_time) * 1000)
+            return RAGResult(
+                answer=GREETING_RESPONSE,
+                retrieved_documents=[],
+                should_escalate=False,
+                latency_ms=latency_ms,
+                confidence_score=1.0,
+                model_used="greeting_fallback",
+            )
+
+        # ── 0.5. FAST-PATH "QUEM É MEU PERSONAL?" ─────────────────────────
+        # Pergunta direta sobre o personal trainer vinculado é respondida
+        # deterministicamente a partir do user_context (preenchido pelo
+        # ChatService a partir de User.trainer_id). Evita uma chamada
+        # desnecessária ao LLM e garante consistência.
+        if _TRAINER_QUERY_REGEX.search(query):
+            trainer = (user_context or {}).get("personal_trainer")
+            if trainer and trainer.get("name"):
+                answer = (
+                    f"Seu Personal Trainer é o(a) {trainer['name']}. Você "
+                    "pode falar com ele(a) pelo aplicativo ou na recepção "
+                    "da academia."
+                )
+            else:
+                answer = (
+                    "Você ainda não tem um Personal Trainer vinculado no "
+                    "sistema. Procure a recepção para fazer essa associação."
+                )
+            latency_ms = int((time.monotonic() - start_time) * 1000)
+            return RAGResult(
+                answer=answer,
+                retrieved_documents=[],
+                should_escalate=False,
+                latency_ms=latency_ms,
+                confidence_score=1.0,
+                model_used="trainer_lookup",
+            )
 
         # ── 1. RETRIEVE ────────────────────────────────────────────────────
         retrieved_docs = await self.retrieve(query, session, academy_id)
 
         # ── Verificar necessidade de escalação explícita ANTES de gerar ──────────────
         should_escalate, escalation_reason = self._should_escalate(
-            query, retrieved_docs
+            query, retrieved_docs, user_context
         )
 
-        if should_escalate and escalation_reason == "user_requested":
-            # Palavra-chave de risco ou pedido explícito → escalar imediatamente
+        if should_escalate and escalation_reason in {"user_requested", "health_risk"}:
+            # Pedido explícito ou risco de saúde → escalar antes de chamar o LLM
             latency_ms = int((time.monotonic() - start_time) * 1000)
             logger.warning(
                 "RAG: escalando conversa | reason=%s | latency_ms=%d",
@@ -500,10 +760,7 @@ class RAGChain:
                 latency_ms,
             )
             return RAGResult(
-                answer=(
-                    "Sua dúvida é muito específica e precisa da atenção do seu "
-                    "Personal Trainer. Estou escalando para ele agora! 🎯"
-                ),
+                answer=ESCALATION_MESSAGES[escalation_reason],
                 retrieved_documents=[],
                 should_escalate=True,
                 escalation_reason=escalation_reason,
@@ -511,29 +768,18 @@ class RAGChain:
                 confidence_score=0.0,
             )
 
-        # ── 1.5. FAST-PATH FAQ (Fallback e Otimização) ─────────────────────
-        query_lower = query.lower()
-        faq_rules = [
-            (["horário", "horas", "aberta", "fecha", "funcionamento"], "A OmniConnect funciona de segunda a sexta, das 06:00 às 23:00, e aos sábados das 08:00 às 18:00. Domingos e feriados não abrimos."),
-            (["toalha"], "Sim, fornecemos toalhas na recepção. O uso de toalha nos equipamentos é obrigatório por questões de higiene."),
-            (["avaliação física", "agendar avaliação","com quem agendo minha avaliação","agendar minha avaliação", "quem é meu personal", "quem é o personal"], "Para agendar sua avaliação física, você pode acessar a aba 'Avaliações' aqui mesmo no aplicativo e escolher um horário disponível com o seu Personal, ou solicitar diretamente na recepção."),
-            (["onde verifico","onde vejo","onde encontro", "lista de treinos", "meu treino", "treino de hoje", "treinos para hoje", "qual meu treino"], "Você pode verificar a sua lista de treinos de hoje e da semana acessando a aba 'Meus Treinos' na tela inicial do aplicativo. Lá seu Personal deixa tudo prescrito!"),
-            (["mensalidade", "pagamento", "pagar", "plano"], "Para detalhes sobre sua assinatura, mensalidade ou planos, acesse a seção 'Assinatura' no menu do seu perfil ou procure a recepção."),
-            (["wi-fi", "wifi", "internet", "senha da internet"], "A rede Wi-Fi para alunos é 'OmniConnect_Alunos' e a senha é: TreinoFocado100"),
-            (["cancelar", "cancelamento", "trancar"], "Para cancelar ou trancar sua matrícula, por favor, entre em contato com a recepção presencialmente. Não é possível fazer isso pelo app no momento.")
-        ]
-
-        for keywords, response in faq_rules:
-            if any(kw in query_lower for kw in keywords):
-                latency_ms = int((time.monotonic() - start_time) * 1000)
-                return RAGResult(
-                    answer=response,
-                    retrieved_documents=[],
-                    should_escalate=False,
-                    latency_ms=latency_ms,
-                    confidence_score=1.0,
-                    model_used="faq_fallback"
-                )
+        # ── 1.5. FAST-PATH FAQ (delegado ao FAQService dedicado) ───────────
+        faq_response = faq_service.match(query)
+        if faq_response is not None:
+            latency_ms = int((time.monotonic() - start_time) * 1000)
+            return RAGResult(
+                answer=faq_response,
+                retrieved_documents=[],
+                should_escalate=False,
+                latency_ms=latency_ms,
+                confidence_score=1.0,
+                model_used="faq_fallback",
+            )
 
         # ── 2. AUGMENT ─────────────────────────────────────────────────────
         system_prompt = self.augment(
@@ -541,37 +787,46 @@ class RAGChain:
         )
 
         # ── 3. GENERATE ────────────────────────────────────────────────────
+        # Aplica timeout duro: se o LLM exceder CHAT_MAX_RESPONSE_LATENCY_MS,
+        # cancelamos e devolvemos fallback amigável + escalação.
+        timeout_seconds = settings.CHAT_MAX_RESPONSE_LATENCY_MS / 1000
         try:
-            answer, tokens_used, model_name = await self.generate(system_prompt, query)
+            answer, tokens_used, model_name = await asyncio.wait_for(
+                self.generate(system_prompt, query),
+                timeout=timeout_seconds,
+            )
+        except asyncio.TimeoutError:
+            logger.warning(
+                "Geração excedeu %d ms — abortando com fallback",
+                settings.CHAT_MAX_RESPONSE_LATENCY_MS,
+            )
+            latency_ms = int((time.monotonic() - start_time) * 1000)
+            return RAGResult(
+                answer=ESCALATION_MESSAGES["timeout"],
+                should_escalate=True,
+                escalation_reason="timeout",
+                latency_ms=latency_ms,
+            )
         except Exception as exc:
             logger.error("Falha na geração: %s", exc)
             latency_ms = int((time.monotonic() - start_time) * 1000)
             return RAGResult(
-                answer=(
-                    "Desculpe, não consegui processar sua dúvida agora. "
-                    "Tente novamente em instantes."
-                ),
+                answer=ESCALATION_MESSAGES["generation_error"],
                 should_escalate=True,
                 escalation_reason="generation_error",
                 latency_ms=latency_ms,
             )
 
         # ── 4. VALIDATE ────────────────────────────────────────────────────
-        is_valid, needs_review = self.validate(answer, retrieved_docs)
+        # Regra única e previsível: se a resposta gerada não passa na
+        # validação (vazia/curta demais), substituímos por mensagem segura
+        # de fallback e escalamos. Caso contrário, preservamos o estado de
+        # escalação já calculado em _should_escalate.
+        is_valid, _needs_review = self.validate(answer, retrieved_docs)
         if not is_valid:
-            answer = (
-                "Não encontrei informações suficientes na base de conhecimento "
-                "para responder com segurança. Seu Personal Trainer pode ajudar melhor!"
-            )
+            answer = ESCALATION_MESSAGES["validation_failed"]
             should_escalate = True
             escalation_reason = "validation_failed"
-        elif not retrieved_docs and not should_escalate:
-             # Nao precisa fazer nada
-             pass
-        elif not retrieved_docs and should_escalate:
-            # Respondeu com sucesso (usando FAQ), então podemos cancelar a escalação
-            should_escalate = False
-            escalation_reason = ""
 
         # Calcular confidence como média dos scores recuperados
         confidence = (

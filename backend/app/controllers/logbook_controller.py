@@ -15,6 +15,7 @@ from app.dtos.logbook_dto import (
     CalendarResponseDTO,
     CreateSessionDTO,
     FrequencyResponseDTO,
+    MuscleGroupDistributionResponseDTO,
     PaginatedSessionsDTO,
     ProgressionResponseDTO,
     SessionExerciseDTO,
@@ -145,3 +146,15 @@ class LogbookController:
             period=period,
             limit=limit,
         )
+
+    async def get_muscle_group_distribution(
+        self,
+        user_id: UUID,
+        days: int,
+    ) -> MuscleGroupDistributionResponseDTO:
+        """Retorna a distribuição de exercícios executados por grupo muscular."""
+        return await self.service.get_muscle_group_distribution(
+            user_id=user_id,
+            days=days,
+        )
+

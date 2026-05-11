@@ -17,6 +17,10 @@ from app.dtos.workout_sheet_dto import (
     PaginatedWorkoutSheetsDTO,
     UpdateWorkoutSheetDTO,
     WorkoutSheetResponseDTO,
+    CreateWorkoutProgramDTO,
+    UpdateWorkoutProgramDTO,
+    WorkoutProgramResponseDTO,
+    PaginatedWorkoutProgramsDTO,
 )
 from app.services.workout_sheet_service import WorkoutSheetService
 
@@ -26,6 +30,63 @@ class WorkoutSheetController:
 
     def __init__(self, session: AsyncSession) -> None:
         self.service = WorkoutSheetService(session)
+
+    # ------------------------------------------------------------------
+    # Programas de Treino
+    # ------------------------------------------------------------------
+
+    async def create_workout_program(
+        self,
+        requester_id: UUID,
+        role: str,
+        dto: CreateWorkoutProgramDTO,
+    ) -> WorkoutProgramResponseDTO:
+        return await self.service.create_workout_program(requester_id, role, dto)
+
+    async def list_workout_programs(
+        self,
+        requester_id: UUID,
+        role: str,
+        user_id_filter: Optional[UUID],
+        page: int,
+        limit: int,
+    ) -> PaginatedWorkoutProgramsDTO:
+        return await self.service.list_workout_programs(
+            requester_id=requester_id,
+            role=role,
+            user_id_filter=user_id_filter,
+            page=page,
+            limit=limit,
+        )
+
+    async def get_workout_program(
+        self,
+        program_id: UUID,
+        requester_id: UUID,
+        role: str,
+    ) -> WorkoutProgramResponseDTO:
+        return await self.service.get_workout_program(program_id, requester_id, role)
+
+    async def update_workout_program(
+        self,
+        program_id: UUID,
+        requester_id: UUID,
+        role: str,
+        dto: UpdateWorkoutProgramDTO,
+    ) -> WorkoutProgramResponseDTO:
+        return await self.service.update_workout_program(program_id, requester_id, role, dto)
+
+    async def delete_workout_program(
+        self,
+        program_id: UUID,
+        requester_id: UUID,
+        role: str,
+    ) -> None:
+        return await self.service.delete_workout_program(program_id, requester_id, role)
+
+    # ------------------------------------------------------------------
+    # Fichas de Treino
+    # ------------------------------------------------------------------
 
     async def create_workout_sheet(
         self,
@@ -40,8 +101,7 @@ class WorkoutSheetController:
         self,
         requester_id: UUID,
         role: str,
-        user_id_filter: Optional[UUID],
-        day_of_week: Optional[int],
+        workout_program_id: Optional[UUID],
         page: int,
         limit: int,
     ) -> PaginatedWorkoutSheetsDTO:
@@ -49,8 +109,7 @@ class WorkoutSheetController:
         return await self.service.list_workout_sheets(
             requester_id=requester_id,
             role=role,
-            user_id_filter=user_id_filter,
-            day_of_week=day_of_week,
+            workout_program_id=workout_program_id,
             page=page,
             limit=limit,
         )

@@ -89,6 +89,46 @@ class UserProvider extends ChangeNotifier {
     }
   }
 
+  /// Troca a senha do usuário autenticado
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+    required String confirmPassword,
+  }) async {
+    if (_user == null) {
+      _error = 'Usuário não autenticado.';
+      notifyListeners();
+      return;
+    }
+
+    try {
+      _setLoading(true);
+      _error = null;
+
+      await _userService.changePassword(
+        userId: _user!.id,
+        currentPassword: currentPassword,
+        newPassword: newPassword,
+        confirmPassword: confirmPassword,
+      );
+      notifyListeners();
+    } on NetworkException catch (e) {
+      _error = 'Erro de conexão: ${e.message}';
+      notifyListeners();
+      rethrow;
+    } on ApiException catch (e) {
+      _error = e.message;
+      notifyListeners();
+      rethrow;
+    } catch (e) {
+      _error = 'Erro ao alterar senha: ${e.toString()}';
+      notifyListeners();
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
   /// Limpa dados do usuário
   void clearUser() {
     _user = null;
