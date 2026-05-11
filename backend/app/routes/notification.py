@@ -66,6 +66,9 @@ async def update_token(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
+    # Wrapper fino: slowapi exige `request: Request` no escopo da função
+    # para extrair o IP em @limiter.limit. O controller é staticmethod e
+    # não precisa do request.
     return await NotificationController.update_token(
         dto=dto,
         db=db,
