@@ -1,20 +1,69 @@
-import 'dart:convert';
 import 'dart:async';
-import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:animate_do/animate_do.dart';
+import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
+import 'package:record/record.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
-import '../../theme/app_colors.dart';
-import '../../theme/theme_colors.dart';
+
 import '../../config/api_config.dart';
 import '../../services/api_client.dart';
 import '../../services/chat_service.dart';
+import '../../theme/app_colors.dart';
+import '../../theme/theme_colors.dart';
 
 /// Chave usada para persistir o id da conversa ativa entre saídas e
-/// retornos à tela de chat. Sem isto, cada visita à tela criava uma
-/// nova conversa no backend e perdia todo o histórico.
+/// retornos à tela de chat.
 const String _kConversationIdPrefsKey = 'chat_active_conversation_id';
+
+// ── Tipos de mensagem internos ────────────────────────────────────────────────
+
+/// Tipo da bolha exibida na lista de mensagens.
+enum _MsgType { text, food }
+
+/// Representação interna de uma mensagem da lista.
+class _ChatMsg {
+  final String role;       // 'user' | 'assistant'
+  final _MsgType type;
+  final String text;
+  final String time;
+  final FoodLoggedDTO? food;   // não-nulo apenas quando type == food
+
+  const _ChatMsg({
+    required this.role,
+    required this.type,
+    required this.text,
+    required this.time,
+    this.food,
+  });
+
+  factory _ChatMsg.text({
+    required String role,
+    required String text,
+    required String time,
+  }) =>
+      _ChatMsg(role: role, type: _MsgType.text, text: text, time: time);
+
+  factory _ChatMsg.food({
+    required FoodLoggedDTO food,
+    required String transcription,
+    required String time,
+  }) =>
+      _ChatMsg(
+        role: 'assistant',
+        type: _MsgType.food,
+        text: transcription,
+        time: time,
+        food: food,
+      );
+}
+
+// ── Tela principal ────────────────────────────────────────────────────────────
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -26,12 +75,20 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  final List<Map<String, String>> _messages = [];
+  final List<_ChatMsg> _messages = [];
+
   WebSocketChannel? _channel;
   bool _isConnected = false;
   bool _isTyping = false;
   String _typingStatus = '';
   String? _conversationId;
+
+  // ── Áudio ──────────────────────────────────────────────────────────────────
+  final AudioRecorder _recorder = AudioRecorder();
+  bool _isRecording = false;
+  bool _isSendingAudio = false;
+  Timer? _recordingTimer;
+  int _recordingSeconds = 0;
 
   @override
   void initState() {
@@ -39,102 +96,81 @@ class _ChatScreenState extends State<ChatScreen> {
     _bootstrap();
   }
 
-  /// Tenta carregar o histórico da última conversa antes de abrir o
-  /// WebSocket. Se não houver conversa salva (ou o id não for mais
-  /// válido — usuário trocou de conta, conversa removida etc.), segue
-  /// para o WebSocket sem mensagens prévias.
   Future<void> _bootstrap() async {
     await _loadStoredConversation();
     if (!mounted) return;
     await _connectWebSocket();
   }
 
-  Future<void> _loadStoredConversation() async {
-    // Capturado de forma síncrona antes de qualquer await — não é
-    // seguro tocar em context após gaps assíncronos.
-    final chatService = context.read<ChatService>();
+  // ── Histórico ──────────────────────────────────────────────────────────────
 
+  Future<void> _loadStoredConversation() async {
+    final chatService = context.read<ChatService>();
     final prefs = await SharedPreferences.getInstance();
     final storedId = prefs.getString(_kConversationIdPrefsKey);
-    debugPrint('[chat] _loadStoredConversation lido: $storedId');
     if (storedId == null || storedId.isEmpty) return;
 
     try {
       final detail = await chatService.getConversation(storedId);
       if (!mounted) return;
-      debugPrint(
-          '[chat] historico carregado: id=${detail.id}, msgs=${detail.messages.length}');
       setState(() {
         _conversationId = detail.id;
-        _messages.addAll(detail.messages.map((m) => {
-              'role': m.role,
-              'text': m.content,
-              'time': _formatTimeFrom(m.createdAt),
-            }));
+        _messages.addAll(detail.messages.map((m) => _ChatMsg.text(
+              role: m.role,
+              text: m.content,
+              time: _formatTimeFrom(m.createdAt),
+            )));
       });
       _scrollToBottom();
     } on NotFoundException {
-      debugPrint('[chat] conversa $storedId 404 — limpando id salvo');
       await prefs.remove(_kConversationIdPrefsKey);
     } on UnauthorizedException {
-      debugPrint('[chat] conversa $storedId 401 — limpando id salvo');
       await prefs.remove(_kConversationIdPrefsKey);
-    } catch (e, st) {
-      debugPrint('[chat] erro ao carregar historico: $e\n$st');
-    }
+    } catch (_) {}
   }
 
   Future<void> _persistConversationId(String id) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_kConversationIdPrefsKey, id);
-    debugPrint('[chat] conversation_id salvo: $id');
   }
+
+  // ── WebSocket ──────────────────────────────────────────────────────────────
 
   Future<void> _connectWebSocket() async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('jwt_token');
-
     if (token == null || token.isEmpty) {
       if (mounted) {
         setState(() {
-          _messages.add({
-            'role': 'assistant',
-            'text': 'Erro de autenticação. Por favor, faça login novamente.',
-            'time': _formatTime(),
-          });
+          _messages.add(_ChatMsg.text(
+            role: 'assistant',
+            text: 'Erro de autenticação. Por favor, faça login novamente.',
+            time: _formatTime(),
+          ));
         });
       }
       return;
     }
 
-    // Usa ApiConfig para URL base (não hardcoded)
     final wsBaseUrl = ApiConfig.wsBaseUrl;
     if (wsBaseUrl == null) return;
 
-    final wsUrl = Uri.parse('$wsBaseUrl/api/v1/chat/ws');
-
     try {
-      _channel = WebSocketChannel.connect(wsUrl);
-
-      // Aguarda confirmação de conexão e envia autenticação
+      _channel = WebSocketChannel.connect(Uri.parse('$wsBaseUrl/api/v1/chat/ws'));
       _channel!.stream.listen(
         (message) async {
-          final data = jsonDecode(message);
+          final data = jsonDecode(message as String) as Map<String, dynamic>;
 
-          // Responde ao handshake de autenticação
           if (data['type'] == 'auth_success') {
             if (mounted) {
               setState(() {
                 _isConnected = true;
-                // Só mostra a saudação inicial se não houver histórico
-                // recuperado (caso contrário ela apareceria toda vez
-                // que o usuário voltasse à tela).
                 if (_messages.isEmpty) {
-                  _messages.add({
-                    'role': 'assistant',
-                    'text': 'Olá! Eu sou o Vitali, assistente da FitLoop. Como posso te ajudar hoje?',
-                    'time': _formatTime(),
-                  });
+                  _messages.add(_ChatMsg.text(
+                    role: 'assistant',
+                    text: 'Olá! Eu sou o Vitali, assistente da FitLoop. Como posso te ajudar hoje?',
+                    time: _formatTime(),
+                  ));
                 }
               });
               _scrollToBottom();
@@ -143,16 +179,15 @@ class _ChatScreenState extends State<ChatScreen> {
             if (mounted) {
               setState(() {
                 _isConnected = false;
-                _messages.add({
-                  'role': 'assistant',
-                  'text': 'Erro de autenticação: ${data['error'] ?? 'Desconhecido'}',
-                  'time': _formatTime(),
-                });
+                _messages.add(_ChatMsg.text(
+                  role: 'assistant',
+                  text: 'Erro de autenticação: ${data['error'] ?? 'Desconhecido'}',
+                  time: _formatTime(),
+                ));
               });
             }
             _channel?.sink.close();
           } else if (data['type'] == 'status') {
-            // Indicador de carregamento intermediário (thinking/searching/generating)
             if (mounted) {
               setState(() {
                 _isTyping = true;
@@ -162,23 +197,19 @@ class _ChatScreenState extends State<ChatScreen> {
             }
           } else if (data['type'] == 'response') {
             final newId = data['conversation_id'] as String?;
-            debugPrint('[chat] response recebida com conversation_id=$newId');
             if (newId != null) {
               _conversationId = newId;
-              // Save sincrono (await) para garantir flush em disco antes
-              // do dispose; unawaited podia perder a corrida se o usuario
-              // saisse da tela imediatamente apos receber a resposta.
               await _persistConversationId(newId);
             }
             if (mounted) {
               setState(() {
                 _isTyping = false;
                 _typingStatus = '';
-                _messages.add({
-                  'role': 'assistant',
-                  'text': data['content'] ?? '',
-                  'time': _formatTime(),
-                });
+                _messages.add(_ChatMsg.text(
+                  role: 'assistant',
+                  text: data['content'] as String? ?? '',
+                  time: _formatTime(),
+                ));
               });
               _scrollToBottom();
             }
@@ -187,67 +218,250 @@ class _ChatScreenState extends State<ChatScreen> {
               setState(() {
                 _isTyping = false;
                 _typingStatus = '';
-                _messages.add({
-                  'role': 'assistant',
-                  'text': 'Desculpe, ocorreu um erro: ${data['error'] ?? 'Desconhecido'}',
-                  'time': _formatTime(),
-                });
+                _messages.add(_ChatMsg.text(
+                  role: 'assistant',
+                  text: 'Desculpe, ocorreu um erro: ${data['error'] ?? 'Desconhecido'}',
+                  time: _formatTime(),
+                ));
               });
               _scrollToBottom();
             }
-            if (data['type'] == 'timeout') {
-              _channel?.sink.close();
-            }
+            if (data['type'] == 'timeout') _channel?.sink.close();
           }
         },
         onDone: () {
-          if (mounted) {
-            setState(() {
-              _isConnected = false;
-              _isTyping = false;
-              _typingStatus = '';
-            });
-          }
+          if (mounted) setState(() { _isConnected = false; _isTyping = false; });
         },
-        onError: (error) {
+        onError: (_) {
           if (mounted) {
             setState(() {
               _isConnected = false;
               _isTyping = false;
-              _typingStatus = '';
-              _messages.add({
-                'role': 'assistant',
-                'text': 'Erro de conexão com o servidor: $error',
-                'time': _formatTime(),
-              });
+              _messages.add(_ChatMsg.text(
+                role: 'assistant',
+                text: 'Erro de conexão com o servidor.',
+                time: _formatTime(),
+              ));
             });
           }
         },
       );
 
-      // Envia autenticação na primeira mensagem (após slight delay para garantir que stream está listening)
       await Future.delayed(const Duration(milliseconds: 100));
-      final authMsg = jsonEncode({'type': 'auth', 'token': token});
-      _channel!.sink.add(authMsg);
+      _channel!.sink.add(jsonEncode({'type': 'auth', 'token': token}));
     } catch (e) {
       if (mounted) {
         setState(() {
           _isConnected = false;
-          _messages.add({
-            'role': 'assistant',
-            'text': 'Falha ao conectar no servidor: $e',
-            'time': _formatTime(),
-          });
+          _messages.add(_ChatMsg.text(
+            role: 'assistant',
+            text: 'Falha ao conectar no servidor: $e',
+            time: _formatTime(),
+          ));
         });
       }
     }
   }
 
+  // ── Envio de texto ─────────────────────────────────────────────────────────
+
+  void _sendMessage() {
+    final text = _messageController.text.trim();
+    if (text.isEmpty || _isTyping) return;
+
+    setState(() {
+      _messages.add(_ChatMsg.text(role: 'user', text: text, time: _formatTime()));
+      _isTyping = true;
+      _typingStatus = 'Analisando sua pergunta...';
+    });
+    _scrollToBottom();
+
+    if (_isConnected && _channel != null) {
+      final payload = <String, dynamic>{'type': 'message', 'content': text};
+      if (_conversationId != null) payload['conversation_id'] = _conversationId;
+      _channel!.sink.add(jsonEncode(payload));
+    } else {
+      setState(() {
+        _isTyping = false;
+        _messages.add(_ChatMsg.text(
+          role: 'assistant',
+          text: 'Você está desconectado. Reinicie o aplicativo para tentar novamente.',
+          time: _formatTime(),
+        ));
+      });
+      _scrollToBottom();
+    }
+
+    _messageController.clear();
+  }
+
+  // ── Gravação de áudio ──────────────────────────────────────────────────────
+
+  Future<bool> _requestMicPermission() async {
+    final status = await Permission.microphone.request();
+    if (status.isGranted) return true;
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Permissão de microfone necessária para gravar refeições por voz.'),
+          duration: Duration(seconds: 3),
+        ),
+      );
+    }
+    return false;
+  }
+
+  Future<void> _startRecording() async {
+    if (_isRecording || _isSendingAudio) return;
+    if (!await _requestMicPermission()) return;
+
+    final dir = await getTemporaryDirectory();
+    final path = '${dir.path}/meal_audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
+
+    await _recorder.start(
+      const RecordConfig(encoder: AudioEncoder.aacLc, sampleRate: 16000),
+      path: path,
+    );
+
+    _recordingSeconds = 0;
+    _recordingTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _recordingSeconds++);
+      // Limite de 60 segundos
+      if (_recordingSeconds >= 60) _stopAndSendRecording();
+    });
+
+    setState(() => _isRecording = true);
+    _scrollToBottom();
+  }
+
+  Future<void> _cancelRecording() async {
+    _recordingTimer?.cancel();
+    _recordingTimer = null;
+    await _recorder.cancel();
+    setState(() {
+      _isRecording = false;
+      _recordingSeconds = 0;
+    });
+  }
+
+  Future<void> _stopAndSendRecording() async {
+    if (!_isRecording) return;
+    _recordingTimer?.cancel();
+    _recordingTimer = null;
+
+    final path = await _recorder.stop();
+    setState(() { _isRecording = false; _recordingSeconds = 0; });
+
+    if (path == null) return;
+    await _sendAudioFile(File(path));
+  }
+
+  Future<void> _sendAudioFile(File file) async {
+    // Captura context-dependents antes de qualquer await
+    final chatService = context.read<ChatService>();
+
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('jwt_token');
+    if (token == null) return;
+
+    // Mostrar mensagem do usuário com ícone de microfone imediatamente
+    setState(() {
+      _isSendingAudio = true;
+      _isTyping = true;
+      _typingStatus = 'Transcrevendo áudio...';
+      _messages.add(_ChatMsg.text(
+        role: 'user',
+        text: '🎤 Enviando áudio...',
+        time: _formatTime(),
+      ));
+    });
+    _scrollToBottom();
+
+    try {
+      final response = await chatService.sendAudio(
+        audioFile: file,
+        token: token,
+        conversationId: _conversationId,
+      );
+
+      // Atualizar o texto da última mensagem do usuário com a transcrição real
+      setState(() {
+        final lastUserIdx =
+            _messages.lastIndexWhere((m) => m.role == 'user');
+        if (lastUserIdx >= 0) {
+          _messages[lastUserIdx] = _ChatMsg.text(
+            role: 'user',
+            text: '🎤 ${response.transcription}',
+            time: _messages[lastUserIdx].time,
+          );
+        }
+      });
+
+      // Persistir conversation_id
+      if (response.conversationId.isNotEmpty) {
+        _conversationId = response.conversationId;
+        await _persistConversationId(response.conversationId);
+      }
+
+      // Adicionar resposta do Vitali
+      if (response.foodLogged != null) {
+        // Resposta com card de refeição
+        setState(() {
+          _isTyping = false;
+          _isSendingAudio = false;
+          _messages.add(_ChatMsg.food(
+            food: response.foodLogged!,
+            transcription: response.transcription,
+            time: _formatTime(),
+          ));
+        });
+      } else {
+        // Fallback: texto simples (parse_confidence == "failed")
+        setState(() {
+          _isTyping = false;
+          _isSendingAudio = false;
+          _messages.add(_ChatMsg.text(
+            role: 'assistant',
+            text: response.content,
+            time: _formatTime(),
+          ));
+        });
+      }
+    } on ApiException catch (e) {
+      setState(() {
+        _isTyping = false;
+        _isSendingAudio = false;
+        _messages.add(_ChatMsg.text(
+          role: 'assistant',
+          text: '❌ ${e.message}',
+          time: _formatTime(),
+        ));
+      });
+    } catch (e) {
+      setState(() {
+        _isTyping = false;
+        _isSendingAudio = false;
+        _messages.add(_ChatMsg.text(
+          role: 'assistant',
+          text: '❌ Falha ao processar o áudio. Tente novamente.',
+          time: _formatTime(),
+        ));
+      });
+    }
+
+    _scrollToBottom();
+
+    // Deletar arquivo temporário
+    try { await file.delete(); } catch (_) {}
+  }
+
+  // ── Utilitários ────────────────────────────────────────────────────────────
+
   String _formatTime() => _formatTimeFrom(DateTime.now());
 
   String _formatTimeFrom(DateTime dt) {
-    final local = dt.toLocal();
-    return '${local.hour}:${local.minute.toString().padLeft(2, '0')}';
+    final l = dt.toLocal();
+    return '${l.hour}:${l.minute.toString().padLeft(2, '0')}';
   }
 
   void _scrollToBottom() {
@@ -267,55 +481,12 @@ class _ChatScreenState extends State<ChatScreen> {
     _messageController.dispose();
     _scrollController.dispose();
     _channel?.sink.close();
+    _recordingTimer?.cancel();
+    _recorder.dispose();
     super.dispose();
   }
 
-  void _sendMessage() {
-    if (_messageController.text.trim().isEmpty) return;
-    if (_isTyping) return; // evita enviar enquanto IA está respondendo
-
-    final text = _messageController.text.trim();
-
-    setState(() {
-      _messages.add({
-        'role': 'user',
-        'text': text,
-        'time': _formatTime(),
-      });
-      // Mostrar indicador imediatamente: o backend só envia 'thinking'
-      // depois de processar input; um feedback otimista evita silêncio
-      // visual no intervalo entre o envio e o primeiro evento de status.
-      _isTyping = true;
-      _typingStatus = 'Analisando sua pergunta...';
-    });
-    _scrollToBottom();
-
-    if (_isConnected && _channel != null) {
-      final payload = {
-        'type': 'message',
-        'content': text,
-      };
-
-      if (_conversationId != null) {
-        payload['conversation_id'] = _conversationId!;
-      }
-
-      _channel!.sink.add(jsonEncode(payload));
-    } else {
-      setState(() {
-        _isTyping = false;
-        _typingStatus = '';
-        _messages.add({
-          'role': 'assistant',
-          'text': 'Você está desconectado. Reinicie o aplicativo para tentar novamente.',
-          'time': _formatTime(),
-        });
-      });
-      _scrollToBottom();
-    }
-
-    _messageController.clear();
-  }
+  // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -331,21 +502,25 @@ class _ChatScreenState extends State<ChatScreen> {
                 color: AppColors.primary.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(8),
               ),
-              // Halter como identidade visual da academia (Vitali =
-              // assistente fitness). Leitura imediata para o aluno.
-              child: const Icon(Icons.fitness_center, color: AppColors.primary, size: 20),
+              child: const Icon(Icons.fitness_center,
+                  color: AppColors.primary, size: 20),
             ),
             const SizedBox(width: 10),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('Vitali',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodyMedium
+                        ?.copyWith(fontWeight: FontWeight.w600)),
                 Text(
                   _isConnected ? 'Online' : 'Desconectado',
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: _isConnected ? Colors.green : context.colors.textSecondary,
-                  ),
+                        color: _isConnected
+                            ? Colors.green
+                            : context.colors.textSecondary,
+                      ),
                 ),
               ],
             ),
@@ -355,11 +530,12 @@ class _ChatScreenState extends State<ChatScreen> {
       body: SafeArea(
         child: Column(
           children: [
+            // ── Lista de mensagens ───────────────────────────────────────
             Expanded(
               child: ListView.builder(
                 controller: _scrollController,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                // +1 quando _isTyping para reservar espaço do indicador
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 itemCount: _messages.length + (_isTyping ? 1 : 0),
                 itemBuilder: (context, index) {
                   if (_isTyping && index == _messages.length) {
@@ -367,39 +543,71 @@ class _ChatScreenState extends State<ChatScreen> {
                   }
 
                   final msg = _messages[index];
-                  final isUser = msg['role'] == 'user';
 
+                  if (msg.type == _MsgType.food && msg.food != null) {
+                    return FadeInUp(
+                      delay: Duration(milliseconds: index * 50),
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: _FoodCard(food: msg.food!, time: msg.time),
+                      ),
+                    );
+                  }
+
+                  final isUser = msg.role == 'user';
                   return FadeInUp(
                     delay: Duration(milliseconds: index * 50),
                     child: Padding(
                       padding: const EdgeInsets.only(bottom: 12),
                       child: Align(
-                        alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+                        alignment: isUser
+                            ? Alignment.centerRight
+                            : Alignment.centerLeft,
                         child: Container(
                           constraints: BoxConstraints(
-                            maxWidth: MediaQuery.of(context).size.width * 0.75,
+                            maxWidth:
+                                MediaQuery.of(context).size.width * 0.75,
                           ),
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 10),
                           decoration: BoxDecoration(
-                            color: isUser ? AppColors.primary : context.colors.surface,
-                            border: isUser ? null : Border.all(color: context.colors.border, width: 1),
+                            color: isUser
+                                ? AppColors.primary
+                                : context.colors.surface,
+                            border: isUser
+                                ? null
+                                : Border.all(
+                                    color: context.colors.border, width: 1),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Column(
-                            crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                            crossAxisAlignment: isUser
+                                ? CrossAxisAlignment.end
+                                : CrossAxisAlignment.start,
                             children: [
                               Text(
-                                msg['text']!,
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: isUser ? Colors.white : context.colors.textPrimary,
+                                msg.text,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                      color: isUser
+                                          ? Colors.white
+                                          : context.colors.textPrimary,
                                       height: 1.4,
                                     ),
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                msg['time']!,
-                                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                      color: isUser ? Colors.white.withValues(alpha: 0.7) : context.colors.textMuted,
+                                msg.time,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .labelSmall
+                                    ?.copyWith(
+                                      color: isUser
+                                          ? Colors.white
+                                              .withValues(alpha: 0.7)
+                                          : context.colors.textMuted,
                                       fontSize: 10,
                                     ),
                               ),
@@ -412,30 +620,59 @@ class _ChatScreenState extends State<ChatScreen> {
                 },
               ),
             ),
+
+            // ── Indicador de gravação ────────────────────────────────────
+            if (_isRecording) _RecordingBar(
+              seconds: _recordingSeconds,
+              onCancel: _cancelRecording,
+            ),
+
+            // ── Barra de input ───────────────────────────────────────────
             Container(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
               decoration: BoxDecoration(
                 color: context.colors.surface,
-                border: Border(top: BorderSide(color: context.colors.border, width: 1)),
+                border: Border(
+                    top: BorderSide(color: context.colors.border, width: 1)),
               ),
               child: Row(
                 children: [
+                  // Botão microfone
+                  _MicButton(
+                    isRecording: _isRecording,
+                    isBusy: _isTyping || _isSendingAudio,
+                    onTapDown: _startRecording,
+                    onTapUp: _stopAndSendRecording,
+                    onTapCancel: _cancelRecording,
+                  ),
+
+                  const SizedBox(width: 8),
+
+                  // Campo de texto
                   Expanded(
                     child: TextField(
                       controller: _messageController,
-                      enabled: _isConnected && !_isTyping,
+                      enabled: _isConnected && !_isTyping && !_isRecording && !_isSendingAudio,
                       decoration: InputDecoration(
-                        hintText: !_isConnected
-                            ? 'Conectando...'
-                            : (_isTyping ? 'Aguardando resposta...' : 'Pergunte algo...'),
-                        hintStyle: TextStyle(color: context.colors.textMuted),
+                        hintText: _isRecording
+                            ? 'Gravando...'
+                            : _isSendingAudio
+                                ? 'Processando áudio...'
+                                : (!_isConnected
+                                    ? 'Conectando...'
+                                    : (_isTyping
+                                        ? 'Aguardando resposta...'
+                                        : 'Pergunte algo...')),
+                        hintStyle:
+                            TextStyle(color: context.colors.textMuted),
                         filled: true,
                         fillColor: context.colors.surfaceLight,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
                           borderSide: BorderSide.none,
                         ),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 12),
                       ),
                       style: TextStyle(color: context.colors.textPrimary),
                       minLines: 1,
@@ -443,15 +680,24 @@ class _ChatScreenState extends State<ChatScreen> {
                       onSubmitted: (_) => _sendMessage(),
                     ),
                   ),
-                  const SizedBox(width: 10),
+
+                  const SizedBox(width: 8),
+
+                  // Botão enviar
                   Container(
                     decoration: BoxDecoration(
-                      color: (_isConnected && !_isTyping) ? AppColors.primary : Colors.grey,
+                      color: (_isConnected && !_isTyping && !_isRecording && !_isSendingAudio)
+                          ? AppColors.primary
+                          : Colors.grey,
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: IconButton(
-                      icon: const Icon(Icons.send, color: Colors.white, size: 20),
-                      onPressed: (_isConnected && !_isTyping) ? _sendMessage : null,
+                      icon: const Icon(Icons.send,
+                          color: Colors.white, size: 20),
+                      onPressed:
+                          (_isConnected && !_isTyping && !_isRecording && !_isSendingAudio)
+                              ? _sendMessage
+                              : null,
                     ),
                   ),
                 ],
@@ -464,11 +710,270 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 }
 
-/// Indicador de "digitando" com 3 bolinhas pulsantes + texto de status.
-/// Renderizado abaixo das mensagens enquanto a IA processa a resposta.
+// ── Widgets auxiliares ─────────────────────────────────────────────────────────
+
+/// Botão de microfone com comportamento press-and-hold.
+/// Pressionar inicia gravação; soltar envia; arrastar para fora cancela.
+class _MicButton extends StatelessWidget {
+  final bool isRecording;
+  final bool isBusy;
+  final VoidCallback onTapDown;
+  final VoidCallback onTapUp;
+  final VoidCallback onTapCancel;
+
+  const _MicButton({
+    required this.isRecording,
+    required this.isBusy,
+    required this.onTapDown,
+    required this.onTapUp,
+    required this.onTapCancel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final active = !isBusy;
+    final color = isRecording
+        ? Colors.red
+        : (active ? AppColors.primary : Colors.grey);
+
+    return GestureDetector(
+      onTapDown: active ? (_) => onTapDown() : null,
+      onTapUp: active ? (_) => onTapUp() : null,
+      onTapCancel: active ? onTapCancel : null,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: isRecording ? 0.15 : 0.12),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: color, width: 1.5),
+        ),
+        child: Icon(
+          isRecording ? Icons.stop_rounded : Icons.mic_rounded,
+          color: color,
+          size: 22,
+        ),
+      ),
+    );
+  }
+}
+
+/// Barra vermelha exibida no topo do input durante a gravação.
+class _RecordingBar extends StatelessWidget {
+  final int seconds;
+  final VoidCallback onCancel;
+
+  const _RecordingBar({required this.seconds, required this.onCancel});
+
+  String get _formatted {
+    final m = seconds ~/ 60;
+    final s = seconds % 60;
+    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: Colors.red.withValues(alpha: 0.08),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          const Icon(Icons.fiber_manual_record, color: Colors.red, size: 14),
+          const SizedBox(width: 8),
+          Text(
+            'Gravando $_formatted — solte para enviar',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Colors.red,
+                  fontWeight: FontWeight.w500,
+                ),
+          ),
+          const Spacer(),
+          GestureDetector(
+            onTap: onCancel,
+            child: const Icon(Icons.close, color: Colors.red, size: 18),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Card de confirmação de refeição registrada via áudio.
+class _FoodCard extends StatelessWidget {
+  final FoodLoggedDTO food;
+  final String time;
+
+  const _FoodCard({required this.food, required this.time});
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        constraints:
+            BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.85),
+        decoration: BoxDecoration(
+          color: AppColors.primary.withValues(alpha: 0.08),
+          border: Border.all(
+              color: AppColors.primary.withValues(alpha: 0.35), width: 1),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Cabeçalho
+            Row(
+              children: [
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    food.mealName,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  time,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: context.colors.textMuted,
+                        fontSize: 10,
+                      ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 10),
+
+            // Nome do alimento + quantidade
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                const Text('✅ ', style: TextStyle(fontSize: 16)),
+                Expanded(
+                  child: Text(
+                    '${food.quantityG.toStringAsFixed(0)}g de ${food.foodName}',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: context.colors.textPrimary,
+                          fontWeight: FontWeight.w600,
+                          height: 1.3,
+                        ),
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 10),
+
+            // Grid de macros
+            _MacroGrid(food: food),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Grid 2×2 com os macros do alimento registrado.
+class _MacroGrid extends StatelessWidget {
+  final FoodLoggedDTO food;
+
+  const _MacroGrid({required this.food});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        _MacroChip(
+          label: 'Kcal',
+          value: food.kcal.toStringAsFixed(0),
+          color: Colors.orange,
+        ),
+        const SizedBox(width: 6),
+        _MacroChip(
+          label: 'Prot',
+          value: '${food.protein.toStringAsFixed(1)}g',
+          color: Colors.blue,
+        ),
+        const SizedBox(width: 6),
+        _MacroChip(
+          label: 'Carbs',
+          value: '${food.carbs.toStringAsFixed(1)}g',
+          color: AppColors.primary,
+        ),
+        const SizedBox(width: 6),
+        _MacroChip(
+          label: 'Gord',
+          value: '${food.fats.toStringAsFixed(1)}g',
+          color: Colors.purple,
+        ),
+      ],
+    );
+  }
+}
+
+class _MacroChip extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+
+  const _MacroChip({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color.withValues(alpha: 0.25)),
+        ),
+        child: Column(
+          children: [
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 9,
+                color: color.withValues(alpha: 0.8),
+                fontWeight: FontWeight.w500,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Indicador de digitando ────────────────────────────────────────────────────
+
 class _TypingIndicator extends StatefulWidget {
   final String status;
-
   const _TypingIndicator({required this.status});
 
   @override
@@ -502,9 +1007,9 @@ class _TypingIndicatorState extends State<_TypingIndicator>
         alignment: Alignment.centerLeft,
         child: Container(
           constraints: BoxConstraints(
-            maxWidth: MediaQuery.of(context).size.width * 0.75,
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              maxWidth: MediaQuery.of(context).size.width * 0.75),
+          padding:
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
             color: context.colors.surface,
             border: Border.all(color: context.colors.border, width: 1),
@@ -512,7 +1017,6 @@ class _TypingIndicatorState extends State<_TypingIndicator>
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               AnimatedBuilder(
                 animation: _controller,
@@ -520,7 +1024,8 @@ class _TypingIndicatorState extends State<_TypingIndicator>
                   mainAxisSize: MainAxisSize.min,
                   children: List.generate(3, (i) {
                     final t = (_controller.value + i * 0.2) % 1.0;
-                    final scale = 0.6 + (1 - (t - 0.5).abs() * 2).clamp(0.0, 1.0) * 0.6;
+                    final scale =
+                        0.6 + (1 - (t - 0.5).abs() * 2).clamp(0.0, 1.0) * 0.6;
                     return Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 2),
                       child: Transform.scale(
