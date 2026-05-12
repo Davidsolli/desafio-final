@@ -3,6 +3,8 @@ import '../screens/auth/splash_screen.dart';
 import '../screens/auth/login_screen.dart';
 import '../screens/auth/register_screen.dart';
 import '../screens/auth/invite_code_screen.dart';
+import '../screens/auth/forgot_password_screen.dart';
+import '../screens/auth/reset_password_screen.dart';
 import '../screens/student/student_shell.dart';
 import '../screens/student/home_screen.dart';
 import '../screens/student/workouts_screen.dart';
@@ -13,6 +15,7 @@ import '../screens/student/goals_screen.dart';
 import '../screens/student/chat_screen.dart';
 import '../screens/student/profile_screen_new.dart';
 import '../screens/notifications_screen.dart';
+import '../screens/notifications_settings_screen.dart';
 import '../screens/trainer/trainer_shell.dart';
 import '../screens/trainer/trainer_home_screen.dart';
 import '../screens/trainer/trainer_students_screen.dart';
@@ -26,6 +29,11 @@ import '../screens/admin/admin_pt_form_screen.dart';
 import '../screens/admin/admin_pt_details_screen.dart';
 import '../screens/admin/admin_settings_screen.dart';
 import '../screens/admin/admin_student_form_screen.dart';
+import '../screens/admin/admin_whatsapp_screen.dart';
+import '../screens/student/plans_screen.dart';
+import '../screens/student/subscription_screen.dart';
+import '../screens/admin/admin_plans_screen.dart';
+import '../screens/admin/admin_payment_dashboard_screen.dart';
 
 class AppRoutes {
   // Auth
@@ -34,6 +42,8 @@ class AppRoutes {
   static const String register = '/register';
   static const String inviteCode = '/invite-code';
   static const String generateInvite = '/trainer/generate-invite';
+  static const String forgotPassword = '/forgot-password';
+  static const String resetPassword = '/reset-password';
 
   // Student
   static const String home = '/home';
@@ -60,9 +70,17 @@ class AppRoutes {
   static const String adminAddStudent = '/admin/add-student';
   static const String adminEditStudent = '/admin/edit-student';
   static const String adminSettings = '/admin/settings';
+  static const String adminWhatsApp = '/admin/whatsapp';
+  static const String adminPlans = '/admin/plans';
+  static const String adminPayments = '/admin/payments';
+
+  // Payment
+  static const String plans = '/plans';
+  static const String subscription = '/subscription';
 
   // Shared
   static const String notifications = '/notifications';
+  static const String notificationsSettings = '/notifications-settings';
 
   static final GoRouter router = GoRouter(
     initialLocation: splash,
@@ -86,6 +104,17 @@ class AppRoutes {
       GoRoute(
         path: inviteCode,
         builder: (context, state) => const InviteCodeScreen(),
+      ),
+      GoRoute(
+        path: forgotPassword,
+        builder: (context, state) => const ForgotPasswordScreen(),
+      ),
+      GoRoute(
+        path: resetPassword,
+        builder: (context, state) {
+          final token = state.uri.queryParameters['token'] ?? '';
+          return ResetPasswordScreen(token: token);
+        },
       ),
       GoRoute(
         path: generateInvite,
@@ -132,6 +161,10 @@ class AppRoutes {
         path: notifications,
         builder: (context, state) => const NotificationsScreen(),
       ),
+      GoRoute(
+        path: notificationsSettings,
+        builder: (context, state) => const NotificationsSettingsScreen(),
+      ),
       ShellRoute(
         builder: (context, state, child) => TrainerShell(child: child),
         routes: [
@@ -170,7 +203,27 @@ class AppRoutes {
             path: adminSettings,
             builder: (context, state) => const AdminSettingsScreen(),
           ),
+          GoRoute(
+            path: adminWhatsApp,
+            builder: (context, state) => const AdminWhatsAppScreen(),
+          ),
+          GoRoute(
+            path: adminPlans,
+            builder: (context, state) => const AdminPlansScreen(),
+          ),
+          GoRoute(
+            path: adminPayments,
+            builder: (context, state) => const AdminPaymentDashboardScreen(),
+          ),
         ],
+      ),
+      GoRoute(
+        path: plans,
+        builder: (context, state) => const PlansScreen(),
+      ),
+      GoRoute(
+        path: subscription,
+        builder: (context, state) => const SubscriptionScreen(),
       ),
       GoRoute(
         path: adminAddTrainer,

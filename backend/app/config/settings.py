@@ -43,6 +43,14 @@ class Settings(BaseSettings):
     CHAT_MAX_MESSAGE_LENGTH: int = 500          # RN segurança: máximo de caracteres
     CHAT_INACTIVITY_CLOSE_HOURS: int = 24       # RN-02: fechar conversa após 24h inativa
 
+    # ── InfinitePay ────────────────────────────────────────────────────────
+    INFINITEPAY_HANDLE: str = "rafaelapvilela"
+    INFINITEPAY_WEBHOOK_URL: str = ""           # URL pública do servidor (ex: https://api.seudominio.com)
+
+    # ── WhatsApp (Meta Cloud API) ──────────────────────────────────────────
+    WHATSAPP_TOKEN: str = ""
+    WHATSAPP_PHONE_NUMBER_ID: str = ""
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 

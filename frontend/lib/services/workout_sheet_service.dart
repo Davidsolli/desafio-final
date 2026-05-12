@@ -35,7 +35,7 @@ class WorkoutSheetService {
   /// [page] — Número da página (a partir de 1).
   /// [limit] — Itens por página (máx. 100).
   Future<PaginatedWorkoutSheets> listWorkoutSheets({
-    String? userId,
+    String? workoutProgramId,
     int? dayOfWeek,
     int page = 1,
     int limit = 10,
@@ -44,7 +44,7 @@ class WorkoutSheetService {
       final queryParams = <String, dynamic>{
         'page': page.toString(),
         'limit': limit.toString(),
-        if (userId != null) 'user_id': userId,
+        if (workoutProgramId != null) 'workout_program_id': workoutProgramId,
         if (dayOfWeek != null) 'day_of_week': dayOfWeek.toString(),
       };
 
@@ -157,6 +157,95 @@ class WorkoutSheetService {
         throw WorkoutSheetConflictException(e.message);
       }
       rethrow;
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Programas de Treino
+  // ---------------------------------------------------------------------------
+
+  /// Lista programas de treino com paginação e filtros.
+  Future<PaginatedWorkoutPrograms> listWorkoutPrograms({
+    String? userId,
+    int page = 1,
+    int limit = 10,
+  }) async {
+    try {
+      final queryParams = <String, dynamic>{
+        'page': page.toString(),
+        'limit': limit.toString(),
+        if (userId != null) 'user_id': userId,
+      };
+
+      final response = await _apiClient.get<PaginatedWorkoutPrograms>(
+        '/workout-programs',
+        queryParameters: queryParams,
+        fromJson: (data) =>
+            PaginatedWorkoutPrograms.fromJson(data as Map<String, dynamic>),
+      );
+      return response;
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  /// Cria um novo programa de treino.
+  Future<WorkoutProgramResponse> createWorkoutProgram(
+      CreateWorkoutProgramDTO dto) async {
+    try {
+      final response = await _apiClient.post<WorkoutProgramResponse>(
+        '/workout-programs',
+        body: dto.toJson(),
+        fromJson: (data) =>
+            WorkoutProgramResponse.fromJson(data as Map<String, dynamic>),
+      );
+      return response;
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  /// Busca um programa de treino pelo ID.
+  Future<WorkoutProgramResponse> getWorkoutProgram(String programId) async {
+    try {
+      final response = await _apiClient.get<WorkoutProgramResponse>(
+        '/workout-programs/$programId',
+        fromJson: (data) =>
+            WorkoutProgramResponse.fromJson(data as Map<String, dynamic>),
+      );
+      return response;
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  /// Atualiza um programa de treino.
+  Future<WorkoutProgramResponse> updateWorkoutProgram(
+    String programId,
+    UpdateWorkoutProgramDTO dto,
+  ) async {
+    try {
+      final response = await _apiClient.put<WorkoutProgramResponse>(
+        '/workout-programs/$programId',
+        body: dto.toJson(),
+        fromJson: (data) =>
+            WorkoutProgramResponse.fromJson(data as Map<String, dynamic>),
+      );
+      return response;
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  /// Soft delete de um programa de treino.
+  Future<void> deleteWorkoutProgram(String programId) async {
+    try {
+      await _apiClient.delete<void>(
+        '/workout-programs/$programId',
+        fromJson: (_) {},
+      );
     } catch (e) {
       rethrow;
     }

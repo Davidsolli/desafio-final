@@ -1,5 +1,3 @@
-# Importar todos os modelos para que o Base.metadata contenha todas as tabelas.
-# Necessário para que create_all() nas fixtures de teste crie todas as tabelas.
 from app.models.user import Base, User  # noqa: F401
 from app.models.chatbot import (  # noqa: F401
     KnowledgeBase,
@@ -12,6 +10,7 @@ from app.models.exercise_catalog import ExerciseCatalog  # noqa: F401
 from app.models.food_catalog import FoodCatalog  # noqa: F401
 from app.models.diet import CustomFood, Diet, DietMeal, DietItem  # noqa: F401
 from app.models.diet_logbook import DietLogbook, DietLogbookEntry  # noqa: F401
+from app.models.payment import Plan, Subscription  # noqa: F401
 
 __all__ = [
     "Base",
@@ -30,5 +29,6 @@ __all__ = [
     "DietItem",
     "DietLogbook",
     "DietLogbookEntry",
+    "Plan",
+    "Subscription",
 ]
-

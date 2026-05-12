@@ -1,8 +1,9 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:animate_do/animate_do.dart';
 import 'package:provider/provider.dart';
-import '../../theme/app_colors.dart';
+
 import '../../theme/theme_colors.dart';
 import '../../routes/app_routes.dart';
 import '../../providers/auth_provider.dart';
@@ -36,6 +37,24 @@ class _SplashScreenState extends State<SplashScreen> {
     if (authProvider.isAuthenticated && authProvider.user != null) {
       _navigateByRole(authProvider.user!.role);
     } else {
+      // Em web, verificar se o usuário acessou uma rota pública via deep link
+      // e navegar para ela em vez de redirecionar para login
+      if (kIsWeb) {
+        final path = Uri.base.path;
+        final publicPaths = [
+          AppRoutes.resetPassword,
+          AppRoutes.forgotPassword,
+          AppRoutes.register,
+          AppRoutes.inviteCode,
+        ];
+        for (final publicPath in publicPaths) {
+          if (path.contains(publicPath)) {
+            final query = Uri.base.hasQuery ? '?${Uri.base.query}' : '';
+            context.go('$publicPath$query');
+            return;
+          }
+        }
+      }
       context.go(AppRoutes.login);
     }
   }

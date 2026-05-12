@@ -7,6 +7,7 @@ import '../../../../theme/theme_provider.dart';
 import '../../../../routes/app_routes.dart';
 import '../../../../providers/user_provider.dart';
 import '../../../../providers/auth_provider.dart';
+import '../../../../shared/widgets/change_password_dialog.dart';
 
 class ProfileSettings extends StatefulWidget {
   const ProfileSettings({super.key});
@@ -110,6 +111,60 @@ class _ProfileSettingsState extends State<ProfileSettings> {
                 onChanged: (_) => themeProvider.toggleTheme(),
               ),
             ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        // ── Minha Assinatura ──────────────────────────────────────────────
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              side: const BorderSide(color: AppColors.primary),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () => context.push(AppRoutes.subscription),
+            icon: const Icon(Icons.card_membership_outlined, color: AppColors.primary),
+            label: Text(
+              'Minha Assinatura',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        // ── Alterar Senha ─────────────────────────────────────────────────
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              side: BorderSide(color: context.colors.border),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () {
+              final userProvider = context.read<UserProvider>();
+              showDialog(
+                context: context,
+                builder: (_) => ChangePasswordDialog(
+                  onSubmit: (current, newPass, confirm) => userProvider.changePassword(
+                    currentPassword: current,
+                    newPassword: newPass,
+                    confirmPassword: confirm,
+                  ),
+                ),
+              );
+            },
+            icon: const Icon(Icons.lock_outline, color: AppColors.primary),
+            label: Text(
+              'Alterar Senha',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
           ),
         ),
         const SizedBox(height: 16),

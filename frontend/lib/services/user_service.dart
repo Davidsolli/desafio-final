@@ -55,7 +55,7 @@ class UserResponse {
   }
 
   int get tmb {
-    if (role == 'male') {
+    if (gender == 'male') {
       return (88.362 + (13.397 * weight) + (4.799 * height) - (5.677 * age)).toInt();
     } else {
       return (447.593 + (9.247 * weight) + (3.098 * height) - (4.330 * age)).toInt();
@@ -122,6 +122,27 @@ class UserService {
         fromJson: (data) => UserResponse.fromJson(data as Map<String, dynamic>),
       );
       return response;
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  Future<void> changePassword({
+    required String userId,
+    required String currentPassword,
+    required String newPassword,
+    required String confirmPassword,
+  }) async {
+    try {
+      await _apiClient.put<Map<String, dynamic>>(
+        '/users/$userId/password',
+        body: {
+          'current_password': currentPassword,
+          'new_password': newPassword,
+          'confirm_password': confirmPassword,
+        },
+        fromJson: (data) => data as Map<String, dynamic>,
+      );
     } catch (e) {
       rethrow;
     }

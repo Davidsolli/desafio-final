@@ -136,25 +136,28 @@ class ExerciseResponse {
 
 /// DTO para criar uma nova ficha de treino.
 class CreateWorkoutSheetDTO {
-  final String userId;
+  final String workoutProgramId;
   final String name;
   final String? description;
-  final int dayOfWeek;
+  final int? dayOfWeek;
+  final int order;
   final List<ExerciseCreateDTO> exercises;
 
   CreateWorkoutSheetDTO({
-    required this.userId,
+    required this.workoutProgramId,
     required this.name,
     this.description,
-    required this.dayOfWeek,
+    this.dayOfWeek,
+    this.order = 1,
     this.exercises = const [],
   });
 
   Map<String, dynamic> toJson() => {
-        'user_id': userId,
+        if (workoutProgramId.isNotEmpty) 'workout_program_id': workoutProgramId,
         'name': name,
         if (description != null) 'description': description,
-        'day_of_week': dayOfWeek,
+        if (dayOfWeek != null) 'day_of_week': dayOfWeek,
+        'order': order,
         'exercises': exercises.map((e) => e.toJson()).toList(),
       };
 }
@@ -164,12 +167,14 @@ class UpdateWorkoutSheetDTO {
   final String? name;
   final String? description;
   final int? dayOfWeek;
+  final int? order;
   final List<ExerciseCreateDTO>? exercises;
 
   UpdateWorkoutSheetDTO({
     this.name,
     this.description,
     this.dayOfWeek,
+    this.order,
     this.exercises,
   });
 
@@ -178,6 +183,7 @@ class UpdateWorkoutSheetDTO {
     if (name != null) map['name'] = name;
     if (description != null) map['description'] = description;
     if (dayOfWeek != null) map['day_of_week'] = dayOfWeek;
+    if (order != null) map['order'] = order;
     if (exercises != null) {
       map['exercises'] = exercises!.map((e) => e.toJson()).toList();
     }
@@ -188,17 +194,17 @@ class UpdateWorkoutSheetDTO {
 /// DTO para duplicar uma ficha de treino.
 class DuplicateWorkoutSheetDTO {
   final String? name;
-  final String? userId;
+  final String? workoutProgramId;
 
   DuplicateWorkoutSheetDTO({
     this.name,
-    this.userId,
+    this.workoutProgramId,
   });
 
   Map<String, dynamic> toJson() {
     final map = <String, dynamic>{};
     if (name != null) map['name'] = name;
-    if (userId != null) map['user_id'] = userId;
+    if (workoutProgramId != null) map['workout_program_id'] = workoutProgramId;
     return map;
   }
 }
@@ -206,11 +212,11 @@ class DuplicateWorkoutSheetDTO {
 /// Resposta completa de uma ficha de treino (com exercícios).
 class WorkoutSheetResponse {
   final String id;
-  final String userId;
-  final String? personalTrainerId;
+  final String workoutProgramId;
   final String name;
   final String? description;
-  final int dayOfWeek;
+  final int? dayOfWeek;
+  final int order;
   final bool isActive;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -218,11 +224,11 @@ class WorkoutSheetResponse {
 
   WorkoutSheetResponse({
     required this.id,
-    required this.userId,
-    this.personalTrainerId,
+    required this.workoutProgramId,
     required this.name,
     this.description,
-    required this.dayOfWeek,
+    this.dayOfWeek,
+    required this.order,
     required this.isActive,
     required this.createdAt,
     required this.updatedAt,
@@ -232,11 +238,11 @@ class WorkoutSheetResponse {
   factory WorkoutSheetResponse.fromJson(Map<String, dynamic> json) {
     return WorkoutSheetResponse(
       id: json['id'] as String,
-      userId: json['user_id'] as String,
-      personalTrainerId: json['personal_trainer_id'] as String?,
+      workoutProgramId: json['workout_program_id'] as String,
       name: json['name'] as String,
       description: json['description'] as String?,
-      dayOfWeek: json['day_of_week'] as int,
+      dayOfWeek: json['day_of_week'] as int?,
+      order: json['order'] as int? ?? 1,
       isActive: json['is_active'] as bool,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
@@ -248,10 +254,11 @@ class WorkoutSheetResponse {
   }
 
   /// Retorna o label do dia da semana
-  String get dayOfWeekLabel => dayOfWeekLabels[dayOfWeek] ?? 'Desconhecido';
+  String get dayOfWeekLabel => dayOfWeek != null ? (dayOfWeekLabels[dayOfWeek!] ?? 'Desconhecido') : 'Geral';
 
   /// Retorna emoji baseado no dia da semana
   String get emoji {
+    if (dayOfWeek == null) return '💪';
     switch (dayOfWeek) {
       case 0:
         return '💪';
@@ -276,20 +283,20 @@ class WorkoutSheetResponse {
 /// Item de ficha na listagem (sem exercícios completos, com contagem).
 class WorkoutSheetListItem {
   final String id;
-  final String userId;
-  final String? personalTrainerId;
+  final String workoutProgramId;
   final String name;
-  final int dayOfWeek;
+  final int? dayOfWeek;
+  final int order;
   final bool isActive;
   final int exerciseCount;
   final DateTime createdAt;
 
   WorkoutSheetListItem({
     required this.id,
-    required this.userId,
-    this.personalTrainerId,
+    required this.workoutProgramId,
     required this.name,
-    required this.dayOfWeek,
+    this.dayOfWeek,
+    required this.order,
     required this.isActive,
     this.exerciseCount = 0,
     required this.createdAt,
@@ -298,10 +305,10 @@ class WorkoutSheetListItem {
   factory WorkoutSheetListItem.fromJson(Map<String, dynamic> json) {
     return WorkoutSheetListItem(
       id: json['id'] as String,
-      userId: json['user_id'] as String,
-      personalTrainerId: json['personal_trainer_id'] as String?,
+      workoutProgramId: json['workout_program_id'] as String,
       name: json['name'] as String,
-      dayOfWeek: json['day_of_week'] as int,
+      dayOfWeek: json['day_of_week'] as int?,
+      order: json['order'] as int? ?? 1,
       isActive: json['is_active'] as bool,
       exerciseCount: json['exercise_count'] as int? ?? 0,
       createdAt: DateTime.parse(json['created_at'] as String),
@@ -309,10 +316,11 @@ class WorkoutSheetListItem {
   }
 
   /// Retorna o label do dia da semana
-  String get dayOfWeekLabel => dayOfWeekLabels[dayOfWeek] ?? 'Desconhecido';
+  String get dayOfWeekLabel => dayOfWeek != null ? (dayOfWeekLabels[dayOfWeek!] ?? 'Desconhecido') : 'Geral';
 
   /// Retorna emoji baseado no dia da semana
   String get emoji {
+    if (dayOfWeek == null) return '💪';
     switch (dayOfWeek) {
       case 0:
         return '💪';
@@ -355,6 +363,126 @@ class PaginatedWorkoutSheets {
       limit: json['limit'] as int,
       data: (json['data'] as List<dynamic>)
           .map((e) => WorkoutSheetListItem.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// DTOs de Programas de Treino
+// ---------------------------------------------------------------------------
+
+class CreateWorkoutProgramDTO {
+  final String userId;
+  final String name;
+  final String? description;
+  final String? goal;
+  final List<CreateWorkoutSheetDTO> workoutSheets;
+
+  CreateWorkoutProgramDTO({
+    required this.userId,
+    required this.name,
+    this.description,
+    this.goal,
+    this.workoutSheets = const [],
+  });
+
+  Map<String, dynamic> toJson() => {
+        'user_id': userId,
+        'name': name,
+        if (description != null) 'description': description,
+        if (goal != null) 'goal': goal,
+        'workout_sheets': workoutSheets.map((e) => e.toJson()).toList(),
+      };
+}
+
+class UpdateWorkoutProgramDTO {
+  final String? name;
+  final String? description;
+  final String? goal;
+  final bool? isActive;
+
+  UpdateWorkoutProgramDTO({
+    this.name,
+    this.description,
+    this.goal,
+    this.isActive,
+  });
+
+  Map<String, dynamic> toJson() {
+    final map = <String, dynamic>{};
+    if (name != null) map['name'] = name;
+    if (description != null) map['description'] = description;
+    if (goal != null) map['goal'] = goal;
+    if (isActive != null) map['is_active'] = isActive;
+    return map;
+  }
+}
+
+class WorkoutProgramResponse {
+  final String id;
+  final String userId;
+  final String? personalTrainerId;
+  final String name;
+  final String? description;
+  final String? goal;
+  final bool isActive;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final List<WorkoutSheetResponse> workoutSheets;
+
+  WorkoutProgramResponse({
+    required this.id,
+    required this.userId,
+    this.personalTrainerId,
+    required this.name,
+    this.description,
+    this.goal,
+    required this.isActive,
+    required this.createdAt,
+    required this.updatedAt,
+    this.workoutSheets = const [],
+  });
+
+  factory WorkoutProgramResponse.fromJson(Map<String, dynamic> json) {
+    return WorkoutProgramResponse(
+      id: json['id'] as String,
+      userId: json['user_id'] as String,
+      personalTrainerId: json['personal_trainer_id'] as String?,
+      name: json['name'] as String,
+      description: json['description'] as String?,
+      goal: json['goal'] as String?,
+      isActive: json['is_active'] as bool,
+      createdAt: DateTime.parse(json['created_at'] as String),
+      updatedAt: DateTime.parse(json['updated_at'] as String),
+      workoutSheets: (json['workout_sheets'] as List<dynamic>?)
+              ?.map((e) => WorkoutSheetResponse.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
+    );
+  }
+}
+
+class PaginatedWorkoutPrograms {
+  final int total;
+  final int page;
+  final int limit;
+  final List<WorkoutProgramResponse> data;
+
+  PaginatedWorkoutPrograms({
+    required this.total,
+    required this.page,
+    required this.limit,
+    required this.data,
+  });
+
+  factory PaginatedWorkoutPrograms.fromJson(Map<String, dynamic> json) {
+    return PaginatedWorkoutPrograms(
+      total: json['total'] as int,
+      page: json['page'] as int,
+      limit: json['limit'] as int,
+      data: (json['data'] as List<dynamic>)
+          .map((e) => WorkoutProgramResponse.fromJson(e as Map<String, dynamic>))
           .toList(),
     );
   }

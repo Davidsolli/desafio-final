@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
+
 import 'package:provider/provider.dart';
-import 'package:animate_do/animate_do.dart';
+
 import '../../theme/app_colors.dart';
 import '../../theme/theme_colors.dart';
 import '../../providers/nutrition_provider.dart';
@@ -89,6 +89,65 @@ class _NutritionScreenState extends State<NutritionScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.chevron_left),
+                onPressed: () => provider.changeDate(provider.currentDate.subtract(const Duration(days: 1))),
+              ),
+              GestureDetector(
+                onTap: () async {
+                  final date = await showDatePicker(
+                    context: context,
+                    initialDate: provider.currentDate,
+                    firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                    lastDate: DateTime.now(),
+                    locale: const Locale('pt', 'BR'),
+                    builder: (context, child) {
+                      return Theme(
+                        data: Theme.of(context).copyWith(
+                          colorScheme: ColorScheme.light(
+                            primary: AppColors.primary,
+                            onPrimary: Colors.white,
+                            surface: context.colors.surface,
+                            onSurface: context.colors.textPrimary,
+                          ),
+                        ),
+                        child: child!,
+                      );
+                    },
+                  );
+                  if (date != null) {
+                    provider.changeDate(date);
+                  }
+                },
+                child: Row(
+                  children: [
+                    Icon(Icons.calendar_today, size: 16, color: AppColors.primary),
+                    const SizedBox(width: 8),
+                    Text(
+                      _formatDate(provider.currentDate),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.chevron_right),
+                onPressed: () {
+                  if (provider.currentDate.isBefore(DateTime.now().subtract(const Duration(days: 1)))) {
+                     provider.changeDate(provider.currentDate.add(const Duration(days: 1)));
+                  } else {
+                     provider.changeDate(DateTime.now());
+                  }
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _buildWeeklyConsistencyGrid(provider),
+          const SizedBox(height: 12),
           _buildCalorieCard(
             logbook?.totalKcal ?? 0.0,
             targets['calories'] ?? 2000.0,
@@ -96,7 +155,11 @@ class _NutritionScreenState extends State<NutritionScreen> {
             logbook?.totalCarbs ?? 0.0,
             logbook?.totalFats ?? 0.0,
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
+          _buildAICoachCard(provider),
+          const SizedBox(height: 4),
+          _buildWaterTrackerCard(provider),
+          const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -118,6 +181,323 @@ class _NutritionScreenState extends State<NutritionScreen> {
               return _buildMealGroup(entry.key, entry.value);
             }).toList(),
           const SizedBox(height: 32),
+        ],
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Componentes de Nutrição Avançada (Consistência, IA e Água)
+  // ---------------------------------------------------------------------------
+
+  Widget _buildWeeklyConsistencyGrid(NutritionProvider provider) {
+    final now = provider.currentDate;
+    final calorieTarget = provider.dailyTargets['calories'] ?? 2000.0;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: context.colors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: context.colors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.insights, size: 16, color: AppColors.primary),
+              const SizedBox(width: 6),
+              Text(
+                'Consistência Semanal',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: context.colors.textPrimary),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: List.generate(7, (index) {
+              final date = now.subtract(Duration(days: 6 - index));
+              final calories = provider.last7DaysCalories[index];
+              final isLogged = provider.last7DaysLogged[index];
+              
+              final isWithinRange = isLogged && (calories >= calorieTarget * 0.85 && calories <= calorieTarget * 1.15);
+              
+              Color badgeColor = context.colors.surfaceLight;
+              Widget icon = Text(
+                '${date.day}',
+                style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: context.colors.textSecondary),
+              );
+
+              if (isLogged) {
+                if (isWithinRange) {
+                  badgeColor = const Color(0xFF059669);
+                  icon = const Icon(Icons.check, size: 12, color: Colors.white);
+                } else {
+                  badgeColor = Colors.amber[700]!;
+                  icon = const Icon(Icons.star_half, size: 12, color: Colors.white);
+                }
+              }
+
+              final isTodaySelected = date.year == now.year && date.month == now.month && date.day == now.day;
+
+              return Column(
+                children: [
+                  Text(
+                    _getAbbreviatedWeekday(date.weekday),
+                    style: TextStyle(
+                      fontSize: 10, 
+                      fontWeight: isTodaySelected ? FontWeight.bold : FontWeight.normal,
+                      color: isTodaySelected ? AppColors.primary : context.colors.textMuted,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: badgeColor,
+                      shape: BoxShape.circle,
+                      border: isTodaySelected 
+                          ? Border.all(color: AppColors.primary, width: 2) 
+                          : Border.all(color: Colors.transparent),
+                      boxShadow: isTodaySelected ? [
+                        BoxShadow(color: AppColors.primary.withOpacity(0.3), blurRadius: 4, spreadRadius: 1)
+                      ] : null,
+                    ),
+                    child: Center(child: icon),
+                  ),
+                ],
+              );
+            }),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getAbbreviatedWeekday(int weekday) {
+    switch (weekday) {
+      case DateTime.monday: return 'Seg';
+      case DateTime.tuesday: return 'Ter';
+      case DateTime.wednesday: return 'Qua';
+      case DateTime.thursday: return 'Qui';
+      case DateTime.friday: return 'Sex';
+      case DateTime.saturday: return 'Sáb';
+      case DateTime.sunday: return 'Dom';
+      default: return '';
+    }
+  }
+
+  Widget _buildAICoachCard(NutritionProvider provider) {
+    final feedback = provider.getAICoachFeedback();
+    final title = feedback['title'] ?? 'Dica do OmniAI Coach 💡';
+    final advice = feedback['advice'] ?? '';
+    final type = feedback['type'] ?? 'info';
+
+    Color cardBorderColor = context.colors.border;
+    Color iconBgColor = AppColors.primary.withOpacity(0.1);
+    Color iconColor = AppColors.primary;
+    IconData icon = Icons.psychology_outlined;
+
+    if (type == 'warning') {
+      cardBorderColor = Colors.amber.withOpacity(0.4);
+      iconBgColor = Colors.amber.withOpacity(0.12);
+      iconColor = Colors.amber[800]!;
+      icon = Icons.warning_amber_rounded;
+    } else if (type == 'alert') {
+      cardBorderColor = Colors.red.withOpacity(0.4);
+      iconBgColor = Colors.red.withOpacity(0.12);
+      iconColor = Colors.red[800]!;
+      icon = Icons.error_outline_rounded;
+    } else if (type == 'success') {
+      cardBorderColor = const Color(0xFF10B981).withOpacity(0.4);
+      iconBgColor = const Color(0xFF10B981).withOpacity(0.12);
+      iconColor = const Color(0xFF059669);
+      icon = Icons.emoji_events_outlined;
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: context.colors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: cardBorderColor, width: 1.2),
+        gradient: LinearGradient(
+          colors: [
+            context.colors.surface,
+            iconBgColor.withOpacity(0.03),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: iconBgColor,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: iconColor, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: context.colors.textPrimary),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF8A2387), Color(0xFFE94057)],
+                            ),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'OMNIAI',
+                            style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 0.8),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      advice,
+                      style: TextStyle(color: context.colors.textSecondary, fontSize: 11, height: 1.4),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWaterTrackerCard(NutritionProvider provider) {
+    final water = provider.waterToday;
+    final goal = provider.waterGoal;
+    final percent = goal > 0 ? (water / goal).clamp(0.0, 1.0) : 0.0;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: context.colors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: context.colors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.water_drop, color: Colors.blue, size: 18),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Registro de Hidratação',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: context.colors.textPrimary),
+                  ),
+                ],
+              ),
+              if (water > 0)
+                GestureDetector(
+                  onTap: () => provider.resetWater(),
+                  child: Text(
+                    'Zerar',
+                    style: TextStyle(color: context.colors.textMuted, fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '${water} ml',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.blue),
+                        ),
+                        Text(
+                          'Meta: ${goal} ml',
+                          style: TextStyle(color: context.colors.textSecondary, fontSize: 11),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: LinearProgressIndicator(
+                        value: percent,
+                        minHeight: 10,
+                        backgroundColor: context.colors.surfaceLight,
+                        valueColor: const AlwaysStoppedAnimation(Colors.blue),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => provider.addWater(250),
+                  icon: const Icon(Icons.local_cafe_outlined, size: 14),
+                  label: const Text('+250 ml', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.blue,
+                    side: const BorderSide(color: Colors.blue),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => provider.addWater(500),
+                  icon: const Icon(Icons.local_drink_outlined, size: 14),
+                  label: const Text('+500 ml', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    elevation: 0,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -280,15 +660,23 @@ class _NutritionScreenState extends State<NutritionScreen> {
   // ---------------------------------------------------------------------------
 
   Widget _buildCalorieCard(double current, double target, double p, double c, double f, {bool isDietTab = false}) {
-    final percent = target > 0 ? ((current / target) * 100).clamp(0, 100) : 0.0;
+    final percentRaw = target > 0 ? ((current / target) * 100) : 0.0;
+    final percent = percentRaw.clamp(0.0, 100.0);
+    final isOver = percentRaw > 100.0;
+
     final titleLabel = isDietTab ? 'Total Diário' : '${current.toStringAsFixed(0)} kcal';
-    final subtitleLabel = isDietTab ? '${current.toStringAsFixed(0)} kcal prescritas' : '${percent.toStringAsFixed(0)}% da meta diária';
+    final subtitleLabel = isDietTab ? '${current.toStringAsFixed(0)} kcal prescritas' : 'de ${target.toStringAsFixed(0)} kcal (${percentRaw.toStringAsFixed(0)}% da meta diária)';
+    
+    final highlightColor = isOver && !isDietTab ? Colors.red : AppColors.primary;
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: context.colors.surface,
-        border: Border.all(color: context.colors.border, width: 1),
+        color: isOver && !isDietTab ? Colors.red.withOpacity(0.1) : context.colors.surface,
+        border: Border.all(
+          color: isOver && !isDietTab ? Colors.red : context.colors.border, 
+          width: isOver && !isDietTab ? 1.5 : 1
+        ),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -318,8 +706,8 @@ class _NutritionScreenState extends State<NutritionScreen> {
                   decoration: BoxDecoration(shape: BoxShape.circle, color: context.colors.surfaceLight),
                   child: Center(
                     child: Text(
-                      '${percent.toStringAsFixed(0)}%',
-                      style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary),
+                      '${percentRaw.toStringAsFixed(0)}%',
+                      style: TextStyle(fontWeight: FontWeight.bold, color: highlightColor),
                     ),
                   ),
                 ),
@@ -333,7 +721,7 @@ class _NutritionScreenState extends State<NutritionScreen> {
                 value: (percent / 100).clamp(0, 1),
                 minHeight: 8,
                 backgroundColor: context.colors.surfaceLight,
-                valueColor: const AlwaysStoppedAnimation(AppColors.primary),
+                valueColor: AlwaysStoppedAnimation(highlightColor),
               ),
             ),
           ],
@@ -396,11 +784,24 @@ class _NutritionScreenState extends State<NutritionScreen> {
   }
 
   void _deleteLogbookEntry(BuildContext context, String entryId) {
-    final date = context.read<NutritionProvider>().currentLogbook?.date ?? DateTime.now();
-    context.read<NutritionProvider>().deleteLogbookEntry(entryId, date).catchError((e) {
+    final provider = context.read<NutritionProvider>();
+    final date = provider.currentDate;
+    provider.deleteLogbookEntry(entryId, date).catchError((e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro: $e')));
       }
     });
+  }
+
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    if (date.year == now.year && date.month == now.month && date.day == now.day) {
+      return 'Hoje';
+    }
+    final yesterday = now.subtract(const Duration(days: 1));
+    if (date.year == yesterday.year && date.month == yesterday.month && date.day == yesterday.day) {
+      return 'Ontem';
+    }
+    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
   }
 }

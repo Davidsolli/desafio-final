@@ -8,7 +8,6 @@ import '../../providers/goal_provider.dart';
 import '../../providers/logbook_provider.dart';
 import '../../services/dashboard_service.dart';
 import '../../widgets/frequency_bar_chart.dart';
-import '../../widgets/progression_line_chart.dart';
 import '../../shared/widgets/index.dart';
 
 class MetricsScreen extends StatefulWidget {

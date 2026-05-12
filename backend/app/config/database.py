@@ -65,6 +65,7 @@ async def init_db() -> None:
     import app.models.diet  # noqa: F401 — registra CustomFood, Diet, DietMeal, DietItem
     import app.models.diet_logbook  # noqa: F401 — registra DietLogbook, DietLogbookEntry
     from app.models.invitation import Invitation  # noqa: F401 — registra Invitation
+    import app.models.payment  # noqa: F401 — registra Plan, Subscription
 
     logger = logging.getLogger(__name__)
 
