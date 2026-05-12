@@ -181,9 +181,9 @@ class SubscriptionService:
             subscription_id=subscription.id,
             plan_name=plan.name,
             price_brl=float(plan.price),
-            student_name=student.full_name or student.email,
+            student_name=student.name or student.email,
             student_email=student.email,
-            student_phone=getattr(student, "phone_whatsapp", None) or getattr(student, "phone", None),
+            student_phone=getattr(student, "phone_whatsapp", None),
         )
 
         if infinitepay_result:
@@ -195,7 +195,7 @@ class SubscriptionService:
             if phone:
                 await send_payment_link(
                     phone=phone,
-                    student_name=student.full_name or student.email,
+                    student_name=student.name or student.email,
                     plan_name=plan.name,
                     payment_url=checkout_url,
                     price_brl=float(plan.price),
@@ -203,7 +203,7 @@ class SubscriptionService:
         else:
             # InfinitePay falhou — retorna URL de fallback para o aluno copiar
             logger.warning(f"InfinitePay falhou para subscription {subscription.id}, usando fallback")
-            checkout_url = f"https://checkout.infinitepay.com.br/rafaelapvilela"
+            checkout_url = f"https://checkout.infinitepay.io/rafaelapvilela"
             external_id = f"manual_{subscription.id}"
 
         return CheckoutResponseDTO(

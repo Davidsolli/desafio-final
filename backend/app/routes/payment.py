@@ -135,7 +135,7 @@ async def create_checkout(
     session: AsyncSession = Depends(get_db)
 ):
     """Criar checkout para assinatura"""
-    if current_user.role != "student":
+    if current_user.role not in ("student", "client"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Apenas alunos podem criar assinaturas"
@@ -163,7 +163,7 @@ async def get_current_subscription(
     session: AsyncSession = Depends(get_db)
 ):
     """Buscar assinatura ativa do aluno"""
-    if current_user.role != "student":
+    if current_user.role not in ("student", "client"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Apenas alunos podem acessar suas assinaturas"
@@ -191,7 +191,7 @@ async def get_subscription(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assinatura não encontrada")
 
     # Validar permissão (aluno só vê sua, admin vê de seus alunos)
-    if current_user.role == "student" and subscription.student_id != current_user.id:
+    if current_user.role in ("student", "client") and subscription.student_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Sem permissão")
 
     return subscription
