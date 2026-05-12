@@ -141,7 +141,7 @@ class WorkoutSheetListItemDTO(BaseModel):
     """Item de ficha na listagem (sem exercícios completos, com contagem)."""
 
     id: UUID
-    workout_program_id: UUID
+    workout_program_id: Optional[UUID] = None
     name: str
     day_of_week: Optional[int] = None
     order: int

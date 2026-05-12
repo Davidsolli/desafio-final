@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "179733082586",
+    "project_id": "omniconnect-fitness",
+    "storage_bucket": "omniconnect-fitness.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:179733082586:android:2532c37a481dcfb404d0e3",
+        "android_client_info": {
+          "package_name": "com.example.omniconnect_fitness"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBpOCdnTfHvk7YA4DdxALdRW5aaH_dfbEo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

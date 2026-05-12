@@ -131,7 +131,8 @@ class WorkoutSheetRepository:
         # Página
         offset = (page - 1) * limit
         paged_stmt = (
-            base_stmt.order_by(WorkoutSheet.order.asc(), WorkoutSheet.created_at.desc())
+            base_stmt.options(selectinload(WorkoutSheet.exercises))
+            .order_by(WorkoutSheet.order.asc(), WorkoutSheet.created_at.desc())
             .offset(offset)
             .limit(limit)
         )
