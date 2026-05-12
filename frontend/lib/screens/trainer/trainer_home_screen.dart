@@ -26,6 +26,13 @@ class _TrainerHomeScreenState extends State<TrainerHomeScreen> {
     _initDashboard();
   }
 
+  String _greeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return 'Bom dia,';
+    if (hour < 18) return 'Boa tarde,';
+    return 'Boa noite,';
+  }
+
   void _initDashboard() {
     final apiClient = context.read<ApiClient>();
     final service = DashboardService(apiClient);
@@ -59,45 +66,61 @@ class _TrainerHomeScreenState extends State<TrainerHomeScreen> {
 
               return CustomScrollView(
                 slivers: [
-                  // Header
-                  SliverAppBar(
-                    backgroundColor: context.colors.background,
-                    elevation: 0,
-                    pinned: false,
-                  ),
+                  // ── Header ──────────────────────────────────────────────
                   SliverToBoxAdapter(
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text('Olá, ${provider.trainerName}',
-                                      style: Theme.of(context).textTheme.bodySmall
-                                          ?.copyWith(color: context.colors.textSecondary)),
-                                  Text('Painel Profissional 👨‍🏫',
-                                      style: Theme.of(context).textTheme.headlineSmall
-                                          ?.copyWith(fontWeight: FontWeight.bold)),
-                                ],
+                              Text(
+                                _greeting(),
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(color: context.colors.textSecondary),
                               ),
-                              IconButton(
-                                icon: const Icon(Icons.card_giftcard_outlined),
-                                color: AppColors.primary,
-                                onPressed: () => context.push(AppRoutes.generateInvite),
-                                tooltip: 'Gerar Convite',
+                              Row(
+                                children: [
+                                  Text(
+                                    provider.trainerName,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .headlineSmall
+                                        ?.copyWith(fontWeight: FontWeight.bold),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  const Text('🏋️', style: TextStyle(fontSize: 20)),
+                                ],
                               ),
                             ],
                           ),
-                          const SizedBox(height: 16),
-                          // Stats
+                          GestureDetector(
+                            onTap: () => context.push(AppRoutes.generateInvite),
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: AppColors.primary.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Icon(Icons.person_add_outlined,
+                                  color: AppColors.primary, size: 20),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // ── Stats 2×2 ───────────────────────────────────────────
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                      child: Column(
+                        children: [
                           Row(
                             children: [
-                              // Total Alunos
                               Expanded(
                                 child: _StatsCard(
                                   icon: Icons.people_outlined,
@@ -106,12 +129,32 @@ class _TrainerHomeScreenState extends State<TrainerHomeScreen> {
                                 ),
                               ),
                               const SizedBox(width: 12),
-                              // Freq Média
                               Expanded(
                                 child: _StatsCard(
-                                  icon: Icons.calendar_today_outlined,
-                                  title: '${provider.averageFrequency.toStringAsFixed(1)}x',
-                                  subtitle: 'Freq. Média',
+                                  icon: Icons.fitness_center_outlined,
+                                  title: '${provider.workoutsThisWeek}',
+                                  subtitle: 'Treinos esta\nSemana',
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _StatsCard(
+                                  icon: Icons.mail_outline,
+                                  title: '${provider.pendingInvites}',
+                                  subtitle: 'Convites\nPendentes',
+                                  onTap: () => context.push(AppRoutes.generateInvite),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: _StatsCard(
+                                  icon: Icons.trending_up_outlined,
+                                  title: '${provider.averageAdherence.toStringAsFixed(0)}%',
+                                  subtitle: 'Adesão Média',
                                 ),
                               ),
                             ],
@@ -120,25 +163,122 @@ class _TrainerHomeScreenState extends State<TrainerHomeScreen> {
                       ),
                     ),
                   ),
-                  // Lista de Alunos
+
+                  // ── Ações Rápidas ────────────────────────────────────────
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Ações Rápidas',
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _QuickActionButton(
+                                  icon: Icons.person_add_outlined,
+                                  label: 'Convidar\nAluno',
+                                  color: AppColors.primary,
+                                  onTap: () => context.push(AppRoutes.generateInvite),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: _QuickActionButton(
+                                  icon: Icons.assignment_outlined,
+                                  label: 'Criar\nFicha',
+                                  color: const Color(0xFF4db8ff),
+                                  onTap: () => context.go(AppRoutes.trainerSheets),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: _QuickActionButton(
+                                  icon: Icons.people_outlined,
+                                  label: 'Ver\nAlunos',
+                                  color: const Color(0xFFffc84d),
+                                  onTap: () => context.go(AppRoutes.trainerStudents),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // ── Alertas: alunos inativos ─────────────────────────────
+                  if (provider.studentsNeedingAttention.isNotEmpty)
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+                      sliver: SliverToBoxAdapter(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.warning_amber_rounded,
+                                    color: Color(0xFFffc84d), size: 16),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Precisam de atenção',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .labelMedium
+                                      ?.copyWith(
+                                        color: const Color(0xFFffc84d),
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            ...provider.studentsNeedingAttention.map(
+                              (s) => _StudentCard(student: s, needsAttention: true),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                  // ── Lista de Alunos ──────────────────────────────────────
                   if (provider.students.isEmpty)
-                    const SliverFillRemaining(
-                      child: OmniEmptyState(
-                        icon: Icons.people_outline,
-                        title: 'Nenhum aluno vinculado ainda',
-                        subtitle: 'Crie uma ficha de treino para começar',
+                    SliverFillRemaining(
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 24),
+                        child: OmniEmptyState(
+                          icon: Icons.people_outline,
+                          title: 'Nenhum aluno vinculado ainda',
+                          subtitle: 'Convide alunos para começar',
+                        ),
                       ),
                     )
                   else
                     SliverPadding(
-                      padding: const EdgeInsets.all(16),
-                      sliver: SliverList(
-                        delegate: SliverChildBuilderDelegate(
-                          (context, index) {
-                            final student = provider.studentsSortedByAdherence[index];
-                            return _StudentCard(student: student);
-                          },
-                          childCount: provider.students.length,
+                      padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+                      sliver: SliverToBoxAdapter(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Meus Alunos',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 12),
+                            ...provider.studentsSortedByAdherence.map(
+                              (s) => _StudentCard(student: s),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -157,11 +297,13 @@ class _StatsCard extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
+  final VoidCallback? onTap;
 
   const _StatsCard({
     required this.icon,
     required this.title,
     required this.subtitle,
+    this.onTap,
   });
 
   @override
@@ -170,6 +312,52 @@ class _StatsCard extends StatelessWidget {
       icon: icon,
       value: title,
       label: subtitle,
+      onTap: onTap,
+    );
+  }
+}
+
+/// Botão de ação rápida
+class _QuickActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _QuickActionButton({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.10),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: color, size: 24),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w600,
+                    height: 1.3,
+                  ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -177,20 +365,27 @@ class _StatsCard extends StatelessWidget {
 /// Card individual do aluno
 class _StudentCard extends StatelessWidget {
   final StudentDashboardData student;
+  final bool needsAttention;
 
-  const _StudentCard({required this.student});
+  const _StudentCard({required this.student, this.needsAttention = false});
 
   @override
   Widget build(BuildContext context) {
+    final borderColor = needsAttention
+        ? const Color(0xFFffc84d)
+        : context.colors.border;
+
     return GestureDetector(
       onTap: () => context.push('/trainer/student/${student.id}'),
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: context.colors.surface,
+          color: needsAttention
+              ? const Color(0xFFffc84d).withOpacity(0.06)
+              : context.colors.surface,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: context.colors.border, width: 1),
+          border: Border.all(color: borderColor, width: needsAttention ? 1.5 : 1),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -222,23 +417,43 @@ class _StudentCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            // Último treino (direita)
+            // Último treino + aderência (direita)
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(student.lastWorkoutDisplay,
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(color: context.colors.textSecondary),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis),
+                if (needsAttention)
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFffc84d).withOpacity(0.18),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      student.lastWorkout == null
+                          ? 'Nunca treinou'
+                          : student.lastWorkoutDisplay,
+                      style: const TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFFffc84d),
+                          fontWeight: FontWeight.w600),
+                    ),
+                  )
+                else
+                  Text(student.lastWorkoutDisplay,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: context.colors.textSecondary),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
                 const SizedBox(height: 8),
                 SizedBox(
                   width: 100,
                   child: OmniProgressBar(
                     value: student.adherencePercent / 100,
-                    trailingLabel: '${student.adherencePercent.toStringAsFixed(0)}%',
+                    trailingLabel:
+                        '${student.adherencePercent.toStringAsFixed(0)}%',
                   ),
                 ),
               ],
