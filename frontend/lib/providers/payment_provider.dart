@@ -129,6 +129,32 @@ class PaymentProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> updatePlan(String planId, {
+    String? name,
+    String? description,
+    double? price,
+    int? durationMonths,
+    bool? isActive,
+  }) async {
+    try {
+      final updatedPlan = await _service.updatePlan(
+        planId,
+        name: name,
+        description: description,
+        price: price,
+        durationMonths: durationMonths,
+        isActive: isActive,
+      );
+      _plans = _plans.map((p) => p.id == planId ? updatedPlan : p).toList();
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      return false;
+    }
+  }
+
   Future<void> loadDashboard({String? statusFilter}) async {
     _isLoadingDashboard = true;
     _error = null;

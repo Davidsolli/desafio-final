@@ -145,6 +145,11 @@ class _AdminPlansScreenState extends State<AdminPlansScreen> {
               ),
               const SizedBox(width: 8),
               GestureDetector(
+                onTap: () => _showEditPlanDialog(context, plan),
+                child: Icon(Icons.edit_outlined, color: context.colors.textSecondary, size: 20),
+              ),
+              const SizedBox(width: 8),
+              GestureDetector(
                 onTap: () => _confirmDelete(context, plan),
                 child: const Icon(Icons.delete_outline, color: AppColors.accentError, size: 20),
               ),
@@ -406,6 +411,221 @@ class _AdminPlansScreenState extends State<AdminPlansScreen> {
             child: const Text('Excluir', style: TextStyle(color: AppColors.accentError)),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showEditPlanDialog(BuildContext context, PlanModel plan) {
+    final nameCtrl = TextEditingController(text: plan.name);
+    final descCtrl = TextEditingController(text: plan.description ?? '');
+    final priceCtrl = TextEditingController(text: plan.price.toStringAsFixed(2));
+    int selectedDuration = plan.durationMonths;
+    String? selectedModality = plan.modality;
+    bool isActive = plan.isActive;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: context.colors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) => Padding(
+          padding: EdgeInsets.fromLTRB(20, 12, 20, MediaQuery.of(ctx).viewInsets.bottom + 24),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40, height: 4,
+                    decoration: BoxDecoration(
+                      color: context.colors.surfaceLight,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  'Editar Plano',
+                  style: TextStyle(
+                    color: context.colors.textPrimary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                OmniTextField(
+                  controller: nameCtrl,
+                  labelText: 'Nome do plano',
+                  hintText: 'Ex: Plano Premium',
+                ),
+                const SizedBox(height: 12),
+                OmniTextField(
+                  controller: descCtrl,
+                  labelText: 'Descrição (opcional)',
+                  hintText: 'Ex: Treino + Dieta + IA',
+                ),
+                const SizedBox(height: 12),
+                OmniTextField(
+                  controller: priceCtrl,
+                  labelText: 'Valor (R\$)',
+                  hintText: 'Ex: 150.00',
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Duração',
+                  style: TextStyle(color: context.colors.textPrimary, fontSize: 14, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  children: [1, 3, 6, 12].map((months) {
+                    final isSelected = selectedDuration == months;
+                    final label = months == 12 ? '1 ano' : '$months ${months == 1 ? 'mês' : 'meses'}';
+                    return GestureDetector(
+                      onTap: () => setModalState(() => selectedDuration = months),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: isSelected ? AppColors.primary : context.colors.surfaceLight,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: isSelected ? AppColors.primary : Colors.transparent),
+                        ),
+                        child: Text(
+                          label,
+                          style: TextStyle(
+                            color: isSelected ? Colors.white : context.colors.textSecondary,
+                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Modalidade (opcional)',
+                  style: TextStyle(color: context.colors.textPrimary, fontSize: 14, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  children: ['Online', 'Presencial', 'Híbrido'].map((mod) {
+                    final isSelected = selectedModality == mod;
+                    return GestureDetector(
+                      onTap: () => setModalState(() =>
+                          selectedModality = isSelected ? null : mod),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                        decoration: BoxDecoration(
+                          color: isSelected ? AppColors.primary : context.colors.surfaceLight,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          mod,
+                          style: TextStyle(
+                            color: isSelected ? Colors.white : context.colors.textSecondary,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Text(
+                      'Plano Ativo',
+                      style: TextStyle(color: context.colors.textPrimary, fontSize: 14, fontWeight: FontWeight.w600),
+                    ),
+                    const Spacer(),
+                    Switch(
+                      value: isActive,
+                      activeColor: AppColors.primary,
+                      onChanged: (val) => setModalState(() => isActive = val),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => _doUpdatePlan(
+                      ctx,
+                      plan.id,
+                      nameCtrl.text,
+                      descCtrl.text,
+                      priceCtrl.text,
+                      selectedDuration,
+                      selectedModality,
+                      isActive,
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Text('Salvar Alterações', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _doUpdatePlan(
+    BuildContext ctx,
+    String planId,
+    String name,
+    String description,
+    String priceStr,
+    int durationMonths,
+    String? modality,
+    bool isActive,
+  ) async {
+    if (name.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nome do plano é obrigatório'), backgroundColor: AppColors.accentError),
+      );
+      return;
+    }
+
+    final price = double.tryParse(priceStr.replaceAll(',', '.'));
+    if (price == null || price <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Informe um valor válido'), backgroundColor: AppColors.accentError),
+      );
+      return;
+    }
+
+    Navigator.pop(ctx);
+
+    final provider = context.read<PaymentProvider>();
+    final success = await provider.updatePlan(
+      planId,
+      name: name.trim(),
+      description: description.trim().isEmpty ? null : description.trim(),
+      price: price,
+      durationMonths: durationMonths,
+      isActive: isActive,
+    );
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(success ? 'Plano atualizado com sucesso!' : provider.error ?? 'Erro ao atualizar plano'),
+        backgroundColor: success ? AppColors.accentSuccess : AppColors.accentError,
       ),
     );
   }
