@@ -19,6 +19,7 @@ from app.routes.diet import custom_food_router, diet_router
 from app.routes.diet_logbook import router as diet_logbook_router
 from app.routes.password import router as password_router
 from app.routes.notification import router as notification_router
+from app.routes.steps import router as steps_router
 
 from app.tasks.notification_scheduler import NotificationScheduler
 
@@ -99,3 +100,4 @@ app.include_router(webhooks.router)
 app.include_router(pages_router)
 app.include_router(password_router)
 app.include_router(notification_router)
+app.include_router(steps_router)

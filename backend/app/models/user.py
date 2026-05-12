@@ -98,6 +98,8 @@ class User(Base):
 
     fcm_token = Column(String(500), nullable=True)
 
+    daily_step_goal = Column(Integer, nullable=False, default=1000)
+
     timezone = Column(
         String(50),
         nullable=True,
