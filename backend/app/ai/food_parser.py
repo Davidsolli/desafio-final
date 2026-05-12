@@ -296,6 +296,35 @@ class FoodParser:
         logger.warning("LLM não retornou índice válido, usando primeiro candidato")
         return candidates[0]
 
+    # ── Etapa 3b: Verificar base de alimentos personalizados do usuário ──────
+
+    async def _find_existing_custom_food(
+        self, food_name: str, session: AsyncSession, user_id: UUID
+    ) -> CustomFood | None:
+        """
+        Verifica se o usuário já tem um CustomFood com este nome.
+
+        Usa ILIKE nos dois sentidos para encontrar correspondências parciais:
+          - Guardado "whey protein"  + buscado "whey protein isolado" → match
+          - Guardado "whey protein isolado" + buscado "whey protein" → match
+        """
+        from sqlalchemy import or_
+
+        stmt = (
+            select(CustomFood)
+            .where(
+                CustomFood.user_id == user_id,
+                or_(
+                    CustomFood.name.ilike(f"%{food_name}%"),
+                    CustomFood.name.ilike(f"{food_name[:20]}%"),  # prefixo
+                ),
+            )
+            .order_by(CustomFood.created_at.desc())
+            .limit(1)
+        )
+        result = await session.execute(stmt)
+        return result.scalars().first()
+
     # ── Etapa 4a: Busca web via Tavily ────────────────────────────────────────
 
     async def _search_web_nutrition(
@@ -533,14 +562,37 @@ class FoodParser:
                 catalog_item=best_match,
             )
 
-        # Etapa 3: TACO não encontrou — tentar fallback web/LLM
+        # Etapa 3: TACO não encontrou — tentar fallback
         if not user_id:
             raise FoodNotFoundError(
                 f"'{food_name_raw}' não foi encontrado no catálogo nutricional. "
                 "Tente digitar o nome do alimento manualmente pelo app."
             )
 
-        # 3a: Busca web via Tavily
+        # 3a: Checar base personalizada do usuário antes de qualquer busca externa.
+        # Evita duplicatas: o mesmo alimento (whey, suplemento, etc.) pesquisado
+        # mais de uma vez reutiliza o CustomFood já salvo.
+        existing = await self._find_existing_custom_food(
+            food_name_raw, session, user_id
+        )
+        if existing:
+            source = existing.category if existing.category in {"web_search", "estimativa_ia"} else "web"
+            # Normaliza para os valores esperados pelo front
+            source = "web" if existing.category == "web_search" else "estimativa"
+            logger.info(
+                "Parser cache | raw=%r → CustomFood existente id=%s (%s)",
+                food_name_raw, existing.id, existing.category,
+            )
+            return FoodParseResult(
+                food_name_raw=food_name_raw,
+                quantity_g=quantity_g,
+                meal_name=meal_name,
+                confidence=confidence,
+                source=source,
+                custom_food=existing,
+            )
+
+        # 3b: Busca web via Tavily
         custom_food: CustomFood | None = None
         source = "web"
 
@@ -549,7 +601,7 @@ class FoodParser:
                 food_name_raw, session, user_id
             )
 
-        # 3b: Estimativa LLM como último recurso
+        # 3c: Estimativa LLM como último recurso
         if custom_food is None:
             source = "estimativa"
             custom_food = await self._estimate_nutrition_llm(
