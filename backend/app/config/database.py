@@ -74,6 +74,7 @@ async def init_db() -> None:
     from app.models.whatsapp_pre_registration import WhatsAppPreRegistration  # noqa: F401
     import app.models.notification  # noqa: F401 — registra NotificationPreference, NotificationLog, WorkoutReminderSchedule
     import app.models.step_log  # noqa: F401 — registra StepLog
+    import app.models.payment  # noqa: F401 — registra Plan, Subscription
 
     logger = logging.getLogger(__name__)
 
@@ -133,7 +134,7 @@ async def init_db() -> None:
                 await conn.execute(text(alter))
             except Exception as exc:
                 logger.warning("Erro ao executar ALTER TABLE diets: %s", exc)
-        logger.info("✓ Colunas atualizadas em diets para suportar water_target_ml")
+        logger.info("✓ Colunas updated em diets para suportar water_target_ml")
 
         # 6. Migração: converter colunas de password_reset_tokens para TIMESTAMPTZ
         token_col_alters = [
@@ -191,17 +192,6 @@ async def init_db() -> None:
             logger.info("✓ Coluna student_inactivity_enabled verificada/adicionada em notification_preferences")
         except Exception as exc:
             logger.warning("Erro ao adicionar student_inactivity_enabled em notification_preferences: %s", exc)
-
-    # 4. Migração manual: Adicionar food_name ao logbook entries se não existir
-    # (feita APÓS criar as tabelas, em transação separada)
-    # COMENTADO TEMPORARIAMENTE - será aplicado depois
-    # engine = _get_engine()
-    # async with engine.begin() as conn:
-    #     try:
-    #         await conn.execute(text("ALTER TABLE diet_logbook_entries ADD COLUMN IF NOT EXISTS food_name VARCHAR(255) DEFAULT '';"))
-    #         logger.info("✓ Coluna food_name verificada/adicionada em diet_logbook_entries")
-    #     except Exception as exc:
-    #         logger.warning("Erro na migração manual de diet_logbook_entries: %s", exc)
 
     # Popular Banco de Dados Inicial (Seed)
     import sys

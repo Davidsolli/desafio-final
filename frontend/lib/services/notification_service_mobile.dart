@@ -96,12 +96,16 @@ class NotificationService {
 
   Future<List<Map<String, dynamic>>> getHistory({String? type, int limit = 20}) async {
     try {
+      final queryParams = <String, String>{
+        'limit': limit.toString(),
+      };
+      if (type != null) {
+        queryParams['notification_type'] = type;
+      }
+
       final response = await apiClient.get<Map<String, dynamic>>(
         '/notifications/history',
-        queryParameters: {
-          'notification_type': ?type,
-          'limit': limit,
-        },
+        queryParameters: queryParams,
         fromJson: (json) => json is Map<String, dynamic> ? json : {},
       );
       final data = response['data'];

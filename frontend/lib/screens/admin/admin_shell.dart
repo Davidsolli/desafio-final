@@ -18,8 +18,10 @@ class AdminShell extends StatefulWidget {
 class _AdminShellState extends State<AdminShell> {
   int _getSelectedNavIndex(String currentPath) {
     if (currentPath.contains('/admin/trainers')) return 0;
-    if (currentPath.contains('/admin/whatsapp')) return 1;
-    if (currentPath.contains('/admin/settings')) return 2;
+    if (currentPath.contains('/admin/plans')) return 1;
+    if (currentPath.contains('/admin/payments')) return 2;
+    if (currentPath.contains('/admin/whatsapp')) return 3;
+    if (currentPath.contains('/admin/settings')) return 4;
     return 0;
   }
 
@@ -46,6 +48,8 @@ class _AdminShellState extends State<AdminShell> {
         onTap: (index) {
           final routes = [
             '/admin/trainers',
+            '/admin/plans',
+            '/admin/payments',
             '/admin/whatsapp',
             '/admin/settings',
           ];
@@ -57,8 +61,10 @@ class _AdminShellState extends State<AdminShell> {
         unselectedItemColor: context.colors.textMuted,
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.people_outlined), label: 'Trainers'),
+          BottomNavigationBarItem(icon: Icon(Icons.card_membership_outlined), label: 'Planos'),
+          BottomNavigationBarItem(icon: Icon(Icons.attach_money), label: 'Pagamentos'),
           BottomNavigationBarItem(icon: Icon(Icons.mark_chat_unread_outlined), label: 'WhatsApp'),
-          BottomNavigationBarItem(icon: Icon(Icons.settings_outlined), label: 'Configurações'),
+          BottomNavigationBarItem(icon: Icon(Icons.settings_outlined), label: 'Config'),
         ],
       ),
     );

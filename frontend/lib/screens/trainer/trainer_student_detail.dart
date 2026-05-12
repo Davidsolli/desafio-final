@@ -836,7 +836,6 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                   Tab(icon: Icon(Icons.info_outline), text: 'Info'),
                   Tab(icon: Icon(Icons.fitness_center), text: 'Treinos'),
                   Tab(icon: Icon(Icons.restaurant_outlined), text: 'Nutrição'),
-                  Tab(icon: Icon(Icons.trending_up), text: 'Evolução'),
                   Tab(icon: Icon(Icons.directions_walk), text: 'Passos'),
                 ],
                 labelColor: AppColors.primary,

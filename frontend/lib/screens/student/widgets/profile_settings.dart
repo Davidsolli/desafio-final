@@ -169,6 +169,27 @@ class _ProfileSettingsState extends State<ProfileSettings> {
           ),
         ),
         const SizedBox(height: 16),
+        // ── Minha Assinatura ──────────────────────────────────────────────
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              side: const BorderSide(color: AppColors.primary),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () => context.push(AppRoutes.subscription),
+            icon: const Icon(Icons.card_membership_outlined, color: AppColors.primary),
+            label: Text(
+              'Minha Assinatura',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
         // ── Alterar Senha ─────────────────────────────────────────────────
         SizedBox(
           width: double.infinity,

@@ -51,6 +51,14 @@ class Settings(BaseSettings):
     CHAT_INACTIVITY_CLOSE_HOURS: int = 24       # RN-02: fechar conversa após 24h inativa
     CHAT_MAX_RESPONSE_LATENCY_MS: int = 10000   # Timeout máximo para o LLM (cold start + rede)
 
+    # ── InfinitePay ────────────────────────────────────────────────────────
+    INFINITEPAY_HANDLE: str = "natalia-faria-16"
+    INFINITEPAY_WEBHOOK_URL: str = ""           # URL pública do servidor (ex: https://api.seudominio.com)
+
+    # ── WhatsApp (Meta Cloud API) ──────────────────────────────────────────
+    WHATSAPP_TOKEN: str = ""
+    WHATSAPP_PHONE_NUMBER_ID: str = ""
+
     # ── Firebase ──────────────────────────────────────────────────────────
     FIREBASE_CREDENTIALS_PATH: str = "./firebase-credentials.json"
 

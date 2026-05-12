@@ -15,6 +15,8 @@ import 'services/workout_sheet_service.dart';
 import 'services/invitation_service.dart';
 import 'services/admin_service.dart';
 import 'services/chat_service.dart';
+import 'services/payment_service.dart';
+import 'providers/payment_provider.dart';
 import 'services/step_service.dart';
 import 'providers/auth_provider.dart';
 import 'providers/user_provider.dart';
@@ -132,6 +134,11 @@ class OmniConnectApp extends StatelessWidget {
           update: (_, apiClient, _) => StepService(apiClient: apiClient),
         ),
 
+        // Payment Service (depende de ApiClient)
+        ProxyProvider<ApiClient, PaymentService>(
+          update: (_, apiClient, __) => PaymentService(apiClient: apiClient),
+        ),
+
         // Auth Provider (depende de AuthService)
         ChangeNotifierProxyProvider<AuthService, AuthProvider>(
           create: (context) => AuthProvider(
@@ -219,6 +226,16 @@ class OmniConnectApp extends StatelessWidget {
           ),
           update: (_, stepService, previous) {
             return previous ?? StepProvider(stepService: stepService);
+          },
+        ),
+
+        // Payment Provider (depende de PaymentService)
+        ChangeNotifierProxyProvider<PaymentService, PaymentProvider>(
+          create: (context) => PaymentProvider(
+            paymentService: context.read<PaymentService>(),
+          ),
+          update: (_, paymentService, previous) {
+            return previous ?? PaymentProvider(paymentService: paymentService);
           },
         ),
       ],
