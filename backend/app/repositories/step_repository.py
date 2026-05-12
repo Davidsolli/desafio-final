@@ -31,6 +31,7 @@ class StepRepository:
         day: date_type,
         steps: int,
         distance_meters: float,
+        handicap_level: Optional[int] = None,
     ) -> StepLog:
         """Cria ou atualiza o registro do dia para o usuário."""
         existing = await self.get_by_user_and_date(user_id, day)
@@ -39,6 +40,8 @@ class StepRepository:
             if steps > existing.steps:
                 existing.steps = steps
                 existing.distance_meters = distance_meters
+            # Handicap é sempre atualizado (usuário pode mudar o nível durante o dia)
+            existing.handicap_level = handicap_level
             return existing
 
         log = StepLog(
@@ -46,6 +49,7 @@ class StepRepository:
             date=day,
             steps=steps,
             distance_meters=distance_meters,
+            handicap_level=handicap_level,
         )
         self.session.add(log)
         await self.session.flush()
@@ -72,29 +76,14 @@ class StepRepository:
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
-    async def get_weekly_best(self, user_id: UUID) -> int:
-        """
-        Calcula a maior soma semanal de passos já registrada pelo usuário.
-        Usa semana ISO (segunda a domingo).
-        """
-        # date_trunc não suporta 'isoweek', então truncamos para 'week' (segunda-feira no PG)
-        week_col = func.date_trunc("week", StepLog.date)
-        query = (
-            select(week_col.label("week_start"), func.sum(StepLog.steps).label("total"))
-            .where(StepLog.user_id == user_id)
-            .group_by(week_col)
-            .order_by(func.sum(StepLog.steps).desc())
-            .limit(1)
-        )
+    async def get_all_time_record(self, user_id: UUID) -> int:
+        """Retorna a maior contagem de passos num único dia já registrada."""
+        query = select(func.max(StepLog.steps)).where(StepLog.user_id == user_id)
         result = await self.session.execute(query)
-        row = result.first()
-        if row is None:
-            return 0
-        return int(row.total or 0)
+        return int(result.scalar() or 0)
 
     async def get_current_week_total(self, user_id: UUID, today: date_type) -> int:
         """Total de passos da semana atual (segunda → domingo)."""
-        # Segunda-feira da semana atual (Python: weekday() = 0 para segunda)
         monday = today - timedelta(days=today.weekday())
         sunday = monday + timedelta(days=6)
 
@@ -108,23 +97,6 @@ class StepRepository:
         result = await self.session.execute(query)
         total = result.scalar() or 0
         return int(total)
-
-    async def get_max_day_in_week(
-        self, user_id: UUID, day: date_type
-    ) -> int:
-        """Maior contagem de passos em um único dia da semana de `day`."""
-        monday = day - timedelta(days=day.weekday())
-        sunday = monday + timedelta(days=6)
-
-        query = select(func.coalesce(func.max(StepLog.steps), 0)).where(
-            and_(
-                StepLog.user_id == user_id,
-                StepLog.date >= monday,
-                StepLog.date <= sunday,
-            )
-        )
-        result = await self.session.execute(query)
-        return int(result.scalar() or 0)
 
     async def commit(self) -> None:
         await self.session.commit()

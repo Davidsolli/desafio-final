@@ -10,6 +10,7 @@ from app.dtos.step_dto import (
     SyncStepsDTO,
     StepLogResponseDTO,
     StepHistoryResponseDTO,
+    UpdateStepGoalDTO,
 )
 from app.models.user import User
 from app.services.step_service import StepService
@@ -44,3 +45,11 @@ class StepController:
         return await self.service.get_student_history(
             student_id, requesting_user, start_date, end_date
         )
+
+    async def update_goal(self, user_id: UUID, dto: UpdateStepGoalDTO) -> None:
+        return await self.service.update_goal(user_id, dto)
+
+    async def update_student_goal(
+        self, trainer: User, student_id: UUID, dto: UpdateStepGoalDTO
+    ) -> None:
+        return await self.service.update_student_goal(trainer, student_id, dto)

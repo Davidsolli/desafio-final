@@ -16,8 +16,10 @@ class StepSummaryCard extends StatelessWidget {
     return Consumer<StepProvider>(
       builder: (context, provider, _) {
         final steps = provider.stepsToday;
-        final progress = (steps / kDailyStepGoal).clamp(0.0, 1.0);
+        final goal = provider.dailyGoal;
+        final progress = goal > 0 ? (steps / goal).clamp(0.0, 1.0) : 0.0;
         final distanceKm = provider.distanceTodayKm;
+        final calories = provider.caloriesToday;
 
         return GestureDetector(
           onTap: () => context.push(AppRoutes.steps),
@@ -74,12 +76,36 @@ class StepSummaryCard extends StatelessWidget {
                         ],
                       ),
                     ),
-                    Text(
-                      '${distanceKm.toStringAsFixed(2)} km',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.w600,
-                          ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          '${distanceKm.toStringAsFixed(2)} km',
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                        ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.local_fire_department,
+                                color: Color(0xFFF59E0B), size: 12),
+                            const SizedBox(width: 2),
+                            Text(
+                              '${calories.toStringAsFixed(0)} kcal',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    color: const Color(0xFFF59E0B),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                     const SizedBox(width: 4),
                     Icon(Icons.chevron_right,
@@ -100,7 +126,7 @@ class StepSummaryCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Meta: ${_formatNumber(kDailyStepGoal)}',
+                  'Meta: ${_formatNumber(goal)} passos',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: context.colors.textSecondary,
                       ),

@@ -17,17 +17,8 @@ enum StepProviderState {
   sensorUnavailable,
 }
 
-/// Meta padrão de passos por dia (usada na barra de progresso da home).
-const int kDailyStepGoal = 10000;
-
 /// Provider que conecta o sensor nativo de passos do dispositivo,
 /// mantém o total do dia em memória e sincroniza com o backend.
-///
-/// Lógica do baseline:
-///   `Pedometer.stepCountStream` retorna o total acumulado desde o último
-///   reboot do dispositivo. Para descobrir os passos do dia, guardamos um
-///   "baseline" na primeira leitura do dia em `SharedPreferences`. Os passos
-///   do dia = leitura atual - baseline.
 class StepProvider extends ChangeNotifier {
   final StepService _stepService;
 
@@ -53,19 +44,34 @@ class StepProvider extends ChangeNotifier {
   bool _isSyncing = false;
   bool get isSyncing => _isSyncing;
 
+  // Handicap: nível de proteção de sequência selecionado para hoje
+  int? _selectedHandicapLevel;
+  int? get selectedHandicapLevel => _selectedHandicapLevel;
+
+  // Getters derivados do histórico
+  int get dailyGoal => _history.dailyGoal;
+  int get currentStreak => _history.currentStreak;
+  int get allTimeRecord => _history.allTimeRecord;
+
+  double get caloriesToday {
+    if (_history.totalCaloriesToday > 0) return _history.totalCaloriesToday;
+    // Estimativa local antes de sincronizar (fallback sem peso → 70 kg)
+    return double.parse((_stepsToday * 0.04).toStringAsFixed(1));
+  }
+
   // Internos
   String? _userId;
-  double _strideMeters = 0.75; // fallback (homem ~1.80m)
+  double _strideMeters = 0.75;
   StreamSubscription<StepCount>? _stepSub;
   Timer? _syncTimer;
   DateTime _currentDay = _today();
 
   static const String _baselineKeyPrefix = 'steps_baseline_';
   static const String _stepsTodayKeyPrefix = 'steps_today_';
+  static const String _handicapKeyPrefix = 'steps_handicap_';
   static const Duration _syncInterval = Duration(minutes: 15);
 
   /// Inicializa o provider com o usuário autenticado e seus dados antropométricos.
-  /// `heightCm` e `gender` são opcionais e usados para refinar o stride.
   Future<void> initialize({
     required String userId,
     double? heightCm,
@@ -77,7 +83,6 @@ class StepProvider extends ChangeNotifier {
     _state = StepProviderState.loading;
     notifyListeners();
 
-    // 1. Pedir permissão (Android 10+ e iOS)
     final granted = await _ensurePermission();
     if (!granted) {
       _state = StepProviderState.permissionDenied;
@@ -86,17 +91,11 @@ class StepProvider extends ChangeNotifier {
       return;
     }
 
-    // 2. Carregar último valor armazenado para a UI já mostrar algo enquanto o
-    //    sensor não emite o primeiro evento.
+    await _loadCachedHandicap();
     await _loadCachedTodaySteps();
-
-    // 3. Buscar histórico do backend (independe do sensor)
     await refreshHistory();
 
-    // 4. Conectar ao stream do sensor
     _subscribeToSensor();
-
-    // 5. Iniciar sync periódico
     _syncTimer?.cancel();
     _syncTimer = Timer.periodic(_syncInterval, (_) => syncToBackend());
 
@@ -110,8 +109,40 @@ class StepProvider extends ChangeNotifier {
       _history = await _stepService.getMyHistory();
       notifyListeners();
     } catch (e) {
-      // Histórico vazio é aceitável; mantém estado atual.
       _error = 'Erro ao carregar histórico: $e';
+      notifyListeners();
+    }
+  }
+
+  /// Define o nível de handicap para o dia atual e sincroniza.
+  Future<void> setHandicapLevel(int? level) async {
+    _selectedHandicapLevel = level;
+    final prefs = await SharedPreferences.getInstance();
+    final key = _handicapKey(_currentDay);
+    if (level == null) {
+      await prefs.remove(key);
+    } else {
+      await prefs.setInt(key, level);
+    }
+    notifyListeners();
+    await syncToBackend();
+  }
+
+  /// Atualiza a meta diária de passos e sincroniza com o backend.
+  Future<void> setGoal(int goal) async {
+    try {
+      await _stepService.updateMyGoal(goal);
+      _history = StepHistory(
+        logs: _history.logs,
+        allTimeRecord: _history.allTimeRecord,
+        currentWeekTotal: _history.currentWeekTotal,
+        currentStreak: _history.currentStreak,
+        dailyGoal: goal,
+        totalCaloriesToday: _history.totalCaloriesToday,
+      );
+      notifyListeners();
+    } catch (e) {
+      _error = 'Erro ao atualizar meta: $e';
       notifyListeners();
     }
   }
@@ -128,8 +159,9 @@ class StepProvider extends ChangeNotifier {
         date: _currentDay,
         steps: _stepsToday,
         distanceMeters: _distanceTodayMeters,
+        handicapLevel: _selectedHandicapLevel,
       );
-      // Atualiza o histórico em memória com o registro mais recente
+      // Atualiza o log do dia no histórico em memória
       final logs = List<StepLog>.from(_history.logs);
       final idx = logs.indexWhere((l) => _isSameDay(l.date, _currentDay));
       if (idx >= 0) {
@@ -140,11 +172,13 @@ class StepProvider extends ChangeNotifier {
       logs.sort((a, b) => a.date.compareTo(b.date));
       _history = StepHistory(
         logs: logs,
-        weeklyBest: _history.weeklyBest,
+        allTimeRecord: _history.allTimeRecord,
         currentWeekTotal: _history.currentWeekTotal,
-        isNewWeekRecord: _history.isNewWeekRecord,
+        currentStreak: _history.currentStreak,
+        dailyGoal: _history.dailyGoal,
+        totalCaloriesToday: updated.caloriesBurned,
       );
-      // Buscar estatísticas atualizadas em segundo plano
+      // Buscar estatísticas completas em segundo plano
       unawaited(refreshHistory());
     } catch (e) {
       _error = 'Erro ao sincronizar passos: $e';
@@ -154,24 +188,19 @@ class StepProvider extends ChangeNotifier {
     }
   }
 
-  /// Chamado quando o app vai pra background — faz uma última sync.
+  /// Chamado quando o app vai pra background.
   Future<void> onAppPaused() async {
     await syncToBackend();
   }
 
-  /// Cálculo do stride length em metros.
-  /// Fórmula: altura(m) * fator (0.415 homem, 0.413 mulher).
   double _computeStride({double? heightCm, String? gender}) {
     if (heightCm == null || heightCm <= 0) return 0.75;
-    final factor = (gender?.toLowerCase().startsWith('f') ?? false)
-        ? 0.413
-        : 0.415;
+    final factor =
+        (gender?.toLowerCase().startsWith('f') ?? false) ? 0.413 : 0.415;
     return (heightCm / 100.0) * factor;
   }
 
   Future<bool> _ensurePermission() async {
-    // iOS solicita Motion automaticamente ao acessar o sensor.
-    // No Android (10+), precisamos de ACTIVITY_RECOGNITION.
     if (kIsWeb) return false;
     try {
       if (Platform.isAndroid) {
@@ -209,13 +238,12 @@ class StepProvider extends ChangeNotifier {
 
   Future<void> _handleStepEvent(StepCount event) async {
     final today = _today();
-    // Detecta virada de dia: zera o contador e cria novo baseline.
     if (!_isSameDay(today, _currentDay)) {
-      // Sync final do dia anterior antes de resetar
       await syncToBackend();
       _currentDay = today;
       _stepsToday = 0;
       _distanceTodayMeters = 0;
+      _selectedHandicapLevel = null;
       await _setBaseline(event.steps, today);
     }
 
@@ -232,23 +260,21 @@ class StepProvider extends ChangeNotifier {
 
   // --- SharedPreferences helpers ---
 
-  String _baselineKey(DateTime day) {
-    final dateStr = _formatDate(day);
-    return '$_baselineKeyPrefix${_userId ?? "anon"}_$dateStr';
-  }
+  String _baselineKey(DateTime day) =>
+      '$_baselineKeyPrefix${_userId ?? "anon"}_${_formatDate(day)}';
 
-  String _stepsTodayKey(DateTime day) {
-    final dateStr = _formatDate(day);
-    return '$_stepsTodayKeyPrefix${_userId ?? "anon"}_$dateStr';
-  }
+  String _stepsTodayKey(DateTime day) =>
+      '$_stepsTodayKeyPrefix${_userId ?? "anon"}_${_formatDate(day)}';
 
-  Future<int> _getOrCreateBaseline(int currentSensorValue, DateTime day) async {
+  String _handicapKey(DateTime day) =>
+      '$_handicapKeyPrefix${_userId ?? "anon"}_${_formatDate(day)}';
+
+  Future<int> _getOrCreateBaseline(
+      int currentSensorValue, DateTime day) async {
     final prefs = await SharedPreferences.getInstance();
     final key = _baselineKey(day);
     final stored = prefs.getInt(key);
     if (stored != null) {
-      // Caso o dispositivo tenha sido reiniciado, o sensor pode retornar valor
-      // menor que o baseline. Nesse caso, redefinimos o baseline.
       if (currentSensorValue < stored) {
         await prefs.setInt(key, currentSensorValue);
         return currentSensorValue;
@@ -277,6 +303,12 @@ class StepProvider extends ChangeNotifier {
       _distanceTodayMeters = cached * _strideMeters;
       notifyListeners();
     }
+  }
+
+  Future<void> _loadCachedHandicap() async {
+    final prefs = await SharedPreferences.getInstance();
+    final stored = prefs.getInt(_handicapKey(_currentDay));
+    _selectedHandicapLevel = stored;
   }
 
   // --- Utils ---

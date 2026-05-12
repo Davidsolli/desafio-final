@@ -161,6 +161,18 @@ async def init_db() -> None:
                 "Erro ao adicionar escalation_data em chat_conversations: %s", exc
             )
 
+        # Migração: meta diária de passos no usuário e nível de proteção da sequência no step_log
+        alters_steps = [
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS daily_step_goal INTEGER NOT NULL DEFAULT 1000",
+            "ALTER TABLE step_logs ADD COLUMN IF NOT EXISTS handicap_level INTEGER DEFAULT NULL",
+        ]
+        for alter in alters_steps:
+            try:
+                await conn.execute(text(alter))
+            except Exception as exc:
+                logger.warning("Erro ao executar migração de passos: %s", exc)
+        logger.info("✓ Colunas de passos (daily_step_goal, handicap_level) verificadas/adicionadas")
+
     # 4. Migração manual: Adicionar food_name ao logbook entries se não existir
     # (feita APÓS criar as tabelas, em transação separada)
     # COMENTADO TEMPORARIAMENTE - será aplicado depois

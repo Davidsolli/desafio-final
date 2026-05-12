@@ -830,6 +830,8 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
               color: context.colors.surface,
               child: TabBar(
                 controller: _tabController,
+                isScrollable: true,
+                tabAlignment: TabAlignment.start,
                 tabs: const [
                   Tab(icon: Icon(Icons.info_outline), text: 'Info'),
                   Tab(icon: Icon(Icons.fitness_center), text: 'Treinos'),
@@ -837,7 +839,6 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                   Tab(icon: Icon(Icons.trending_up), text: 'Evolução'),
                   Tab(icon: Icon(Icons.directions_walk), text: 'Passos'),
                 ],
-                isScrollable: true,
                 labelColor: AppColors.primary,
                 unselectedLabelColor: context.colors.textMuted,
                 indicatorColor: AppColors.primary,
@@ -2735,6 +2736,8 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
 
   // ----- Aba de Passos -----
 
+  static const _kHandicapColor = Color(0xFFF59E0B);
+
   Widget _buildStepsTab() {
     if (_stepsLoading) {
       return const OmniLoader();
@@ -2754,6 +2757,9 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
       );
     }
 
+    final weekCalories = history.logs.fold<double>(
+        0.0, (s, l) => s + l.caloriesBurned);
+
     return RefreshIndicator(
       onRefresh: _loadStepHistory,
       child: SingleChildScrollView(
@@ -2762,7 +2768,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildStepsSummary(history),
+            _buildStepsSummary(history, weekCalories),
             const SizedBox(height: 16),
             Text(
               'Série histórica (últimos 30 dias)',
@@ -2787,28 +2793,134 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
     );
   }
 
-  Widget _buildStepsSummary(StepHistory history) {
-    return Row(
+  Widget _buildStepsSummary(StepHistory history, double weekCalories) {
+    return Column(
       children: [
-        Expanded(
-          child: _summaryCell(
-            label: 'Semana atual',
-            value: _formatThousands(history.currentWeekTotal),
-            color: AppColors.primary,
-          ),
+        Row(
+          children: [
+            Expanded(
+              child: _summaryCell(
+                label: 'Semana atual',
+                value: _formatThousands(history.currentWeekTotal),
+                color: AppColors.primary,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _summaryCell(
+                label: 'Melhor dia',
+                value: _formatThousands(history.allTimeRecord),
+                color: context.colors.textPrimary,
+                badge: '🏆',
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _summaryCell(
-            label: 'Recorde semanal',
-            value: _formatThousands(history.weeklyBest),
-            color: history.isNewWeekRecord
-                ? AppColors.accentSuccess
-                : context.colors.textPrimary,
-            badge: history.isNewWeekRecord ? '🏆' : null,
-          ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _summaryCell(
+                label: 'Sequência',
+                value: '${history.currentStreak} ${history.currentStreak == 1 ? 'dia' : 'dias'} 🔥',
+                color: history.currentStreak > 0
+                    ? AppColors.primary
+                    : context.colors.textSecondary,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _summaryCell(
+                label: 'kcal (semana)',
+                value: '${weekCalories.toStringAsFixed(0)} kcal',
+                color: _kHandicapColor,
+              ),
+            ),
+          ],
         ),
+        const SizedBox(height: 12),
+        _buildTrainerGoalEditor(history),
       ],
+    );
+  }
+
+  Widget _buildTrainerGoalEditor(StepHistory history) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: context.colors.surface,
+        border: Border.all(color: context.colors.border),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Meta diária do aluno',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: context.colors.textSecondary,
+                      ),
+                ),
+                Text(
+                  '${_formatThousands(history.dailyGoal)} passos/dia',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+              ],
+            ),
+          ),
+          TextButton.icon(
+            onPressed: () => _showTrainerGoalDialog(history.dailyGoal),
+            icon: const Icon(Icons.edit, size: 16),
+            label: const Text('Editar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showTrainerGoalDialog(int currentGoal) {
+    final controller = TextEditingController(text: currentGoal.toString());
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Meta diária de passos'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: 'Passos por dia',
+            suffixText: 'passos',
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final val = int.tryParse(controller.text);
+              if (val != null && val >= 100) {
+                Navigator.of(ctx).pop();
+                try {
+                  final apiClient = context.read<ApiClient>();
+                  final stepService = StepService(apiClient: apiClient);
+                  await stepService.updateStudentGoal(
+                      widget.studentId, val);
+                  await _loadStepHistory();
+                } catch (_) {}
+              }
+            },
+            child: const Text('Salvar'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -2888,7 +3000,18 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
               isCurved: true,
               color: AppColors.primary,
               barWidth: 2.5,
-              dotData: const FlDotData(show: false),
+              dotData: FlDotData(
+                show: true,
+                getDotPainter: (spot, _, __, idx) {
+                  final isHandicap = logs[idx].handicapLevel != null;
+                  return FlDotCirclePainter(
+                    radius: 3,
+                    color: isHandicap ? _kHandicapColor : AppColors.primary,
+                    strokeWidth: 0,
+                    strokeColor: Colors.transparent,
+                  );
+                },
+              ),
               belowBarData: BarAreaData(
                 show: true,
                 color: AppColors.primary.withValues(alpha: 0.15),
@@ -2944,12 +3067,17 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
   }
 
   Widget _buildStepRow(StepLog log) {
+    final isHandicap = log.handicapLevel != null;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: context.colors.surface,
-        border: Border.all(color: context.colors.border),
+        border: Border.all(
+          color: isHandicap
+              ? _kHandicapColor.withValues(alpha: 0.4)
+              : context.colors.border,
+        ),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
@@ -2965,7 +3093,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                       ),
                 ),
                 Text(
-                  '${log.distanceKm.toStringAsFixed(2)} km',
+                  '${log.distanceKm.toStringAsFixed(2)} km · ${log.caloriesBurned.toStringAsFixed(0)} kcal',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: context.colors.textSecondary,
                       ),
@@ -2977,9 +3105,10 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
             _formatThousands(log.steps),
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.bold,
+                  color: isHandicap ? _kHandicapColor : null,
                 ),
           ),
-          if (log.isWeekRecord) ...[
+          if (log.isAllTimeRecord) ...[
             const SizedBox(width: 6),
             const Text('🏆'),
           ],

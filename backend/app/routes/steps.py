@@ -1,9 +1,11 @@
 """Rotas HTTP para o módulo de contador de passos.
 
 Endpoints:
-- POST /api/v1/steps/sync                          → Sincronizar passos do dia (próprio usuário)
-- GET  /api/v1/steps/history                       → Histórico próprio (default: últimos 30 dias)
-- GET  /api/v1/steps/student/{user_id}/history     → Histórico de aluno (trainer/admin)
+- POST  /api/v1/steps/sync                          → Sincronizar passos do dia
+- GET   /api/v1/steps/history                       → Histórico próprio (default: últimos 30 dias)
+- GET   /api/v1/steps/student/{user_id}/history     → Histórico de aluno (trainer/admin)
+- PATCH /api/v1/steps/goal                          → Atualizar meta diária própria
+- PATCH /api/v1/steps/student/{user_id}/goal        → Trainer atualiza meta do aluno
 """
 
 from datetime import date as date_type
@@ -20,6 +22,7 @@ from app.dtos.step_dto import (
     SyncStepsDTO,
     StepLogResponseDTO,
     StepHistoryResponseDTO,
+    UpdateStepGoalDTO,
 )
 from app.models.user import User
 from app.services.step_service import (
@@ -54,13 +57,7 @@ async def sync_steps(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ) -> StepLogResponseDTO:
-    """
-    Sincronizar a contagem de passos do dia para o usuário autenticado.
-
-    O cliente envia o total acumulado do dia (calculado a partir do sensor
-    nativo). O servidor faz upsert do registro do dia, mantendo o maior valor
-    entre o já registrado e o novo (sensor é monotônico crescente).
-    """
+    """Sincronizar a contagem de passos do dia para o usuário autenticado."""
     controller = StepController(session)
     try:
         return await controller.sync_steps(current_user.id, dto)
@@ -84,10 +81,7 @@ async def get_my_history(
     ),
     session: AsyncSession = Depends(get_db),
 ) -> StepHistoryResponseDTO:
-    """
-    Retorna o histórico de passos do usuário autenticado no intervalo informado,
-    além de estatísticas: melhor semana, total da semana atual e flag de novo recorde.
-    """
+    """Histórico de passos do usuário autenticado com estatísticas."""
     controller = StepController(session)
     try:
         return await controller.get_history(current_user.id, start_date, end_date)
@@ -116,15 +110,52 @@ async def get_student_history(
     ),
     session: AsyncSession = Depends(get_db),
 ) -> StepHistoryResponseDTO:
-    """
-    Histórico de passos de um aluno. Apenas o personal trainer vinculado
-    ou um admin podem acessar.
-    """
+    """Histórico de passos de um aluno. Apenas personal trainer vinculado ou admin."""
     controller = StepController(session)
     try:
         return await controller.get_student_history(
             user_id, current_user, start_date, end_date
         )
+    except StepAccessDeniedError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    except StepBusinessRuleError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.patch(
+    "/goal",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Atualizar meta diária de passos",
+)
+async def update_my_goal(
+    dto: UpdateStepGoalDTO,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> None:
+    """Atualiza a meta diária de passos do usuário autenticado."""
+    controller = StepController(session)
+    try:
+        await controller.update_goal(current_user.id, dto)
+    except StepBusinessRuleError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.patch(
+    "/student/{user_id}/goal",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Trainer atualiza meta diária de passos de um aluno",
+    responses={403: {"description": "Acesso negado"}},
+)
+async def update_student_goal(
+    user_id: UUID,
+    dto: UpdateStepGoalDTO,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> None:
+    """Personal trainer ou admin atualiza a meta diária de passos de um aluno."""
+    controller = StepController(session)
+    try:
+        await controller.update_student_goal(current_user, user_id, dto)
     except StepAccessDeniedError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
     except StepBusinessRuleError as e:

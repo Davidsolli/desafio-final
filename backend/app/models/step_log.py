@@ -27,6 +27,8 @@ class StepLog(Base):
     date = Column(Date, nullable=False, index=True)
     steps = Column(Integer, nullable=False, default=0)
     distance_meters = Column(Float, nullable=False, default=0.0)
+    # Nível de proteção da sequência (1-3); NULL = dia normal sem desconto de meta
+    handicap_level = Column(Integer, nullable=True)
 
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(

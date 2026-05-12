@@ -8,20 +8,22 @@ class StepService {
   StepService({required ApiClient apiClient}) : _apiClient = apiClient;
 
   /// Sincroniza os passos do dia com o backend.
-  /// Retorna o registro consolidado (incluindo flag de recorde semanal).
   Future<StepLog> syncSteps({
     required DateTime date,
     required int steps,
     required double distanceMeters,
+    int? handicapLevel,
   }) async {
-    final dateString = _formatDate(date);
+    final body = <String, dynamic>{
+      'date': _formatDate(date),
+      'steps': steps,
+      'distance_meters': distanceMeters,
+    };
+    if (handicapLevel != null) body['handicap_level'] = handicapLevel;
+
     return _apiClient.post<StepLog>(
       '/steps/sync',
-      body: {
-        'date': dateString,
-        'steps': steps,
-        'distance_meters': distanceMeters,
-      },
+      body: body,
       fromJson: (data) => StepLog.fromJson(data as Map<String, dynamic>),
     );
   }
@@ -56,6 +58,24 @@ class StepService {
       '/steps/student/$userId/history',
       queryParameters: query.isEmpty ? null : query,
       fromJson: (data) => StepHistory.fromJson(data as Map<String, dynamic>),
+    );
+  }
+
+  /// Atualiza a meta diária de passos do próprio usuário.
+  Future<void> updateMyGoal(int dailyStepGoal) async {
+    await _apiClient.patch<void>(
+      '/steps/goal',
+      body: {'daily_step_goal': dailyStepGoal},
+      fromJson: (_) {},
+    );
+  }
+
+  /// Personal trainer atualiza a meta de um aluno.
+  Future<void> updateStudentGoal(String userId, int dailyStepGoal) async {
+    await _apiClient.patch<void>(
+      '/steps/student/$userId/goal',
+      body: {'daily_step_goal': dailyStepGoal},
+      fromJson: (_) {},
     );
   }
 
