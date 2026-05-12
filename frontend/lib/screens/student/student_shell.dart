@@ -119,7 +119,7 @@ class _StudentShellState extends State<StudentShell>
         selectedItemColor: AppColors.primary,
         unselectedItemColor: context.colors.textMuted,
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home_outlined), label: 'Início'),
+          BottomNavigationBarItem(icon: Icon(Icons.home_outlined), label: 'Home'),
           BottomNavigationBarItem(icon: Icon(Icons.fitness_center_outlined), label: 'Treinos'),
           BottomNavigationBarItem(icon: Icon(Icons.restaurant_outlined), label: 'Nutrição'),
           BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_outline), label: 'Chat'),
