@@ -215,6 +215,8 @@ class LogbookProvider extends ChangeNotifier {
       await loadSessions();
       await loadFrequency('weekly', limit: 12);
       await loadMuscleGroupDistribution(days: 30);
+      // Atualiza PRs ao finalizar sessão
+      try { await loadPersonalRecords(); } catch (_) {}
     } on NetworkException catch (e) {
       _error = 'Erro de conexão: ${e.message}';
       notifyListeners();
@@ -255,11 +257,15 @@ class LogbookProvider extends ChangeNotifier {
   FrequencyResponse? _frequencyResponse;
   MuscleGroupDistributionResponse? _distributionResponse;
   ProgressionResponse? _progressionResponse;
+  PersonalRecordsResponse? _personalRecordsResponse;
+  VolumeLoadResponse? _volumeLoadResponse;
 
   // Getters correspondentes
   FrequencyResponse? get frequencyResponse => _frequencyResponse;
   MuscleGroupDistributionResponse? get distributionResponse => _distributionResponse;
   ProgressionResponse? get progressionResponse => _progressionResponse;
+  PersonalRecordsResponse? get personalRecordsResponse => _personalRecordsResponse;
+  VolumeLoadResponse? get volumeLoadResponse => _volumeLoadResponse;
 
   /// Carrega a frequência de treinos por período
   Future<void> loadFrequency(String period, {int? limit}) async {
@@ -326,6 +332,213 @@ class LogbookProvider extends ChangeNotifier {
       rethrow;
     } catch (e) {
       _error = 'Erro ao carregar progressão do exercício: ${e.toString()}';
+      notifyListeners();
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  /// Carrega os recordes pessoais de carga
+  Future<void> loadPersonalRecords({int limit = 10}) async {
+    try {
+      _setLoading(true);
+      _error = null;
+      _personalRecordsResponse = await _logbookService.getPersonalRecords(limit: limit);
+      notifyListeners();
+    } on NetworkException catch (e) {
+      _error = 'Erro de conexão: ${e.message}';
+      notifyListeners();
+      rethrow;
+    } on ApiException catch (e) {
+      _error = e.message;
+      notifyListeners();
+      rethrow;
+    } catch (e) {
+      _error = 'Erro ao carregar recordes pessoais: ${e.toString()}';
+      notifyListeners();
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  /// Carrega o Volume Load semanal de um exercício
+  Future<void> loadVolumeLoad(String exerciseId, {int weeks = 8}) async {
+    try {
+      _setLoading(true);
+      _error = null;
+      _volumeLoadResponse = await _logbookService.getVolumeLoad(exerciseId, weeks: weeks);
+      notifyListeners();
+    } on NetworkException catch (e) {
+      _error = 'Erro de conexão: ${e.message}';
+      notifyListeners();
+      rethrow;
+    } on ApiException catch (e) {
+      _error = e.message;
+      notifyListeners();
+      rethrow;
+    } catch (e) {
+      _error = 'Erro ao carregar Volume Load: ${e.toString()}';
+      notifyListeners();
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  // --- MÉTODOS E ATRIBUTOS PARA ALUNOS (VISÃO DO PERSONAL) ---
+  final Map<String, List<LogbookResponse>> _studentSessions = {};
+  final Map<String, FrequencyResponse> _studentFrequency = {};
+  final Map<String, MuscleGroupDistributionResponse> _studentDistribution = {};
+  final Map<String, ProgressionResponse> _studentProgression = {}; // chave: "${studentId}_${exerciseId}"
+  final Map<String, PersonalRecordsResponse> _studentPersonalRecords = {};
+  final Map<String, VolumeLoadResponse> _studentVolumeLoad = {};
+
+  List<LogbookResponse> getStudentSessions(String studentId) => _studentSessions[studentId] ?? [];
+  FrequencyResponse? getStudentFrequency(String studentId) => _studentFrequency[studentId];
+  MuscleGroupDistributionResponse? getStudentDistribution(String studentId) => _studentDistribution[studentId];
+  ProgressionResponse? getStudentProgression(String studentId, String exerciseId) => _studentProgression['${studentId}_$exerciseId'];
+  PersonalRecordsResponse? getStudentPersonalRecords(String studentId) => _studentPersonalRecords[studentId];
+  VolumeLoadResponse? getStudentVolumeLoad(String studentId, String exerciseId) => _studentVolumeLoad['${studentId}_$exerciseId'];
+
+  /// Carrega as sessões completadas do aluno
+  Future<void> loadStudentSessions(String studentId, {int limit = 10, int offset = 0}) async {
+    try {
+      _setLoading(true);
+      _error = null;
+      _studentSessions[studentId] = await _logbookService.getLogbookSessions(limit: limit, offset: offset, userId: studentId);
+      notifyListeners();
+    } on NetworkException catch (e) {
+      _error = 'Erro de conexão: ${e.message}';
+      notifyListeners();
+      rethrow;
+    } on ApiException catch (e) {
+      _error = e.message;
+      notifyListeners();
+      rethrow;
+    } catch (e) {
+      _error = 'Erro ao carregar sessões do aluno: ${e.toString()}';
+      notifyListeners();
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  /// Carrega a frequência de treinos por período para o aluno
+  Future<void> loadStudentFrequency(String studentId, String period, {int? limit}) async {
+    try {
+      _setLoading(true);
+      _error = null;
+      _studentFrequency[studentId] = await _logbookService.getWorkoutFrequency(period: period, limit: limit, userId: studentId);
+      notifyListeners();
+    } on NetworkException catch (e) {
+      _error = 'Erro de conexão: ${e.message}';
+      notifyListeners();
+      rethrow;
+    } on ApiException catch (e) {
+      _error = e.message;
+      notifyListeners();
+      rethrow;
+    } catch (e) {
+      _error = 'Erro ao carregar frequência de treinos do aluno: ${e.toString()}';
+      notifyListeners();
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  /// Carrega a distribuição muscular por período para o aluno
+  Future<void> loadStudentMuscleGroupDistribution(String studentId, {int days = 30}) async {
+    try {
+      _setLoading(true);
+      _error = null;
+      _studentDistribution[studentId] = await _logbookService.getMuscleGroupDistribution(days: days, userId: studentId);
+      notifyListeners();
+    } on NetworkException catch (e) {
+      _error = 'Erro de conexão: ${e.message}';
+      notifyListeners();
+      rethrow;
+    } on ApiException catch (e) {
+      _error = e.message;
+      notifyListeners();
+      rethrow;
+    } catch (e) {
+      _error = 'Erro ao carregar foco muscular do aluno: ${e.toString()}';
+      notifyListeners();
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  /// Carrega a progressão de cargas do exercício selecionado para o aluno
+  Future<void> loadStudentExerciseProgression(String studentId, String exerciseId, {int weeks = 8}) async {
+    try {
+      _setLoading(true);
+      _error = null;
+      _studentProgression['${studentId}_$exerciseId'] = await _logbookService.getExerciseProgression(exerciseId, weeks: weeks, userId: studentId);
+      notifyListeners();
+    } on NetworkException catch (e) {
+      _error = 'Erro de conexão: ${e.message}';
+      notifyListeners();
+      rethrow;
+    } on ApiException catch (e) {
+      _error = e.message;
+      notifyListeners();
+      rethrow;
+    } catch (e) {
+      _error = 'Erro ao carregar progressão do exercício do aluno: ${e.toString()}';
+      notifyListeners();
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  /// Carrega os recordes pessoais de carga para o aluno
+  Future<void> loadStudentPersonalRecords(String studentId, {int limit = 10}) async {
+    try {
+      _setLoading(true);
+      _error = null;
+      _studentPersonalRecords[studentId] = await _logbookService.getPersonalRecords(limit: limit, userId: studentId);
+      notifyListeners();
+    } on NetworkException catch (e) {
+      _error = 'Erro de conexão: ${e.message}';
+      notifyListeners();
+      rethrow;
+    } on ApiException catch (e) {
+      _error = e.message;
+      notifyListeners();
+      rethrow;
+    } catch (e) {
+      _error = 'Erro ao carregar recordes pessoais do aluno: ${e.toString()}';
+      notifyListeners();
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  /// Carrega o Volume Load semanal de um exercício para o aluno
+  Future<void> loadStudentVolumeLoad(String studentId, String exerciseId, {int weeks = 8}) async {
+    try {
+      _setLoading(true);
+      _error = null;
+      _studentVolumeLoad['${studentId}_$exerciseId'] = await _logbookService.getVolumeLoad(exerciseId, weeks: weeks, userId: studentId);
+      notifyListeners();
+    } on NetworkException catch (e) {
+      _error = 'Erro de conexão: ${e.message}';
+      notifyListeners();
+      rethrow;
+    } on ApiException catch (e) {
+      _error = e.message;
+      notifyListeners();
+      rethrow;
+    } catch (e) {
+      _error = 'Erro ao carregar Volume Load do aluno: ${e.toString()}';
       notifyListeners();
       rethrow;
     } finally {

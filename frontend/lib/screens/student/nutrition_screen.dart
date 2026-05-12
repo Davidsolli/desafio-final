@@ -392,6 +392,106 @@ class _NutritionScreenState extends State<NutritionScreen> {
     );
   }
 
+  void _showCustomWaterDialog(BuildContext context, NutritionProvider provider) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: context.colors.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              const Icon(Icons.water_drop, color: Colors.blue, size: 24),
+              const SizedBox(width: 8),
+              Text(
+                'Inserir Hidratação',
+                style: TextStyle(color: context.colors.textPrimary, fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Insira o volume personalizado em ml ou use os atalhos rápidos:',
+                style: TextStyle(color: context.colors.textSecondary, fontSize: 13),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _presetWaterChip(context, controller, 300),
+                  _presetWaterChip(context, controller, 600),
+                  _presetWaterChip(context, controller, 1000),
+                ],
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: controller,
+                keyboardType: TextInputType.number,
+                autofocus: true,
+                style: TextStyle(color: context.colors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold),
+                decoration: InputDecoration(
+                  hintText: 'Ex: 400',
+                  suffixText: 'ml',
+                  suffixStyle: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
+                  filled: true,
+                  fillColor: context.colors.surfaceLight,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: context.colors.border),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Colors.blue, width: 2),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Cancelar', style: TextStyle(color: context.colors.textMuted)),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final text = controller.text;
+                if (text.isNotEmpty) {
+                  final val = int.tryParse(text);
+                  if (val != null && val > 0) {
+                    provider.addWater(val);
+                  }
+                }
+                Navigator.pop(context);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              child: const Text('Confirmar'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _presetWaterChip(BuildContext context, TextEditingController controller, int amount) {
+    return ActionChip(
+      label: Text('+$amount ml'),
+      labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue),
+      backgroundColor: Colors.blue.withOpacity(0.08),
+      side: const BorderSide(color: Colors.blue, width: 0.8),
+      onPressed: () {
+        controller.text = '$amount';
+      },
+    );
+  }
+
   Widget _buildWaterTrackerCard(NutritionProvider provider) {
     final water = provider.waterToday;
     final goal = provider.waterGoal;
@@ -469,24 +569,36 @@ class _NutritionScreenState extends State<NutritionScreen> {
           Row(
             children: [
               Expanded(
-                child: OutlinedButton.icon(
+                child: OutlinedButton(
                   onPressed: () => provider.addWater(250),
-                  icon: const Icon(Icons.local_cafe_outlined, size: 14),
-                  label: const Text('+250 ml', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.blue,
                     side: const BorderSide(color: Colors.blue),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     padding: const EdgeInsets.symmetric(vertical: 8),
                   ),
+                  child: const Text('+250 ml', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => provider.addWater(500),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.blue,
+                    side: const BorderSide(color: Colors.blue),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                  ),
+                  child: const Text('+500 ml', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                ),
+              ),
+              const SizedBox(width: 8),
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: () => provider.addWater(500),
-                  icon: const Icon(Icons.local_drink_outlined, size: 14),
-                  label: const Text('+500 ml', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                  onPressed: () => _showCustomWaterDialog(context, provider),
+                  icon: const Icon(Icons.add, size: 14),
+                  label: const Text('Outro', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blue,
                     foregroundColor: Colors.white,
@@ -582,10 +694,17 @@ class _NutritionScreenState extends State<NutritionScreen> {
             diet.totalFats,
             isDietTab: true,
           ),
-          const SizedBox(height: 24),
           const Text('Refeições Prescritas', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
-          ...diet.meals.map((meal) => _buildDietMealCard(meal)).toList(),
+          ...(() {
+            final sortedMeals = List<DietMeal>.from(diet.meals)..sort((a, b) {
+              if (a.time == null && b.time == null) return 0;
+              if (a.time == null) return 1;
+              if (b.time == null) return -1;
+              return a.time!.compareTo(b.time!);
+            });
+            return sortedMeals.map((meal) => _buildDietMealCard(meal));
+          })(),
           const SizedBox(height: 32),
         ],
       ),
@@ -593,6 +712,10 @@ class _NutritionScreenState extends State<NutritionScreen> {
   }
 
   Widget _buildDietMealCard(DietMeal meal) {
+    final nameParts = meal.name.split(' || ');
+    final displayName = nameParts.first;
+    final displayDesc = nameParts.length > 1 ? nameParts[1] : '';
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
@@ -611,18 +734,44 @@ class _NutritionScreenState extends State<NutritionScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    Icon(Icons.access_time, size: 16, color: context.colors.textMuted),
-                    const SizedBox(width: 6),
-                    Text(meal.time ?? '--:--', style: TextStyle(color: context.colors.textMuted)),
-                    const SizedBox(width: 8),
-                    Text(
-                      meal.name,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                    ),
-                  ],
+                Expanded(
+                  child: Row(
+                    children: [
+                      Icon(Icons.access_time, size: 16, color: context.colors.textMuted),
+                      const SizedBox(width: 6),
+                      Text(meal.time ?? '--:--', style: TextStyle(color: context.colors.textMuted)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              displayName,
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            if (displayDesc.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 2),
+                                child: Text(
+                                  displayDesc,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: context.colors.textMuted,
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 2,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
+                const SizedBox(width: 8),
                 Text(
                   '${meal.subtotalKcal.toStringAsFixed(0)} kcal',
                   style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),

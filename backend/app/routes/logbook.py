@@ -28,11 +28,13 @@ from app.dtos.logbook_dto import (
     FrequencyResponseDTO,
     MuscleGroupDistributionResponseDTO,
     PaginatedSessionsDTO,
+    PersonalRecordsResponseDTO,
     ProgressionResponseDTO,
     SessionExerciseDTO,
     SessionExerciseResponseDTO,
     SessionResponseDTO,
     UpdateSessionDTO,
+    VolumeLoadResponseDTO,
 )
 from app.models.user import User
 from app.services.logbook_service import (
@@ -519,4 +521,88 @@ async def delete_session(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Erro ao deletar sessão.",
+        )
+
+
+# ---------------------------------------------------------------------------
+# GET /personal-records — Recordes Pessoais
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/personal-records",
+    response_model=PersonalRecordsResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Recordes pessoais de carga por exercício",
+    responses={
+        200: {"description": "Recordes calculados"},
+    },
+)
+async def get_personal_records(
+    user_id: Optional[UUID] = Query(None, description="Filtrar por aluno (admin/personal)"),
+    limit: int = Query(10, ge=1, le=50, description="Número máximo de recordes (1–50)"),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> PersonalRecordsResponseDTO:
+    """
+    Retorna os recordes pessoais de carga por exercício do aluno.
+
+    Para cada exercício realizado, calcula:
+    - **Maior carga** registrada em sessões completadas
+    - **1RM estimado** pela fórmula de Epley: `carga × (1 + reps / 30)`
+    - **Data** em que o recorde foi atingido
+    """
+    effective_user_id = user_id if (current_user.role != "client" and user_id) else current_user.id
+    controller = LogbookController(session)
+    try:
+        return await controller.get_personal_records(user_id=effective_user_id, limit=limit)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao calcular recordes pessoais: {str(e)}",
+        )
+
+
+# ---------------------------------------------------------------------------
+# GET /volume-load/{exercise_id} — Volume Load Semanal
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/volume-load/{exercise_id}",
+    response_model=VolumeLoadResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Volume Load semanal de um exercício",
+    responses={
+        200: {"description": "Volume Load calculado"},
+    },
+)
+async def get_volume_load(
+    exercise_id: UUID,
+    user_id: Optional[UUID] = Query(None, description="Filtrar por aluno (admin/personal)"),
+    weeks: int = Query(8, ge=1, le=52, description="Últimas N semanas (padrão: 8)"),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> VolumeLoadResponseDTO:
+    """
+    Retorna o Volume Load semanal de um exercício específico.
+
+    **Volume Load = Séries × Repetições × Carga (kg)** por semana.
+
+    Inclui:
+    - Pontos de dados semanais com volume total e carga máxima
+    - Estatísticas: média, máximo, tendência e % de melhora
+    """
+    effective_user_id = user_id if (current_user.role != "client" and user_id) else current_user.id
+    controller = LogbookController(session)
+    try:
+        return await controller.get_volume_load(
+            user_id=effective_user_id,
+            exercise_id=exercise_id,
+            weeks=weeks,
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao calcular Volume Load: {str(e)}",
         )
