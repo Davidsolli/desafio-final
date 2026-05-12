@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../theme/theme_colors.dart';
 import '../../routes/app_routes.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/api_client.dart';
 import '../../shared/widgets/index.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
@@ -45,7 +46,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       }
     } catch (e) {
       if (mounted) {
-        _showError('Erro ao enviar instruções. Verifique sua conexão.');
+        if (e is ApiException) {
+          _showError(e.message);
+        } else {
+          _showError('Erro ao enviar instruções. Verifique sua conexão.');
+        }
       }
     } finally {
       if (mounted) {

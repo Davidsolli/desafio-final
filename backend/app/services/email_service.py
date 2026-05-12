@@ -1,6 +1,7 @@
 """Serviço de envio de emails transacionais via Resend."""
 
 import asyncio
+import html
 import logging
 
 import resend
@@ -28,9 +29,10 @@ async def send_password_reset_email(
     if expire_minutes is None:
         expire_minutes = settings.PASSWORD_RESET_TOKEN_EXPIRE_MINUTES
 
-    resend.api_key = settings.RESEND_API_KEY
-
     from_address = f"{settings.RESEND_FROM_NAME} <{settings.RESEND_FROM_EMAIL}>"
+
+    safe_name = html.escape(to_name)
+    safe_link = html.escape(reset_link)
 
     html_body = f"""
 <!DOCTYPE html>
@@ -50,13 +52,13 @@ async def send_password_reset_email(
     <tr>
       <td style="padding: 32px 24px;">
         <h2 style="color: #1a1a2e; margin-top: 0;">Redefinição de Senha</h2>
-        <p style="color: #555; line-height: 1.6;">Olá, <strong>{to_name}</strong>!</p>
+        <p style="color: #555; line-height: 1.6;">Olá, <strong>{safe_name}</strong>!</p>
         <p style="color: #555; line-height: 1.6;">
           Recebemos uma solicitação para redefinir a senha da sua conta.
           Clique no botão abaixo para criar uma nova senha:
         </p>
         <div style="text-align: center; margin: 32px 0;">
-          <a href="{reset_link}"
+          <a href="{safe_link}"
              style="background-color: #4f46e5; color: #ffffff; padding: 14px 28px;
                     text-decoration: none; border-radius: 6px; font-weight: bold;
                     font-size: 16px; display: inline-block;">
@@ -72,7 +74,7 @@ async def send_password_reset_email(
         <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;">
         <p style="color: #999; font-size: 12px;">
           Se o botão não funcionar, copie e cole este link no navegador:<br>
-          <a href="{reset_link}" style="color: #4f46e5; word-break: break-all;">{reset_link}</a>
+          <a href="{safe_link}" style="color: #4f46e5; word-break: break-all;">{safe_link}</a>
         </p>
       </td>
     </tr>

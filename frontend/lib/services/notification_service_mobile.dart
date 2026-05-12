@@ -5,16 +5,21 @@ import 'api_client.dart';
 
 class NotificationService {
   final ApiClient apiClient;
-  final FirebaseMessaging _firebaseMessaging;
+  final FirebaseMessaging? _firebaseMessagingOverride;
   final FlutterLocalNotificationsPlugin _localNotifications;
 
   NotificationService({
     required this.apiClient,
     FirebaseMessaging? firebaseMessaging,
     FlutterLocalNotificationsPlugin? localNotifications,
-  })  : _firebaseMessaging = firebaseMessaging ?? FirebaseMessaging.instance,
+  })  : _firebaseMessagingOverride = firebaseMessaging,
         _localNotifications =
             localNotifications ?? FlutterLocalNotificationsPlugin();
+
+  /// Lazy: só acessa FirebaseMessaging.instance dentro de initialize/handlers
+  /// para que testes que não tocam FCM não exijam Firebase inicializado.
+  FirebaseMessaging get _firebaseMessaging =>
+      _firebaseMessagingOverride ?? FirebaseMessaging.instance;
 
   Future<void> initialize() async {
     await Firebase.initializeApp();
@@ -85,6 +90,39 @@ class NotificationService {
       );
       return true;
     } catch (e) {
+      return false;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getHistory({String? type, int limit = 20}) async {
+    try {
+      final response = await apiClient.get<Map<String, dynamic>>(
+        '/api/v1/notifications/history',
+        queryParameters: {
+          if (type != null) 'type': type,
+          'limit': limit,
+        },
+        fromJson: (json) => json is Map<String, dynamic> ? json : {},
+      );
+      final data = response['data'];
+      if (data is List) {
+        return data.whereType<Map<String, dynamic>>().toList();
+      }
+      return [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<bool> markAsRead(String notificationId) async {
+    try {
+      await apiClient.post<Map<String, dynamic>>(
+        '/api/v1/notifications/mark-read',
+        body: {'notification_id': notificationId},
+        fromJson: (json) => json is Map<String, dynamic> ? json : {},
+      );
+      return true;
+    } catch (_) {
       return false;
     }
   }

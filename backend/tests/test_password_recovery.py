@@ -19,8 +19,8 @@ from app.models.password_reset_token import PasswordResetToken
 @pytest.fixture(autouse=True)
 def reset_rate_limiter():
     """Zera contadores do rate limiter antes de cada teste."""
-    from app.config.limiter import limiter
-    limiter._limiter.storage.reset()
+    from app.config.limiter import reset_limits
+    reset_limits()
     yield
 
 
@@ -62,7 +62,7 @@ async def _insert_token(
 # ---------------------------------------------------------------------------
 
 class TestForgotPassword:
-    """11 cenários para o endpoint de solicitação de recuperação."""
+    """7 cenários para o endpoint de solicitação de recuperação."""
 
     @pytest.mark.asyncio
     async def test_email_valido_retorna_200(self, async_client, sample_user):
@@ -366,3 +366,32 @@ class TestResetPassword:
         """Teste 10: Body ausente → 422."""
         response = await async_client.post("/api/v1/auth/reset-password", json={})
         assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_jwt_anterior_ao_reset_e_rejeitado(
+        self, async_client, sample_user, test_db_session
+    ):
+        """Teste 11: JWT emitido antes do reset é rejeitado com 401 após a redefinição (RN06)."""
+        from app.services.auth_service import AuthService
+
+        # Emite JWT com token_version atual
+        jwt_antes = AuthService.create_access_token(
+            {"sub": str(sample_user.id), "tv": sample_user.token_version or 0}
+        )
+
+        plain = await _insert_token(test_db_session, sample_user.id)
+        await async_client.post(
+            "/api/v1/auth/reset-password",
+            json={
+                "token": plain,
+                "new_password": "NovaSenha456!",
+                "confirm_password": "NovaSenha456!",
+            },
+        )
+
+        # JWT antigo deve ser rejeitado após o reset ter incrementado token_version
+        response = await async_client.get(
+            "/api/v1/users/me",
+            headers={"Authorization": f"Bearer {jwt_antes}"},
+        )
+        assert response.status_code == 401

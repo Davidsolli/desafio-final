@@ -1,30 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mockito/annotations.dart';
-import 'package:mockito/mockito.dart';
 import 'package:provider/provider.dart';
 import 'package:omniconnect_fitness/screens/notifications_settings_screen.dart';
 import 'package:omniconnect_fitness/services/notification_service.dart';
 import 'package:omniconnect_fitness/theme/app_theme.dart';
 
-import 'notifications_settings_screen_test.mocks.dart';
+import '../test_helpers/fake_notification_service.dart';
 
-@GenerateMocks([NotificationService])
 void main() {
   group('NotificationsSettingsScreen', () {
-    late MockNotificationService mockNotificationService;
+    late FakeNotificationService fake;
 
     setUp(() {
-      mockNotificationService = MockNotificationService();
+      fake = FakeNotificationService();
     });
 
     Widget wrap(Widget child) => MaterialApp(
           theme: AppTheme.darkTheme,
           home: MultiProvider(
             providers: [
-              Provider<NotificationService>.value(
-                value: mockNotificationService,
-              ),
+              Provider<NotificationService>.value(value: fake),
             ],
             child: child,
           ),
@@ -32,22 +27,21 @@ void main() {
 
     testWidgets('exibe loading enquanto carrega preferências',
         (WidgetTester tester) async {
-      when(mockNotificationService.getPreferences()).thenAnswer(
-        (_) => Future.delayed(
-          const Duration(milliseconds: 100),
-          () => <String, dynamic>{},
-        ),
-      );
+      fake.preferencesFuture = () => Future.delayed(
+            const Duration(milliseconds: 100),
+            () => <String, dynamic>{},
+          );
 
       await tester.pumpWidget(wrap(const NotificationsSettingsScreen()));
 
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      // limpa o future pendente para evitar estado de teste pendurado
+      await tester.pumpAndSettle();
     });
 
     testWidgets('exibe título Notificações após carregamento',
         (WidgetTester tester) async {
-      when(mockNotificationService.getPreferences())
-          .thenAnswer((_) async => <String, dynamic>{});
+      fake.preferencesToReturn = <String, dynamic>{};
 
       await tester.pumpWidget(wrap(const NotificationsSettingsScreen()));
       await tester.pumpAndSettle();
@@ -57,13 +51,12 @@ void main() {
 
     testWidgets('exibe master switch de ativar notificações',
         (WidgetTester tester) async {
-      when(mockNotificationService.getPreferences())
-          .thenAnswer((_) async => <String, dynamic>{
-                'notifications_enabled': true,
-                'workout_reminder_enabled': true,
-                'meal_reminder_enabled': false,
-                'new_workout_sheet_enabled': true,
-              });
+      fake.preferencesToReturn = <String, dynamic>{
+        'notifications_enabled': true,
+        'workout_reminder_enabled': true,
+        'meal_reminder_enabled': false,
+        'new_workout_sheet_enabled': true,
+      };
 
       await tester.pumpWidget(wrap(const NotificationsSettingsScreen()));
       await tester.pumpAndSettle();
@@ -74,12 +67,11 @@ void main() {
 
     testWidgets('exibe cards de lembretes quando notificações habilitadas',
         (WidgetTester tester) async {
-      when(mockNotificationService.getPreferences())
-          .thenAnswer((_) async => <String, dynamic>{
-                'notifications_enabled': true,
-                'workout_reminder_enabled': true,
-                'meal_reminder_enabled': false,
-              });
+      fake.preferencesToReturn = <String, dynamic>{
+        'notifications_enabled': true,
+        'workout_reminder_enabled': true,
+        'meal_reminder_enabled': false,
+      };
 
       await tester.pumpWidget(wrap(const NotificationsSettingsScreen()));
       await tester.pumpAndSettle();
@@ -92,10 +84,9 @@ void main() {
 
     testWidgets('exibe mensagem de silêncio quando notificações desabilitadas',
         (WidgetTester tester) async {
-      when(mockNotificationService.getPreferences())
-          .thenAnswer((_) async => <String, dynamic>{
-                'notifications_enabled': false,
-              });
+      fake.preferencesToReturn = <String, dynamic>{
+        'notifications_enabled': false,
+      };
 
       await tester.pumpWidget(wrap(const NotificationsSettingsScreen()));
       await tester.pumpAndSettle();
@@ -110,16 +101,13 @@ void main() {
 
     testWidgets('clicar no switch chama updatePreferences',
         (WidgetTester tester) async {
-      when(mockNotificationService.getPreferences())
-          .thenAnswer((_) async => <String, dynamic>{
-                'notifications_enabled': true,
-                'workout_reminder_enabled': true,
-                'meal_reminder_enabled': false,
-                'new_workout_sheet_enabled': true,
-              });
-
-      when(mockNotificationService.updatePreferences(any))
-          .thenAnswer((_) async => true);
+      fake.preferencesToReturn = <String, dynamic>{
+        'notifications_enabled': true,
+        'workout_reminder_enabled': true,
+        'meal_reminder_enabled': false,
+        'new_workout_sheet_enabled': true,
+      };
+      fake.updateOk = true;
 
       await tester.pumpWidget(wrap(const NotificationsSettingsScreen()));
       await tester.pumpAndSettle();
@@ -127,19 +115,17 @@ void main() {
       await tester.tap(find.byType(Switch).first);
       await tester.pumpAndSettle();
 
-      verify(mockNotificationService.updatePreferences(any))
-          .called(greaterThan(0));
+      expect(fake.updateCalls.length, greaterThan(0));
     });
 
     testWidgets('exibe ícones nos cards de preferência',
         (WidgetTester tester) async {
-      when(mockNotificationService.getPreferences())
-          .thenAnswer((_) async => <String, dynamic>{
-                'notifications_enabled': true,
-                'workout_reminder_enabled': true,
-                'meal_reminder_enabled': false,
-                'new_workout_sheet_enabled': true,
-              });
+      fake.preferencesToReturn = <String, dynamic>{
+        'notifications_enabled': true,
+        'workout_reminder_enabled': true,
+        'meal_reminder_enabled': false,
+        'new_workout_sheet_enabled': true,
+      };
 
       await tester.pumpWidget(wrap(const NotificationsSettingsScreen()));
       await tester.pumpAndSettle();
@@ -151,14 +137,11 @@ void main() {
 
     testWidgets('exibe SnackBar de erro quando updatePreferences falha',
         (WidgetTester tester) async {
-      when(mockNotificationService.getPreferences())
-          .thenAnswer((_) async => <String, dynamic>{
-                'notifications_enabled': true,
-                'workout_reminder_enabled': true,
-              });
-
-      when(mockNotificationService.updatePreferences(any))
-          .thenAnswer((_) async => false);
+      fake.preferencesToReturn = <String, dynamic>{
+        'notifications_enabled': true,
+        'workout_reminder_enabled': true,
+      };
+      fake.updateOk = false;
 
       await tester.pumpWidget(wrap(const NotificationsSettingsScreen()));
       await tester.pumpAndSettle();
@@ -172,8 +155,7 @@ void main() {
 
     testWidgets('scaffold tem AppBar e Scaffold renderizados',
         (WidgetTester tester) async {
-      when(mockNotificationService.getPreferences())
-          .thenAnswer((_) async => <String, dynamic>{});
+      fake.preferencesToReturn = <String, dynamic>{};
 
       await tester.pumpWidget(wrap(const NotificationsSettingsScreen()));
       await tester.pumpAndSettle();

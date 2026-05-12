@@ -16,7 +16,7 @@ import logging
 import re
 import time
 from datetime import datetime, timedelta
-from typing import Any, Awaitable, Callable
+from typing import Any, AsyncGenerator, Awaitable, Callable
 from uuid import UUID, uuid4
 
 # Tipo de callback de status (envia eventos {"type":"status", ...} para clientes)
@@ -440,7 +440,7 @@ class ChatService:
 
         # 1. Sanitizar e validar
         clean_message = self.sanitize_input(message)
-        if len(message) > MAX_MESSAGE_LENGTH:
+        if len(clean_message) > MAX_MESSAGE_LENGTH:
             raise MessageTooLongError(
                 f"Mensagem excede {MAX_MESSAGE_LENGTH} caracteres."
             )
@@ -747,6 +747,168 @@ class ChatService:
 
         await self.session.commit()
         return {"success": True, "message": "Feedback registrado"}
+
+    # ── Enviar Mensagem (streaming SSE) ──────────────────────────────────
+
+    async def send_message_stream(
+        self,
+        user_id: UUID,
+        message: str,
+        conversation_id: UUID | None = None,
+        academy_id: UUID | None = None,
+        channel: str = "app",
+    ) -> AsyncGenerator[dict[str, Any], None]:
+        """
+        Processar mensagem do aluno com resposta streamada (SSE).
+
+        Fluxo:
+            1. Sanitizar + rate limit (levanta exceção antes do primeiro yield)
+            2. Obter/criar conversa e salvar mensagem do usuário
+            3. Delegar ao run_stream() do RAGChain (yields chunks incrementais)
+            4. Persistir mensagem do assistente e escalação após o stream
+
+        Yields dicts com campo 'type':
+            {"type": "status", "status": "...", "message": "..."}
+            {"type": "chunk",  "content": "<token(s)>"}
+            {"type": "final",  "message_id": ..., "conversation_id": ..., ...}
+
+        Raises (antes do primeiro yield):
+            RateLimitExceededError, MessageTooLongError, ValueError
+        """
+        if channel not in ALLOWED_CHANNELS:
+            raise ValueError(f"channel inválido: {channel!r}")
+
+        clean_message = self.sanitize_input(message)
+        if len(clean_message) > MAX_MESSAGE_LENGTH:
+            raise MessageTooLongError(f"Mensagem excede {MAX_MESSAGE_LENGTH} caracteres.")
+
+        await self._check_rate_limit(user_id)
+
+        conversation = await self._get_or_create_conversation(
+            user_id, conversation_id, academy_id, channel
+        )
+        user_context = await self._build_user_context(user_id)
+        history = await self._get_conversation_history(conversation)
+
+        user_msg = ChatMessage(
+            conversation_id=conversation.id,
+            role="user",
+            content=clean_message,
+            channel=channel,
+        )
+        self.session.add(user_msg)
+        await self.session.flush()
+
+        # ── Streaming RAG ────────────────────────────────────────────────
+        start = time.monotonic()
+        full_answer = ""
+        done_event: dict[str, Any] | None = None
+
+        async for event in rag_chain.run_stream(
+            query=clean_message,
+            session=self.session,
+            academy_id=str(academy_id) if academy_id else None,
+            user_context=user_context,
+            conversation_history=history,
+        ):
+            if event["type"] == "chunk":
+                full_answer += event["content"]
+                yield event
+            elif event["type"] == "done":
+                done_event = event
+                # Não faz yield do "done" — será enviado como "final" com IDs completos
+            else:
+                yield event  # status events
+
+        if done_event is None:
+            done_event = {
+                "answer": full_answer or ESCALATION_MESSAGES["generation_error"],
+                "should_escalate": True,
+                "escalation_reason": "generation_error",
+                "retrieved_documents": [],
+                "model_used": "",
+                "tokens_used": 0,
+                "latency_ms": 0,
+                "confidence_score": 0.0,
+            }
+
+        final_answer = full_answer if full_answer else done_event.get("answer", "")
+        should_escalate: bool = done_event.get("should_escalate", False)
+        escalation_reason: str = done_event.get("escalation_reason", "")
+        retrieved_docs_raw = done_event.get("retrieved_documents", [])
+
+        latency_ms = int((time.monotonic() - start) * 1000)
+
+        # ── Persistência ─────────────────────────────────────────────────
+        context_data = {
+            "user_profile": user_context.get("user_profile", {}),
+            "active_workout_sheet": user_context.get("active_workout_sheet"),
+            "retrieved_documents": [
+                {
+                    "id": doc.id,
+                    "title": doc.title,
+                    "relevance_score": doc.relevance_score,
+                }
+                for doc in retrieved_docs_raw
+            ],
+        }
+
+        assistant_msg = ChatMessage(
+            conversation_id=conversation.id,
+            role="assistant",
+            content=final_answer,
+            context_data=context_data,
+            channel=channel,
+            model_used=done_event.get("model_used", ""),
+            tokens_used=done_event.get("tokens_used", 0),
+            latency_ms=done_event.get("latency_ms") or latency_ms,
+            needs_human_review=should_escalate,
+        )
+        self.session.add(assistant_msg)
+
+        if should_escalate and conversation.status != "escalated":
+            conversation.status = "escalated"
+            conversation.escalation_reason = escalation_reason
+            conversation.escalated_at = datetime.utcnow()
+            conversation.escalation_data = {
+                "original_question": clean_message,
+                "reason": escalation_reason,
+                "rag_best_score": max(
+                    (d.relevance_score for d in retrieved_docs_raw), default=0.0
+                ),
+                "retrieved_count": len(retrieved_docs_raw),
+                "user_profile_summary": {
+                    "name": user_context.get("user_profile", {}).get("name"),
+                    "objective": user_context.get("user_profile", {}).get("objective"),
+                },
+            }
+            self.session.add(conversation)
+
+        await self.session.commit()
+        await self.session.refresh(assistant_msg)
+
+        yield {
+            "type": "final",
+            "message_id": str(assistant_msg.id),
+            "conversation_id": str(conversation.id),
+            "role": "assistant",
+            "content": final_answer,
+            "retrieved_documents": [
+                {
+                    "id": doc.id,
+                    "title": doc.title,
+                    "relevance_score": doc.relevance_score,
+                }
+                for doc in retrieved_docs_raw
+            ],
+            "escalation": (
+                {"escalated": True, "reason": escalation_reason}
+                if should_escalate
+                else None
+            ),
+            "latency_ms": latency_ms,
+            "created_at": assistant_msg.created_at.isoformat() + "Z",
+        }
 
     # ── Admin: Conversas Escaladas ────────────────────────────────────────
 
