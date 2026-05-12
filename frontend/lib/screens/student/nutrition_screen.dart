@@ -58,14 +58,7 @@ class _NutritionScreenState extends State<NutritionScreen> {
         appBar: AppBar(
           backgroundColor: context.colors.background,
           elevation: 0,
-          title: Text(
-            'Nutrição',
-            style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: context.colors.textPrimary,
-                ),
-          ),
-          bottom: TabBar(
+          title: TabBar(
             labelColor: AppColors.primary,
             unselectedLabelColor: context.colors.textSecondary,
             indicatorColor: AppColors.primary,
@@ -162,13 +155,11 @@ class _NutritionScreenState extends State<NutritionScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 12),
+           const SizedBox(height: 12),
           _buildWeeklyConsistencyGrid(provider),
           const SizedBox(height: 12),
           _buildPremiumChartCarousel(provider),
-          const SizedBox(height: 16),
-          _buildAICoachCard(provider),
-          const SizedBox(height: 4),
+          const SizedBox(height: 12),
           _buildWaterTrackerCard(provider),
           const SizedBox(height: 12),
           Row(
@@ -421,106 +412,7 @@ class _NutritionScreenState extends State<NutritionScreen> {
     }
   }
 
-  Widget _buildAICoachCard(NutritionProvider provider) {
-    final feedback = provider.getAICoachFeedback();
-    final title = feedback['title'] ?? 'Dica do OmniAI Coach';
-    final advice = feedback['advice'] ?? '';
-    final type = feedback['type'] ?? 'info';
 
-    Color cardBorderColor = context.colors.border;
-    Color iconBgColor = AppColors.primary.withOpacity(0.1);
-    Color iconColor = AppColors.primary;
-    IconData icon = Icons.psychology_outlined;
-
-    if (type == 'warning') {
-      cardBorderColor = Colors.amber.withOpacity(0.4);
-      iconBgColor = Colors.amber.withOpacity(0.12);
-      iconColor = Colors.amber[800]!;
-      icon = Icons.warning_amber_rounded;
-    } else if (type == 'alert') {
-      cardBorderColor = Colors.red.withOpacity(0.4);
-      iconBgColor = Colors.red.withOpacity(0.12);
-      iconColor = Colors.red[800]!;
-      icon = Icons.error_outline_rounded;
-    } else if (type == 'success') {
-      cardBorderColor = const Color(0xFF10B981).withOpacity(0.4);
-      iconBgColor = const Color(0xFF10B981).withOpacity(0.12);
-      iconColor = const Color(0xFF059669);
-      icon = Icons.emoji_events_outlined;
-    }
-
-    return Container(
-      decoration: BoxDecoration(
-        color: context.colors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: cardBorderColor, width: 1.2),
-        gradient: LinearGradient(
-          colors: [
-            context.colors.surface,
-            iconBgColor.withOpacity(0.03),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: iconBgColor,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, color: iconColor, size: 20),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            title,
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: context.colors.textPrimary),
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFF8A2387), Color(0xFFE94057)],
-                            ),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: const Text(
-                            'OMNIAI',
-                            style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 0.8),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      advice,
-                      style: TextStyle(color: context.colors.textSecondary, fontSize: 11, height: 1.4),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
   void _showCustomWaterDialog(BuildContext context, NutritionProvider provider) {
     final controller = TextEditingController();

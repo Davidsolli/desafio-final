@@ -342,29 +342,29 @@ class NutritionProvider extends ChangeNotifier {
     final proteinConsumed = _currentLogbook?.totalProtein ?? 0.0;
     final proteinTarget = dailyTargets['protein'] ?? 120.0;
 
-    String title = "Dica do OmniAI Coach 💡";
+    String title = "Dica do OmniAI Coach";
     String advice = "Registrar seus alimentos e manter a hidratação constante são os passos mais importantes para a consistência diária. Continue assim!";
     String type = "info"; // info, warning, success, alert
 
     // Lógica inteligente local por regras para simulação perfeita do comportamento
     if (caloriesConsumed == 0) {
-      title = "Inicie seu diário alimentar 🍳";
+      title = "Inicie seu diário alimentar";
       advice = "Seu diário para hoje está vazio. Comece adicionando sua refeição para receber insights automáticos de IA sobre seu progresso!";
       type = "info";
     } else if (_waterToday < _waterGoal * 0.5) {
-      title = "Atenção com a hidratação! 💧";
+      title = "Atenção com a hidratação!";
       advice = "Seu consumo de água está abaixo de 50% da meta recomendada. Beber água é essencial para manter o metabolismo ativo, otimizar a digestão e evitar retenção líquida!";
       type = "warning";
     } else if (proteinConsumed < proteinTarget * 0.7) {
-      title = "Foco nas proteínas 💪";
+      title = "Foco nas proteínas";
       advice = "Você consumiu apenas ${proteinConsumed.toStringAsFixed(0)}g de proteína hoje. Para manter a massa magra e saciedade, tente incluir uma fonte de proteína magra na próxima refeição!";
       type = "alert";
     } else if (caloriesConsumed > caloriesTarget * 1.1) {
-      title = "Limite calórico atingido ⚠️";
+      title = "Limite calórico atingido";
       advice = "Você ultrapassou a sua meta calórica planejada em ${(caloriesConsumed - caloriesTarget).toStringAsFixed(0)} kcal. Opte por alimentos com menor densidade calórica e ricos em fibras nas próximas horas.";
       type = "warning";
     } else if (proteinConsumed >= proteinTarget && caloriesConsumed <= caloriesTarget) {
-      title = "Metas perfeitamente batidas! 🏆";
+      title = "Metas perfeitamente batidas!";
       advice = "Excelente equilíbrio de nutrientes! Você bateu a sua meta diária de proteínas permanecendo dentro do orçamento de calorias. Excelente trabalho!";
       type = "success";
     }

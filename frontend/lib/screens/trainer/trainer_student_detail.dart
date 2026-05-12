@@ -1187,17 +1187,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
               currentFats: currentFats,
               targetFats: totalTargetFats,
             ),
-            const SizedBox(height: 20),
 
-            // 4. OmniAI Smart Coach Card
-            _buildOmniAICoachCard(
-              currentKcal: currentKcal,
-              targetKcal: totalTargetKcal,
-              currentProtein: currentProtein,
-              targetProtein: totalTargetProtein,
-              currentWater: _studentWaterToday,
-              targetWater: waterTargetMl,
-            ),
             const SizedBox(height: 20),
 
             // 5. Card de Hidratação Interativo
@@ -1561,92 +1551,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
     );
   }
 
-  Widget _buildOmniAICoachCard({
-    required double currentKcal,
-    required double targetKcal,
-    required double currentProtein,
-    required double targetProtein,
-    required int currentWater,
-    required int targetWater,
-  }) {
-    final kcalPercent = targetKcal > 0 ? (currentKcal / targetKcal) : 0.0;
-    final proteinPercent = targetProtein > 0 ? (currentProtein / targetProtein) : 0.0;
-    final waterPercent = targetWater > 0 ? (currentWater / targetWater) : 0.0;
 
-    String advice;
-    Color cardColor;
-    IconData adviceIcon;
-
-    if (kcalPercent == 0 && proteinPercent == 0) {
-      advice = 'O aluno ainda não logou refeições nesta data. Envie um lembrete amigável!';
-      cardColor = Colors.blueGrey;
-      adviceIcon = Icons.notifications_active_outlined;
-    } else if (proteinPercent < 0.8) {
-      advice = 'Ingestão proteica baixa hoje (${(proteinPercent * 100).toStringAsFixed(0)}%). Oriente o aluno a reforçar carnes, ovos ou whey nas próximas refeições para suporte de síntese muscular.';
-      cardColor = AppColors.accentWarning;
-      adviceIcon = Icons.trending_down_rounded;
-    } else if (kcalPercent > 1.15) {
-      advice = 'Superávit calórico acima do planejado hoje (+${(kcalPercent * 100 - 100).toStringAsFixed(0)}%). Avalie se houve episódios de indisciplina ou se o plano precisa ser ajustado.';
-      cardColor = AppColors.accentWarning;
-      adviceIcon = Icons.error_outline_rounded;
-    } else if (waterPercent < 0.6) {
-      advice = 'Ingestão hídrica muito baixa. Recomende ao aluno manter uma garrafa sempre por perto para evitar fadiga durante os treinos.';
-      cardColor = const Color(0xFF2196F3);
-      adviceIcon = Icons.local_drink_rounded;
-    } else {
-      advice = 'Excelente adesão hoje! Calorias e proteínas estão perfeitamente alinhadas com o objetivo planejado. Excelente trabalho!';
-      cardColor = AppColors.accentSuccess;
-      adviceIcon = Icons.verified_rounded;
-    }
-
-    return FadeInDown(
-      duration: const Duration(milliseconds: 400),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: cardColor.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: cardColor.withOpacity(0.3)),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: cardColor.withOpacity(0.2),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(adviceIcon, color: cardColor, size: 24),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Análise OmniAI Coach',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: cardColor,
-                        ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    advice,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: context.colors.textPrimary,
-                          height: 1.35,
-                        ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   void _showCustomWaterTrainerDialog(BuildContext context) {
     final controller = TextEditingController();

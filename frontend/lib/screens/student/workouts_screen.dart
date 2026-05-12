@@ -1175,7 +1175,6 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
   Widget _buildMainLayout() {
     return Column(
       children: [
-        _buildSuperHeader(),
         _buildTabBar(),
         Expanded(
           child: TabBarView(
@@ -1187,38 +1186,6 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildSuperHeader() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Foco & Evolução 🚀',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 24,
-                    ),
-              ),
-              Text(
-                'Acompanhe e personalize sua rotina de força',
-                style: TextStyle(color: context.colors.textSecondary, fontSize: 12),
-              ),
-            ],
-          ),
-          IconButton(
-            icon: const Icon(Icons.add_circle_outline, color: AppColors.primary, size: 28),
-            onPressed: _openCustomRoutineBuilder,
-            tooltip: 'Criar Rotina Customizada',
-          ),
-        ],
-      ),
     );
   }
 
@@ -1333,9 +1300,21 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Programa Ativo',
-          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Colors.grey),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Programa Ativo',
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Colors.grey),
+            ),
+            IconButton(
+              icon: const Icon(Icons.add_circle_outline, color: AppColors.primary, size: 20),
+              onPressed: _openCustomRoutineBuilder,
+              tooltip: 'Criar Rotina Customizada',
+              constraints: const BoxConstraints(),
+              padding: EdgeInsets.zero,
+            ),
+          ],
         ),
         const SizedBox(height: 8),
         SingleChildScrollView(
@@ -1386,7 +1365,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
-                            isOfficial ? 'Oficial 🛡️' : 'Personalizado 👤',
+                            isOfficial ? 'Oficial' : 'Personalizado',
                             style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
                           ),
                         ),
@@ -1427,7 +1406,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text(
-                '🔥 SUGESTÃO PARA HOJE',
+                'SUGESTÃO PARA HOJE',
                 style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1.1),
               ),
               Container(
@@ -1495,8 +1474,8 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
               color: AppColors.primary.withOpacity(0.1),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Center(
-              child: Text(sheet.emoji, style: const TextStyle(fontSize: 22)),
+            child: const Center(
+              child: Icon(Icons.fitness_center_outlined, color: AppColors.primary, size: 22),
             ),
           ),
           const SizedBox(width: 12),

@@ -8,7 +8,9 @@ import '../../routes/app_routes.dart';
 import '../../services/api_client.dart';
 import '../../services/home_service.dart';
 import '../../providers/home_provider.dart';
+import '../../providers/logbook_provider.dart';
 import '../../shared/widgets/index.dart';
+import '../../widgets/progress_widgets.dart';
 import 'widgets/step_summary_card.dart';
 
 // HomeScreen creates and injects HomeProvider locally so main.dart stays
@@ -32,8 +34,23 @@ class HomeScreen extends StatelessWidget {
 // Body
 // ---------------------------------------------------------------------------
 
-class _HomeBody extends StatelessWidget {
+class _HomeBody extends StatefulWidget {
   const _HomeBody();
+
+  @override
+  State<_HomeBody> createState() => _HomeBodyState();
+}
+
+class _HomeBodyState extends State<_HomeBody> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<LogbookProvider>().loadSessions().catchError((e) {
+        debugPrint('Erro ao carregar sessões no Home: $e');
+      });
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -102,14 +119,9 @@ class _HomeBody extends StatelessWidget {
                     child: _buildTodayWorkout(context, data),
                   ),
                   const SizedBox(height: 20),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: _buildGoalsSection(context, data),
-                  ),
-                  const SizedBox(height: 20),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: _buildLastWorkoutSection(context, data),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16),
+                    child: WorkoutHistorySection(),
                   ),
                   const SizedBox(height: 20),
                   Padding(
@@ -580,104 +592,6 @@ class _HomeBody extends StatelessWidget {
   }
 
   // ---------------------------------------------------------------------------
-  // Last workout
-  // ---------------------------------------------------------------------------
-
-  Widget _buildLastWorkoutSection(BuildContext context, HomeData data) {
-    return Column(
-      children: [
-        OmniSectionHeader(title: 'Último Treino'),
-        const SizedBox(height: 12),
-        FadeInUp(
-          delay: const Duration(milliseconds: 250),
-          child: data.lastSession == null
-              ? Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: context.colors.surface,
-                    border: Border.all(color: context.colors.border, width: 1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.directions_run_outlined, color: AppColors.primary, size: 28),
-                      const SizedBox(width: 12),
-                      Text(
-                        'Nenhum treino registrado ainda',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: context.colors.textSecondary),
-                      ),
-                    ],
-                  ),
-                )
-              : Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: context.colors.surface,
-                    border: Border.all(color: context.colors.border, width: 1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.sentiment_satisfied_alt_outlined, color: AppColors.accentSuccess, size: 28),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              data.lastSession!.name,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodyMedium
-                                  ?.copyWith(fontWeight: FontWeight.w600),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              data.lastSession!.displayDate,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(
-                                      color: context.colors.textSecondary),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      GestureDetector(
-                        onTap: () => context.go(AppRoutes.logbook),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: AppColors.primary.withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            'Histórico',
-                            style: Theme.of(context)
-                                .textTheme
-                                .labelSmall
-                                ?.copyWith(
-                                  color: AppColors.primary,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-        ),
-      ],
-    );
-  }
-
-  // ---------------------------------------------------------------------------
   // Quick actions
   // ---------------------------------------------------------------------------
 
@@ -759,80 +673,5 @@ class _HomeBody extends StatelessWidget {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // Goals section
-  // ---------------------------------------------------------------------------
 
-  Widget _buildGoalsSection(BuildContext context, HomeData data) {
-    final activeGoals = data.goals.where((g) => !g.completed).take(2).toList();
-
-    return Column(
-      children: [
-        OmniSectionHeader(
-          title: 'Metas',
-          action: GestureDetector(
-            onTap: () => context.go(AppRoutes.goals),
-            child: Text(
-              'Ver todas',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: AppColors.primary, fontWeight: FontWeight.w600),
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        if (activeGoals.isEmpty)
-          OmniEmptyState(
-            icon: Icons.adjust,
-            title: 'Nenhuma meta ativa',
-          )
-        else
-          ...activeGoals.map(
-            (goal) => FadeInUp(
-              delay: const Duration(milliseconds: 200),
-              child: Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: context.colors.surface,
-                  border: Border.all(color: context.colors.border, width: 1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            goal.title,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
-                                ?.copyWith(fontWeight: FontWeight.w600),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        Text(
-                          '${(goal.progress * 100).toStringAsFixed(0)}%',
-                          style: Theme.of(context)
-                              .textTheme
-                              .labelSmall
-                              ?.copyWith(
-                                  color: AppColors.primary,
-                                  fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    OmniProgressBar(value: goal.progress),
-                  ],
-                ),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
 }
