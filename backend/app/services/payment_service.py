@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List
 from uuid import UUID
 from decimal import Decimal
+from datetime import datetime, timedelta
 import logging
 
 from app.models.payment import Plan, Subscription
@@ -389,6 +390,33 @@ class SubscriptionService:
             await session.commit()
             logger.info(f"Assinatura cancelada manualmente: {subscription_id}")
         return success
+
+    @staticmethod
+    async def change_plan(
+        session: AsyncSession,
+        subscription_id: UUID,
+        new_plan_id: UUID
+    ) -> bool:
+        """Alterar plano de uma assinatura (admin)"""
+        subscription = await SubscriptionRepository.find_by_id(session, subscription_id)
+        if not subscription:
+            return False
+
+        plan = await PlanRepository.find_by_id(session, new_plan_id)
+        if not plan or not plan.is_active:
+            return False
+
+        subscription.plan_id = new_plan_id
+        # Se estiver ativa, atualizamos a expiração baseada no novo plano a partir de hoje
+        if subscription.status == "active":
+            now = datetime.utcnow()
+            subscription.expires_at = now + timedelta(days=30 * plan.duration_months)
+
+        await session.flush()
+        await session.commit()
+        logger.info(f"Plano da assinatura {subscription_id} alterado para {new_plan_id}")
+        return True
+
 
 
 class PaymentCronService:

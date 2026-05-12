@@ -21,7 +21,8 @@ from app.dtos.payment_dtos import (
     AsaasWebhookDTO,
     InfinitePayWebhookDTO,
     SubscriptionSummaryDTO,
-    AdminSubscriptionItemDTO
+    AdminSubscriptionItemDTO,
+    ChangePlanDTO
 )
 from app.services.payment_service import PlanService, SubscriptionService
 
@@ -278,6 +279,23 @@ async def manual_cancel_subscription(
     if not success:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assinatura não encontrada")
     return {"status": "canceled"}
+
+
+@router.put("/admin/subscriptions/{subscription_id}/change-plan", status_code=status.HTTP_200_OK)
+async def change_plan_subscription(
+    subscription_id: UUID,
+    dto: ChangePlanDTO,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db)
+):
+    """Alterar plano de uma assinatura (admin)"""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Apenas admins")
+    success = await SubscriptionService.change_plan(session, subscription_id, dto.plan_id)
+    if not success:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Erro ao alterar plano da assinatura")
+    return {"status": "plan_changed"}
+
 
 
 # ============= WEBHOOKS =============

@@ -191,3 +191,9 @@ class InfinitePayWebhookDTO(BaseModel):
         return self.transaction_id or self.order_nsu
 
     model_config = {"extra": "allow"}
+
+
+class ChangePlanDTO(BaseModel):
+    """DTO para alteração de plano de assinatura por admin"""
+    plan_id: UUID
+
