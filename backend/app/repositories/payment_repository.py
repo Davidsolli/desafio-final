@@ -296,7 +296,7 @@ class SubscriptionRepository:
                 Subscription.started_at,
                 Subscription.expires_at,
                 Subscription.created_at,
-                User.full_name.label("student_name"),
+                User.name.label("student_name"),
                 User.email.label("student_email"),
                 Plan.name.label("plan_name"),
                 Plan.price.label("plan_price"),
