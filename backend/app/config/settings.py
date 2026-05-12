@@ -37,11 +37,19 @@ class Settings(BaseSettings):
     RAG_LLM_TEMPERATURE: float = 0.3            # RN PRD: temperatura baixa para consistência
     RAG_HISTORY_MAX_TOKENS: int = 80            # RN-05: máximo de tokens do histórico
 
+    # ── RAG Melhorias ──────────────────────────────────────────────────────
+    RAG_HYBRID_SEARCH: bool = True              # BM25 (PostgreSQL FTS) + vetorial com RRF
+    RAG_HYBRID_FETCH_K: int = 10               # Candidatos extras antes do re-ranking
+    RAG_QUERY_REWRITE: bool = False            # LLM reformula query (desligado: +1 chamada Groq)
+    RAG_RERANK_ENABLED: bool = True            # Cross-encoder após RETRIEVE
+    RAG_RERANK_MODEL: str = "cross-encoder/ms-marco-MiniLM-L-2-v2"  # Configurável via env
+
     # ── Chat Service ───────────────────────────────────────────────────────
     CHAT_RATE_LIMIT_MESSAGES: int = 30          # RN-16: max mensagens por hora por usuário
     CHAT_RATE_LIMIT_WINDOW_HOURS: int = 1
     CHAT_MAX_MESSAGE_LENGTH: int = 500          # RN segurança: máximo de caracteres
     CHAT_INACTIVITY_CLOSE_HOURS: int = 24       # RN-02: fechar conversa após 24h inativa
+    CHAT_MAX_RESPONSE_LATENCY_MS: int = 10000   # Timeout máximo para o LLM (cold start + rede)
 
     # ── InfinitePay ────────────────────────────────────────────────────────
     INFINITEPAY_HANDLE: str = "natalia-faria-16"
@@ -51,8 +59,18 @@ class Settings(BaseSettings):
     WHATSAPP_TOKEN: str = ""
     WHATSAPP_PHONE_NUMBER_ID: str = ""
 
+    # ── Firebase ──────────────────────────────────────────────────────────
+    FIREBASE_CREDENTIALS_PATH: str = "./firebase-credentials.json"
+
+    # ── Recuperação de Senha ───────────────────────────────────────────────
+    PASSWORD_RESET_TOKEN_EXPIRE_MINUTES: int = 60
+    RESEND_API_KEY: str = ""
+    RESEND_FROM_EMAIL: str = "noreply@getfitloop.com"
+    RESEND_FROM_NAME: str = "OmniConnect Fitness"
+    FRONTEND_URL: str = "http://localhost:3000"
+    FRONTEND_RESET_PASSWORD_ROUTE: str = "/reset-password"
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
 settings = Settings()
-

@@ -80,6 +80,41 @@ class ValidateInvitationResponseDTO(BaseModel):
     )
 
 
+class WhatsAppPrefillResponseDTO(BaseModel):
+    """Dados do pré-cadastro WhatsApp para preencher o formulário no app."""
+
+    found: bool = Field(description="Se existe um pré-cadastro vinculado a este código")
+    name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+
+
+class ApproveWhatsAppDTO(BaseModel):
+    """DTO para aprovar pré-cadastro WhatsApp e enviar código ao usuário."""
+
+    phone: str = Field(
+        description="Número do WhatsApp do usuário a aprovar (ex: 5511999999999)",
+    )
+
+
+class WhatsAppPendingItemDTO(BaseModel):
+    """Item de pré-cadastro WhatsApp pendente de aprovação."""
+
+    phone: str
+    name: Optional[str]
+    email: Optional[str]
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class WhatsAppPendingListDTO(BaseModel):
+    """Lista de pré-cadastros WhatsApp aguardando aprovação."""
+
+    total: int
+    items: list[WhatsAppPendingItemDTO]
+
+
 class ListInvitationsResponseDTO(BaseModel):
     """DTO para resposta de listagem de convites."""
 

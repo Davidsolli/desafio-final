@@ -14,6 +14,7 @@ import '../screens/student/metrics_screen.dart';
 import '../screens/student/goals_screen.dart';
 import '../screens/student/chat_screen.dart';
 import '../screens/student/profile_screen_new.dart';
+import '../screens/student/steps/steps_screen.dart';
 import '../screens/notifications_screen.dart';
 import '../screens/notifications_settings_screen.dart';
 import '../screens/trainer/trainer_shell.dart';
@@ -54,6 +55,7 @@ class AppRoutes {
   static const String goals = '/goals';
   static const String chat = '/chat';
   static const String profile = '/profile';
+  static const String steps = '/steps';
 
   // Trainer
   static const String trainerHome = '/trainer/home';
@@ -154,6 +156,10 @@ class AppRoutes {
           GoRoute(
             path: profile,
             builder: (context, state) => const ProfileScreenV2(),
+          ),
+          GoRoute(
+            path: steps,
+            builder: (context, state) => const StepsScreen(),
           ),
         ],
       ),

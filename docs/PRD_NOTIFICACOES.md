@@ -1,16 +1,18 @@
 # PRD: Notificações - OmniConnect Fitness
 
-**Versão:** 1.0  
-**Data:** 2026-04-21  
+**Versão:** 1.1  
+**Data:** 2026-05-08  
 **Status:** 📋 Em Especificação  
-**Responsável:** David Oliveira
+**Responsável:** Anderson Chaves
 
 ---
 
 ## 📋 1. Visão Geral
 
 ### Objetivo
+
 Criar sistema de notificações multi-canal:
+
 - ✅ Enviar notificação push (FCM) para lembrar treino do dia
 - ✅ Enviar lembretes de horários de refeições configurados
 - ✅ Aluno configurar horários de notificações individuais
@@ -19,18 +21,22 @@ Criar sistema de notificações multi-canal:
 - ✅ Silenciar categorias de notificação granularmente
 
 ### Por Quê?
+
 - Engajamento: Lembrar treino aumenta adesão
 - Suporte: Personal fica atento a alunos inativos
 - Flexibilidade: Aluno controla quando quer ser notificado
 
 ### Escopo
+
 ✅ **Incluído:**
+
 - Push via Firebase Cloud Messaging (FCM)
 - Agendamento de notificações
 - Preferências de notificação
 - Histórico de notificações
 
 ❌ **NÃO incluído:**
+
 - Integração com SMS/Email
 - WhatsApp (será integrado no Cadastro WhatsApp)
 - Machine learning para melhor hora
@@ -42,6 +48,7 @@ Criar sistema de notificações multi-canal:
 ### 2.1 Modelo de Dados
 
 #### Tabela: NotificationPreference (Preferências)
+
 ```python
 class NotificationPreference(Base):
     """Preferências de notificação do aluno"""
@@ -77,6 +84,7 @@ class NotificationPreference(Base):
 ```
 
 #### Tabela: NotificationLog (Histórico)
+
 ```python
 class NotificationLog(Base):
     """Registro de cada notificação enviada"""
@@ -101,6 +109,7 @@ class NotificationLog(Base):
 ```
 
 #### Tabela: WorkoutReminderSchedule (Agendamento)
+
 ```python
 class WorkoutReminderSchedule(Base):
     """Agendamento de lembrete de treino"""
@@ -128,6 +137,7 @@ class WorkoutReminderSchedule(Base):
 ### 2.2 DTOs
 
 #### UpdateNotificationPreferenceDTO
+
 ```json
 {
   "notifications_enabled": true,
@@ -141,6 +151,7 @@ class WorkoutReminderSchedule(Base):
 ```
 
 #### NotificationPreferenceResponseDTO
+
 ```json
 {
   "id": "550e8400...",
@@ -161,12 +172,14 @@ class WorkoutReminderSchedule(Base):
 ### 3.1 GET /api/v1/notifications/preferences (Obter Preferências)
 
 **Request:**
+
 ```http
 GET /api/v1/notifications/preferences HTTP/1.1
 Authorization: Bearer {token}
 ```
 
 **Response 200:**
+
 ```json
 {
   "notifications_enabled": true,
@@ -182,6 +195,7 @@ Authorization: Bearer {token}
 ### 3.2 PUT /api/v1/notifications/preferences (Atualizar Preferências)
 
 **Request:**
+
 ```http
 PUT /api/v1/notifications/preferences HTTP/1.1
 Authorization: Bearer {token}
@@ -200,12 +214,14 @@ Authorization: Bearer {token}
 ### 3.3 GET /api/v1/notifications/history (Histórico)
 
 **Request:**
+
 ```http
 GET /api/v1/notifications/history?type=workout_reminder&limit=20 HTTP/1.1
 Authorization: Bearer {token}
 ```
 
 **Response 200:**
+
 ```json
 {
   "total": 45,
@@ -228,6 +244,7 @@ Authorization: Bearer {token}
 ### 3.4 POST /api/v1/notifications/mark-read (Marcar como Lido)
 
 **Request:**
+
 ```http
 POST /api/v1/notifications/mark-read HTTP/1.1
 Authorization: Bearer {token}
@@ -244,6 +261,7 @@ Authorization: Bearer {token}
 ## 📤 4. Tipos de Notificação
 
 ### 4.1 Workout Reminder (Lembrete de Treino)
+
 ```
 Título: "Hora do treino! 💪"
 Corpo: "Treino de Peito - Supino, Peck Deck (45 min)"
@@ -253,6 +271,7 @@ Data: {"workout_sheet_id": "550e8400...", "day_of_week": 1}
 ```
 
 ### 4.2 New Workout Sheet (Nova Ficha Atribuída)
+
 ```
 Título: "Nova ficha de treino!"
 Corpo: "Personal atribuiu: Treino A - Peito"
@@ -260,6 +279,7 @@ Tipo: Imediata (quando personal cria ficha)
 ```
 
 ### 4.3 Achievement (Meta Atingida)
+
 ```
 Título: "Parabéns! 🎉"
 Corpo: "Você atingiu a meta: Supino 90kg"
@@ -267,6 +287,7 @@ Tipo: Imediata (quando logbook mostra evolução)
 ```
 
 ### 4.4 Personal Alert (Aluno Não Registrou)
+
 ```
 Destinatário: Personal
 Título: "Aluno não registrou treino"
@@ -315,6 +336,7 @@ Destinatários: Personal vinculado + Gestor
 ## ⚙️ 7. Integração com Firebase
 
 ### Setup
+
 ```bash
 # Install
 pip install firebase-admin
@@ -324,6 +346,7 @@ export GOOGLE_APPLICATION_CREDENTIALS=/path/to/serviceAccountKey.json
 ```
 
 ### Send FCM
+
 ```python
 import firebase_admin
 from firebase_admin import messaging

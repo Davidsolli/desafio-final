@@ -5,11 +5,14 @@ Camada de lógica de negócio para criação, edição, deleção e duplicação
 de fichas de treino, bem como busca no catálogo de exercícios.
 """
 
+import logging
 from datetime import datetime
 from typing import List, Optional
 from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 from app.dtos.workout_sheet_dto import (
     CreateWorkoutSheetDTO,
@@ -22,8 +25,12 @@ from app.dtos.workout_sheet_dto import (
     UpdateWorkoutSheetDTO,
     WorkoutSheetListItemDTO,
     WorkoutSheetResponseDTO,
+    CreateWorkoutProgramDTO,
+    UpdateWorkoutProgramDTO,
+    WorkoutProgramResponseDTO,
+    PaginatedWorkoutProgramsDTO,
 )
-from app.models.workout_sheet import Exercise, WorkoutSheet
+from app.models.workout_sheet import Exercise, WorkoutSheet, WorkoutProgram
 from app.repositories.workout_sheet_repository import WorkoutSheetRepository
 
 
@@ -56,59 +63,173 @@ WRITE_ROLES = {"admin", "personal_trainer", "professor", "gestor"}
 # ---------------------------------------------------------------------------
 
 
+class WorkoutProgramNotFoundError(Exception):
+    """Programa de treino não encontrado."""
+
 class WorkoutSheetService:
-    """Serviço de lógica de negócio para Fichas de Treino."""
+    """Serviço de lógica de negócio para Programas e Fichas de Treino."""
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
         self.repository = WorkoutSheetRepository(session)
 
     # ------------------------------------------------------------------
-    # Criar Ficha
+    # Programas de Treino
+    # ------------------------------------------------------------------
+
+    async def create_workout_program(
+        self, requester_id: UUID, role: str, dto: CreateWorkoutProgramDTO
+    ) -> WorkoutProgramResponseDTO:
+        if role == "client":
+            if dto.user_id != requester_id:
+                raise WorkoutSheetForbiddenError(
+                    "Você só pode criar programas de treino para você mesmo."
+                )
+        else:
+            self._check_write_permission(role)
+
+        sheets = []
+        for sheet_dto in dto.workout_sheets:
+            exercises = self._build_exercises(sheet_dto.exercises)
+            sheets.append(WorkoutSheet(
+                name=sheet_dto.name,
+                description=sheet_dto.description,
+                day_of_week=sheet_dto.day_of_week,
+                order=sheet_dto.order,
+                is_active=True,
+                exercises=exercises,
+            ))
+
+        program = WorkoutProgram(
+            user_id=dto.user_id,
+            personal_trainer_id=None if role == "client" else requester_id,
+            name=dto.name,
+            description=dto.description,
+            goal=dto.goal,
+            is_active=True,
+            workout_sheets=sheets,
+        )
+
+        created = await self.repository.create_workout_program(program)
+        await self.repository.commit()
+
+        # RN08/RN10: notifica o aluno que recebeu o programa (uma notificação
+        # por programa criado, não por ficha aninhada).
+        await self._notify_new_sheet_safe(
+            user_id=created.user_id,
+            sheet_id=created.id,
+            sheet_name=created.name,
+        )
+        return self._to_program_response(created)
+
+    async def list_workout_programs(
+        self,
+        requester_id: UUID,
+        role: str,
+        user_id_filter: Optional[UUID],
+        page: int,
+        limit: int,
+    ) -> PaginatedWorkoutProgramsDTO:
+        effective_user_id = requester_id if role == "client" else user_id_filter
+        
+        programs, total = await self.repository.list_workout_programs(
+            user_id=effective_user_id,
+            page=page,
+            limit=limit,
+        )
+        items = [self._to_program_response(p) for p in programs]
+        return PaginatedWorkoutProgramsDTO(total=total, page=page, limit=limit, data=items)
+
+    async def get_workout_program(
+        self, program_id: UUID, requester_id: UUID, role: str
+    ) -> WorkoutProgramResponseDTO:
+        program = await self._get_program_and_check_read(program_id, requester_id, role)
+        return self._to_program_response(program)
+
+    async def update_workout_program(
+        self, program_id: UUID, requester_id: UUID, role: str, dto: UpdateWorkoutProgramDTO
+    ) -> WorkoutProgramResponseDTO:
+        program = await self.repository.get_workout_program_by_id(program_id)
+        if not program:
+            raise WorkoutProgramNotFoundError("Programa de treino não encontrado.")
+
+        if role == "client":
+            if program.user_id != requester_id or program.personal_trainer_id is not None:
+                raise WorkoutSheetForbiddenError(
+                    "Você só pode editar seus próprios programas de treino personalizados."
+                )
+        else:
+            self._check_write_permission(role)
+
+        if dto.name is not None:
+            program.name = dto.name
+        if dto.description is not None:
+            program.description = dto.description
+        if dto.goal is not None:
+            program.goal = dto.goal
+        if dto.is_active is not None:
+            program.is_active = dto.is_active
+
+        updated = await self.repository.update_workout_program(program)
+        await self.repository.commit()
+        return self._to_program_response(updated)
+
+    async def delete_workout_program(self, program_id: UUID, requester_id: UUID, role: str) -> None:
+        if role == "client":
+            program = await self.repository.get_workout_program_by_id(program_id)
+            if not program:
+                raise WorkoutProgramNotFoundError("Programa de treino não encontrado.")
+            if program.user_id != requester_id or program.personal_trainer_id is not None:
+                raise WorkoutSheetForbiddenError(
+                    "Você só pode deletar seus próprios programas de treino personalizados."
+                )
+        else:
+            self._check_write_permission(role)
+
+        deleted = await self.repository.soft_delete_workout_program(program_id)
+        if not deleted:
+            raise WorkoutProgramNotFoundError("Programa de treino não encontrado.")
+        await self.repository.commit()
+
+    # ------------------------------------------------------------------
+    # Fichas de Treino (Rotinas)
     # ------------------------------------------------------------------
 
     async def create_workout_sheet(
         self, requester_id: UUID, role: str, dto: CreateWorkoutSheetDTO
     ) -> WorkoutSheetResponseDTO:
-        """
-        Cria uma nova ficha de treino com exercícios.
-
-        Regras:
-        - RN-02: Apenas personal/professor/gestor/admin podem criar fichas.
-        - RN-01: Um aluno só pode ter uma ficha ativa por dia da semana.
-
-        Raises:
-            WorkoutSheetForbiddenError: Usuário sem permissão de escrita.
-            WorkoutSheetValidationError: Já existe ficha ativa para o dia.
-        """
         self._check_write_permission(role)
+        
+        if not dto.workout_program_id:
+            raise WorkoutSheetValidationError("O ID do programa é obrigatório para criar uma ficha individual.")
 
-        # RN-01: verificar se já existe ficha ativa para esse aluno e dia
-        existing_count = await self.repository.count_active_sheets_for_day(
-            user_id=dto.user_id,
-            day_of_week=dto.day_of_week,
-        )
-        if existing_count > 0:
-            raise WorkoutSheetValidationError(
-                f"O aluno já possui uma ficha ativa para o dia {dto.day_of_week}. "
-                "Delete ou desative a ficha existente primeiro."
-            )
+        program = await self.repository.get_workout_program_by_id(dto.workout_program_id)
+        if not program:
+            raise WorkoutProgramNotFoundError("Programa não encontrado.")
 
         exercises = self._build_exercises(dto.exercises)
 
         sheet = WorkoutSheet(
-            user_id=dto.user_id,
-            personal_trainer_id=requester_id,
+            workout_program_id=dto.workout_program_id,
             name=dto.name,
             description=dto.description,
             day_of_week=dto.day_of_week,
+            order=dto.order,
             is_active=True,
             exercises=exercises,
         )
 
         created = await self.repository.create_workout_sheet(sheet)
         await self.repository.commit()
-        return self._to_response(created)
+
+        # RN08/RN10: notifica o aluno dono do programa (falha não derruba a criação).
+        # WorkoutSheet pertence a WorkoutProgram; user_id vem do programa.
+        await self._notify_new_sheet_safe(
+            user_id=program.user_id,
+            sheet_id=created.id,
+            sheet_name=created.name,
+        )
+        return self._to_sheet_response(created)
 
     # ------------------------------------------------------------------
     # Listar Fichas
@@ -118,32 +239,12 @@ class WorkoutSheetService:
         self,
         requester_id: UUID,
         role: str,
-        user_id_filter: Optional[UUID],
-        day_of_week: Optional[int],
+        workout_program_id: Optional[UUID],
         page: int,
         limit: int,
     ) -> PaginatedWorkoutSheetsDTO:
-        """
-        Lista fichas com filtros e paginação.
-
-        - Aluno (client) só vê suas próprias fichas.
-        - Personal/Admin pode filtrar por user_id.
-        """
-        if role == "client":
-            effective_user_id = requester_id
-            personal_id = None
-        elif role == "personal_trainer":
-            effective_user_id = user_id_filter
-            personal_id = requester_id if user_id_filter is None else None
-        else:
-            # Admin vê tudo
-            effective_user_id = user_id_filter
-            personal_id = None
-
         sheets, total = await self.repository.list_workout_sheets(
-            user_id=effective_user_id,
-            personal_trainer_id=personal_id,
-            day_of_week=day_of_week,
+            workout_program_id=workout_program_id,
             page=page,
             limit=limit,
         )
@@ -151,10 +252,10 @@ class WorkoutSheetService:
         items = [
             WorkoutSheetListItemDTO(
                 id=s.id,
-                user_id=s.user_id,
-                personal_trainer_id=s.personal_trainer_id,
+                workout_program_id=s.workout_program_id,
                 name=s.name,
                 day_of_week=s.day_of_week,
+                order=s.order,
                 is_active=s.is_active,
                 exercise_count=len(s.exercises) if s.exercises else 0,
                 created_at=s.created_at,
@@ -171,14 +272,8 @@ class WorkoutSheetService:
     async def get_workout_sheet(
         self, sheet_id: UUID, requester_id: UUID, role: str
     ) -> WorkoutSheetResponseDTO:
-        """
-        Busca uma ficha com controle de acesso.
-
-        - Aluno só pode ver suas próprias fichas.
-        - Personal/Admin pode ver qualquer ficha.
-        """
-        sheet = await self._get_and_check_read(sheet_id, requester_id, role)
-        return self._to_response(sheet)
+        sheet = await self._get_sheet_and_check_read(sheet_id, requester_id, role)
+        return self._to_sheet_response(sheet)
 
     # ------------------------------------------------------------------
     # Atualizar Ficha
@@ -187,32 +282,11 @@ class WorkoutSheetService:
     async def update_workout_sheet(
         self, sheet_id: UUID, requester_id: UUID, role: str, dto: UpdateWorkoutSheetDTO
     ) -> WorkoutSheetResponseDTO:
-        """
-        Atualiza uma ficha (nome, descrição, dia, exercícios).
-
-        Regras:
-        - Apenas personal/admin podem editar fichas.
-        - Aluno (client) recebe 403.
-        - Se `exercises` fornecido, substitui TODOS os exercícios existentes.
-        - RN-01: se alterar dia_semana, verificar conflito.
-        """
         self._check_write_permission(role)
 
         sheet = await self.repository.get_workout_sheet_by_id(sheet_id)
         if not sheet:
             raise WorkoutSheetNotFoundError("Ficha de treino não encontrada.")
-
-        # RN-01: verificar conflito de dia ao mudar day_of_week
-        if dto.day_of_week is not None and dto.day_of_week != sheet.day_of_week:
-            existing_count = await self.repository.count_active_sheets_for_day(
-                user_id=sheet.user_id,
-                day_of_week=dto.day_of_week,
-                exclude_id=sheet_id,
-            )
-            if existing_count > 0:
-                raise WorkoutSheetValidationError(
-                    f"O aluno já possui uma ficha ativa para o dia {dto.day_of_week}."
-                )
 
         if dto.name is not None:
             sheet.name = dto.name
@@ -220,6 +294,8 @@ class WorkoutSheetService:
             sheet.description = dto.description
         if dto.day_of_week is not None:
             sheet.day_of_week = dto.day_of_week
+        if dto.order is not None:
+            sheet.order = dto.order
 
         # Substituição total de exercícios
         if dto.exercises is not None:
@@ -228,7 +304,7 @@ class WorkoutSheetService:
 
         updated = await self.repository.update_workout_sheet(sheet)
         await self.repository.commit()
-        return self._to_response(updated)
+        return self._to_sheet_response(updated)
 
     # ------------------------------------------------------------------
     # Deletar Ficha (soft delete)
@@ -273,19 +349,8 @@ class WorkoutSheetService:
         if not original:
             raise WorkoutSheetNotFoundError("Ficha de treino não encontrada.")
 
-        target_user_id = dto.user_id or original.user_id
+        target_program_id = dto.workout_program_id or original.workout_program_id
         new_name = dto.name or f"{original.name} (Cópia)"
-
-        # RN-01: verificar conflito de dia para o aluno destino
-        existing_count = await self.repository.count_active_sheets_for_day(
-            user_id=target_user_id,
-            day_of_week=original.day_of_week,
-        )
-        if existing_count > 0:
-            raise WorkoutSheetValidationError(
-                f"O aluno já possui uma ficha ativa para o dia {original.day_of_week}. "
-                "Especifique um user_id diferente ou delete a ficha existente."
-            )
 
         # Clonar exercícios
         cloned_exercises = [
@@ -305,18 +370,27 @@ class WorkoutSheetService:
         ]
 
         new_sheet = WorkoutSheet(
-            user_id=target_user_id,
-            personal_trainer_id=requester_id,
+            workout_program_id=target_program_id,
             name=new_name,
             description=original.description,
             day_of_week=original.day_of_week,
+            order=original.order,
             is_active=True,
             exercises=cloned_exercises,
         )
 
         created = await self.repository.create_workout_sheet(new_sheet)
         await self.repository.commit()
-        return self._to_response(created)
+
+        # RN08/RN10: notifica o aluno dono do programa destino (idem create).
+        target_program = await self.repository.get_workout_program_by_id(target_program_id)
+        if target_program is not None:
+            await self._notify_new_sheet_safe(
+                user_id=target_program.user_id,
+                sheet_id=created.id,
+                sheet_name=created.name,
+            )
+        return self._to_sheet_response(created)
 
     # ------------------------------------------------------------------
     # Catálogo de Exercícios
@@ -363,6 +437,31 @@ class WorkoutSheetService:
     # Helpers Privados
     # ------------------------------------------------------------------
 
+    async def _notify_new_sheet_safe(
+        self, user_id: UUID, sheet_id: UUID, sheet_name: str
+    ) -> None:
+        """
+        Dispara notify_new_workout_sheet com isolamento de falha (RN10).
+
+        Nunca propaga exceções: log e segue. Importação local para evitar
+        ciclo entre workout_sheet_service e notification_service.
+        """
+        try:
+            from app.services.notification_service import NotificationService
+
+            service = NotificationService(self.session)
+            await service.notify_new_workout_sheet(
+                user_id=user_id,
+                sheet_id=sheet_id,
+                sheet_name=sheet_name,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Falha ao notificar nova ficha de treino (sheet_id=%s): %s",
+                sheet_id,
+                exc,
+            )
+
     def _check_write_permission(self, role: str) -> None:
         """Verifica se o role tem permissão de escrita (RN-02)."""
         if role not in WRITE_ROLES:
@@ -370,7 +469,17 @@ class WorkoutSheetService:
                 "Apenas personal/professor/gestor/admin podem criar ou editar fichas."
             )
 
-    async def _get_and_check_read(
+    async def _get_program_and_check_read(
+        self, program_id: UUID, requester_id: UUID, role: str
+    ) -> WorkoutProgram:
+        program = await self.repository.get_workout_program_by_id(program_id)
+        if not program:
+            raise WorkoutProgramNotFoundError("Programa de treino não encontrado.")
+        if role == "client" and program.user_id != requester_id:
+            raise WorkoutSheetForbiddenError("Você não tem permissão para visualizar este programa.")
+        return program
+
+    async def _get_sheet_and_check_read(
         self, sheet_id: UUID, requester_id: UUID, role: str
     ) -> WorkoutSheet:
         """Busca a ficha e valida acesso de leitura."""
@@ -378,8 +487,9 @@ class WorkoutSheetService:
         if not sheet:
             raise WorkoutSheetNotFoundError("Ficha de treino não encontrada.")
 
+        program = await self.repository.get_workout_program_by_id(sheet.workout_program_id)
         # Aluno só pode ver suas próprias fichas
-        if role == "client" and sheet.user_id != requester_id:
+        if role == "client" and program and program.user_id != requester_id:
             raise WorkoutSheetForbiddenError(
                 "Você não tem permissão para visualizar esta ficha."
             )
@@ -406,7 +516,22 @@ class WorkoutSheetService:
         ]
 
     @staticmethod
-    def _to_response(sheet: WorkoutSheet) -> WorkoutSheetResponseDTO:
+    def _to_program_response(program: WorkoutProgram) -> WorkoutProgramResponseDTO:
+        return WorkoutProgramResponseDTO(
+            id=program.id,
+            user_id=program.user_id,
+            personal_trainer_id=program.personal_trainer_id,
+            name=program.name,
+            description=program.description,
+            goal=program.goal,
+            is_active=program.is_active,
+            created_at=program.created_at,
+            updated_at=program.updated_at,
+            workout_sheets=[WorkoutSheetService._to_sheet_response(s) for s in sorted(program.workout_sheets or [], key=lambda x: x.order)],
+        )
+
+    @staticmethod
+    def _to_sheet_response(sheet: WorkoutSheet) -> WorkoutSheetResponseDTO:
         """Converte WorkoutSheet para WorkoutSheetResponseDTO."""
         exercises = [
             ExerciseResponseDTO(
@@ -430,11 +555,11 @@ class WorkoutSheetService:
 
         return WorkoutSheetResponseDTO(
             id=sheet.id,
-            user_id=sheet.user_id,
-            personal_trainer_id=sheet.personal_trainer_id,
+            workout_program_id=sheet.workout_program_id,
             name=sheet.name,
             description=sheet.description,
             day_of_week=sheet.day_of_week,
+            order=sheet.order,
             is_active=sheet.is_active,
             created_at=sheet.created_at,
             updated_at=sheet.updated_at,

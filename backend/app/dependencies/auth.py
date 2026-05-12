@@ -49,6 +49,11 @@ async def get_current_user(
     if user is None:
         raise credentials_error
 
+    # Verifica token_version para invalidar sessões após reset de senha
+    token_version_in_jwt = payload.get("tv")
+    if token_version_in_jwt != (user.token_version or 0):
+        raise credentials_error
+
     return user
 
 async def get_current_user_ws(

@@ -163,6 +163,12 @@ class SessionResponseDTO(BaseModel):
     updated_at: datetime
     completed_at: Optional[datetime] = None
     session_exercises: List[SessionExerciseResponseDTO] = []
+    
+    # Campos para compatibilidade direta com o frontend
+    workout_name: Optional[str] = "Sessão de Treino"
+    duration_minutes: Optional[int] = 45
+    calories_burned: Optional[float] = 200.0
+    intensity: Optional[str] = "moderada"
 
     model_config = {"from_attributes": True}
 
@@ -180,6 +186,12 @@ class SessionListItemDTO(BaseModel):
     completed_at: Optional[datetime] = None
     created_at: datetime
     exercise_count: int = 0
+    
+    # Campos para compatibilidade direta com o frontend
+    workout_name: Optional[str] = "Sessão de Treino"
+    duration_minutes: Optional[int] = 45
+    calories_burned: Optional[float] = 200.0
+    intensity: Optional[str] = "moderada"
 
     model_config = {"from_attributes": True}
 
@@ -282,3 +294,24 @@ class FrequencyResponseDTO(BaseModel):
     user_id: UUID
     period: str  # "weekly" ou "monthly"
     data_points: List[FrequencyDataPointDTO]
+
+
+# ---------------------------------------------------------------------------
+# DTOs de Foco Muscular (Muscle Group Distribution)
+# ---------------------------------------------------------------------------
+
+
+class MuscleGroupDistributionItemDTO(BaseModel):
+    """Item de distribuição de treinos por grupo muscular."""
+
+    muscle_group: str
+    count: int
+
+
+class MuscleGroupDistributionResponseDTO(BaseModel):
+    """Resposta de distribuição de treinos por grupo muscular."""
+
+    user_id: UUID
+    days: int
+    distribution: List[MuscleGroupDistributionItemDTO]
+

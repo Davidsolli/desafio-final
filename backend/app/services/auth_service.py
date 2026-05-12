@@ -49,8 +49,8 @@ class AuthService:
         if not user.is_active:
             raise InvalidCredentialsError("Esta conta foi desativada")
 
-        # Gerar token
-        token = self.create_access_token({"sub": str(user.id)})
+        # Gerar token incluindo token_version para suporte a invalidação pós-reset
+        token = self.create_access_token({"sub": str(user.id), "tv": (user.token_version or 0)})
         expires_in_seconds = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
 
         return TokenResponseDTO(

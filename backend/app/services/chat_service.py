@@ -16,8 +16,11 @@ import logging
 import re
 import time
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, AsyncGenerator, Awaitable, Callable
 from uuid import UUID, uuid4
+
+# Tipo de callback de status (envia eventos {"type":"status", ...} para clientes)
+StatusCallback = Callable[[dict[str, Any]], Awaitable[None]]
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,6 +43,8 @@ RATE_LIMIT_MESSAGES = settings.CHAT_RATE_LIMIT_MESSAGES
 RATE_LIMIT_WINDOW_HOURS = settings.CHAT_RATE_LIMIT_WINDOW_HOURS
 MAX_MESSAGE_LENGTH = settings.CHAT_MAX_MESSAGE_LENGTH
 INACTIVITY_CLOSE_HOURS = settings.CHAT_INACTIVITY_CLOSE_HOURS
+
+ALLOWED_CHANNELS: tuple[str, ...] = ("app", "whatsapp")
 
 
 # ── Exceções de Domínio ───────────────────────────────────────────────────────
@@ -138,6 +143,7 @@ class ChatService:
         user_id: UUID,
         conversation_id: UUID | None,
         academy_id: UUID | None,
+        channel: str = "app",
     ) -> ChatConversation:
         """
         Obter conversa existente ou criar nova.
@@ -176,7 +182,7 @@ class ChatService:
         conversation = ChatConversation(
             user_id=user_id,
             academy_id=academy_id,
-            channel="app",
+            channel=channel,
             status="active",
             started_at=datetime.utcnow(),
         )
@@ -212,9 +218,23 @@ class ChatService:
         """
         Montar contexto do aluno para o pipeline RAG.
 
-        Busca perfil do usuário. A ficha ativa seria buscada do módulo
-        de treinos quando disponível (PRD_FICHA_TREINO).
+        Inclui dados REAIS do aluno autenticado:
+        - Perfil (nome, role, dados corporais, objetivo)
+        - Ficha de treino ativa (mais recente)
+        - Metas em andamento
+        - Histórico recente de treinos completos
+        - Dieta ativa
+
+        Cada bloco é resiliente: se a busca falhar ou não houver dados,
+        retorna estrutura vazia (lista [] ou None) sem propagar exceção.
+        Isto isola o chatbot de falhas pontuais em outros módulos.
         """
+        from app.models.diet import Diet
+        from app.models.goal import Goal
+        from app.models.logbook import WorkoutSession
+        from app.models.workout_sheet import WorkoutSheet
+
+        # ── Perfil ────────────────────────────────────────────────────────
         stmt = select(User).where(User.id == user_id, User.is_active == True)
         result = await self.session.execute(stmt)
         user = result.scalar_one_or_none()
@@ -229,13 +249,143 @@ class ChatService:
                 "age": user.age or 0,
                 "gender": user.gender or "não informado",
                 "goal_type": user.goal_type or "não informado",
-                "level": "não informado",     # Campo futuro do perfil
-                "objective": "não informado", # Campo futuro do perfil
+                "level": "não informado",
+                "objective": user.goal_type or "não informado",
             }
+
+        # ── Personal trainer vinculado ────────────────────────────────────
+        # Busca o User referenciado por user.trainer_id. Permite o LLM
+        # responder "quem é meu personal trainer?" e similares.
+        personal_trainer: dict[str, Any] | None = None
+        if user and user.trainer_id:
+            try:
+                trainer_stmt = select(User).where(
+                    User.id == user.trainer_id,
+                    User.is_active == True,
+                )
+                trainer_result = await self.session.execute(trainer_stmt)
+                trainer = trainer_result.scalar_one_or_none()
+                if trainer:
+                    personal_trainer = {
+                        "id": str(trainer.id),
+                        "name": trainer.name,
+                        "email": trainer.email,
+                    }
+            except Exception as exc:
+                logger.debug("Falha ao carregar personal trainer: %s", exc)
+
+        # ── Ficha de treino ativa (mais recente) ──────────────────────────
+        active_workout_sheet: dict[str, Any] | None = None
+        try:
+            sheet_stmt = (
+                select(WorkoutSheet)
+                .where(
+                    WorkoutSheet.user_id == user_id,
+                    WorkoutSheet.is_active == True,
+                )
+                .order_by(WorkoutSheet.created_at.desc())
+                .limit(1)
+            )
+            sheet_result = await self.session.execute(sheet_stmt)
+            sheet = sheet_result.scalar_one_or_none()
+            if sheet:
+                exercises_summary = [
+                    {
+                        "name": ex.name,
+                        "muscle_group": ex.muscle_group,
+                        "sets": ex.series,
+                        "reps": ex.repetitions,
+                        "load_kg": ex.load_kg,
+                    }
+                    for ex in (sheet.exercises or [])[:10]
+                ]
+                active_workout_sheet = {
+                    "id": str(sheet.id),
+                    "name": sheet.name,
+                    "day_of_week": sheet.day_of_week,
+                    "exercises": exercises_summary,
+                }
+        except Exception as exc:
+            logger.debug("Falha ao carregar ficha ativa: %s", exc)
+
+        # ── Metas em andamento ────────────────────────────────────────────
+        active_goals: list[dict[str, Any]] = []
+        try:
+            goal_stmt = (
+                select(Goal)
+                .where(Goal.user_id == user_id, Goal.status == "active")
+                .order_by(Goal.target_date.asc())
+                .limit(5)
+            )
+            goal_result = await self.session.execute(goal_stmt)
+            for goal in goal_result.scalars().all():
+                active_goals.append(
+                    {
+                        "id": str(goal.id),
+                        "title": goal.title,
+                        "category": goal.category,
+                        "current_value": goal.current_value,
+                        "target_value": goal.target_value,
+                        "unit": goal.unit,
+                        "progress_percentage": goal.progress_percentage,
+                    }
+                )
+        except Exception as exc:
+            logger.debug("Falha ao carregar metas: %s", exc)
+
+        # ── Histórico recente de treinos ──────────────────────────────────
+        recent_history: list[dict[str, Any]] = []
+        try:
+            history_stmt = (
+                select(WorkoutSession)
+                .where(
+                    WorkoutSession.user_id == user_id,
+                    WorkoutSession.status == "completed",
+                )
+                .order_by(WorkoutSession.session_date.desc())
+                .limit(3)
+            )
+            history_result = await self.session.execute(history_stmt)
+            for session_obj in history_result.scalars().all():
+                recent_history.append(
+                    {
+                        "id": str(session_obj.id),
+                        "session_date": session_obj.session_date.isoformat(),
+                        "difficulty_level": session_obj.difficulty_level,
+                        "mood": session_obj.mood,
+                    }
+                )
+        except Exception as exc:
+            logger.debug("Falha ao carregar histórico de treinos: %s", exc)
+
+        # ── Dieta ativa ───────────────────────────────────────────────────
+        active_diet: dict[str, Any] | None = None
+        try:
+            diet_stmt = (
+                select(Diet)
+                .where(Diet.user_id == user_id, Diet.is_active == True)
+                .order_by(Diet.updated_at.desc())
+                .limit(1)
+            )
+            diet_result = await self.session.execute(diet_stmt)
+            diet = diet_result.scalar_one_or_none()
+            if diet:
+                active_diet = {
+                    "id": str(diet.id),
+                    "name": diet.name,
+                    "goal": diet.goal,
+                    "is_custom": diet.is_custom,
+                }
+        except Exception as exc:
+            logger.debug("Falha ao carregar dieta ativa: %s", exc)
 
         return {
             "user_profile": user_profile,
-            "active_workout_sheet": None,  # Integração futura com PRD_FICHA_TREINO
+            "personal_trainer": personal_trainer,
+            "active_workout_sheet": active_workout_sheet,
+            "active_goals": active_goals,
+            "recent_history": recent_history,
+            "active_diet": active_diet,
         }
 
     # ── Enviar Mensagem (fluxo principal) ─────────────────────────────────
@@ -246,6 +396,8 @@ class ChatService:
         message: str,
         conversation_id: UUID | None = None,
         academy_id: UUID | None = None,
+        on_status: StatusCallback | None = None,
+        channel: str = "app",
     ) -> dict[str, Any]:
         """
         Processar mensagem do aluno e retornar resposta do chatbot.
@@ -263,6 +415,10 @@ class ChatService:
             message: Texto da mensagem.
             conversation_id: UUID da conversa existente (None = nova).
             academy_id: UUID da academia para filtrar RAG.
+            on_status: callback opcional invocado com eventos
+                {"type": "status", "status": ..., "message": ...} durante o
+                processamento. Permite que clientes (ex.: WebSocket) deem
+                feedback visual em tempo real sem acoplar UI à lógica.
 
         Returns:
             Dicionário com message_id, conversation_id, content, retrieved_documents, etc.
@@ -271,19 +427,32 @@ class ChatService:
             RateLimitExceededError: Limite de mensagens atingido.
             MessageTooLongError: Mensagem muito longa.
         """
+        async def emit(status_name: str, message_text: str) -> None:
+            if on_status is None:
+                return
+            try:
+                await on_status({"type": "status", "status": status_name, "message": message_text})
+            except Exception:
+                logger.debug("Erro ao emitir status %s — ignorando", status_name)
+
+        if channel not in ALLOWED_CHANNELS:
+            raise ValueError(f"channel inválido: {channel!r}")
+
         # 1. Sanitizar e validar
         clean_message = self.sanitize_input(message)
-        if len(message) > MAX_MESSAGE_LENGTH:
+        if len(clean_message) > MAX_MESSAGE_LENGTH:
             raise MessageTooLongError(
                 f"Mensagem excede {MAX_MESSAGE_LENGTH} caracteres."
             )
+
+        await emit("thinking", "Analisando sua pergunta...")
 
         # 2. Rate limit
         await self._check_rate_limit(user_id)
 
         # 3. Obter/criar conversa
         conversation = await self._get_or_create_conversation(
-            user_id, conversation_id, academy_id
+            user_id, conversation_id, academy_id, channel
         )
 
         # 4. Contexto do aluno e histórico
@@ -295,10 +464,13 @@ class ChatService:
             conversation_id=conversation.id,
             role="user",
             content=clean_message,
-            channel="app",
+            channel=channel,
         )
         self.session.add(user_msg)
         await self.session.flush()
+
+        await emit("searching", "Buscando na base de conhecimento...")
+        await emit("generating", "Preparando sua resposta...")
 
         # 6. Pipeline RAG
         start = time.monotonic()
@@ -330,7 +502,7 @@ class ChatService:
             role="assistant",
             content=rag_result.answer,
             context_data=context_data,
-            channel="app",
+            channel=channel,
             model_used=rag_result.model_used,
             tokens_used=rag_result.tokens_used,
             latency_ms=rag_result.latency_ms or latency_ms,
@@ -343,6 +515,21 @@ class ChatService:
             conversation.status = "escalated"
             conversation.escalation_reason = rag_result.escalation_reason
             conversation.escalated_at = datetime.utcnow()
+            conversation.escalation_data = {
+                "original_question": clean_message,
+                "reason": rag_result.escalation_reason,
+                "rag_best_score": (
+                    max(
+                        (d.relevance_score for d in rag_result.retrieved_documents),
+                        default=0.0,
+                    )
+                ),
+                "retrieved_count": len(rag_result.retrieved_documents),
+                "user_profile_summary": {
+                    "name": user_context.get("user_profile", {}).get("name"),
+                    "objective": user_context.get("user_profile", {}).get("objective"),
+                },
+            }
             self.session.add(conversation)
 
         await self.session.commit()
@@ -561,6 +748,168 @@ class ChatService:
         await self.session.commit()
         return {"success": True, "message": "Feedback registrado"}
 
+    # ── Enviar Mensagem (streaming SSE) ──────────────────────────────────
+
+    async def send_message_stream(
+        self,
+        user_id: UUID,
+        message: str,
+        conversation_id: UUID | None = None,
+        academy_id: UUID | None = None,
+        channel: str = "app",
+    ) -> AsyncGenerator[dict[str, Any], None]:
+        """
+        Processar mensagem do aluno com resposta streamada (SSE).
+
+        Fluxo:
+            1. Sanitizar + rate limit (levanta exceção antes do primeiro yield)
+            2. Obter/criar conversa e salvar mensagem do usuário
+            3. Delegar ao run_stream() do RAGChain (yields chunks incrementais)
+            4. Persistir mensagem do assistente e escalação após o stream
+
+        Yields dicts com campo 'type':
+            {"type": "status", "status": "...", "message": "..."}
+            {"type": "chunk",  "content": "<token(s)>"}
+            {"type": "final",  "message_id": ..., "conversation_id": ..., ...}
+
+        Raises (antes do primeiro yield):
+            RateLimitExceededError, MessageTooLongError, ValueError
+        """
+        if channel not in ALLOWED_CHANNELS:
+            raise ValueError(f"channel inválido: {channel!r}")
+
+        clean_message = self.sanitize_input(message)
+        if len(clean_message) > MAX_MESSAGE_LENGTH:
+            raise MessageTooLongError(f"Mensagem excede {MAX_MESSAGE_LENGTH} caracteres.")
+
+        await self._check_rate_limit(user_id)
+
+        conversation = await self._get_or_create_conversation(
+            user_id, conversation_id, academy_id, channel
+        )
+        user_context = await self._build_user_context(user_id)
+        history = await self._get_conversation_history(conversation)
+
+        user_msg = ChatMessage(
+            conversation_id=conversation.id,
+            role="user",
+            content=clean_message,
+            channel=channel,
+        )
+        self.session.add(user_msg)
+        await self.session.flush()
+
+        # ── Streaming RAG ────────────────────────────────────────────────
+        start = time.monotonic()
+        full_answer = ""
+        done_event: dict[str, Any] | None = None
+
+        async for event in rag_chain.run_stream(
+            query=clean_message,
+            session=self.session,
+            academy_id=str(academy_id) if academy_id else None,
+            user_context=user_context,
+            conversation_history=history,
+        ):
+            if event["type"] == "chunk":
+                full_answer += event["content"]
+                yield event
+            elif event["type"] == "done":
+                done_event = event
+                # Não faz yield do "done" — será enviado como "final" com IDs completos
+            else:
+                yield event  # status events
+
+        if done_event is None:
+            done_event = {
+                "answer": full_answer or ESCALATION_MESSAGES["generation_error"],
+                "should_escalate": True,
+                "escalation_reason": "generation_error",
+                "retrieved_documents": [],
+                "model_used": "",
+                "tokens_used": 0,
+                "latency_ms": 0,
+                "confidence_score": 0.0,
+            }
+
+        final_answer = full_answer if full_answer else done_event.get("answer", "")
+        should_escalate: bool = done_event.get("should_escalate", False)
+        escalation_reason: str = done_event.get("escalation_reason", "")
+        retrieved_docs_raw = done_event.get("retrieved_documents", [])
+
+        latency_ms = int((time.monotonic() - start) * 1000)
+
+        # ── Persistência ─────────────────────────────────────────────────
+        context_data = {
+            "user_profile": user_context.get("user_profile", {}),
+            "active_workout_sheet": user_context.get("active_workout_sheet"),
+            "retrieved_documents": [
+                {
+                    "id": doc.id,
+                    "title": doc.title,
+                    "relevance_score": doc.relevance_score,
+                }
+                for doc in retrieved_docs_raw
+            ],
+        }
+
+        assistant_msg = ChatMessage(
+            conversation_id=conversation.id,
+            role="assistant",
+            content=final_answer,
+            context_data=context_data,
+            channel=channel,
+            model_used=done_event.get("model_used", ""),
+            tokens_used=done_event.get("tokens_used", 0),
+            latency_ms=done_event.get("latency_ms") or latency_ms,
+            needs_human_review=should_escalate,
+        )
+        self.session.add(assistant_msg)
+
+        if should_escalate and conversation.status != "escalated":
+            conversation.status = "escalated"
+            conversation.escalation_reason = escalation_reason
+            conversation.escalated_at = datetime.utcnow()
+            conversation.escalation_data = {
+                "original_question": clean_message,
+                "reason": escalation_reason,
+                "rag_best_score": max(
+                    (d.relevance_score for d in retrieved_docs_raw), default=0.0
+                ),
+                "retrieved_count": len(retrieved_docs_raw),
+                "user_profile_summary": {
+                    "name": user_context.get("user_profile", {}).get("name"),
+                    "objective": user_context.get("user_profile", {}).get("objective"),
+                },
+            }
+            self.session.add(conversation)
+
+        await self.session.commit()
+        await self.session.refresh(assistant_msg)
+
+        yield {
+            "type": "final",
+            "message_id": str(assistant_msg.id),
+            "conversation_id": str(conversation.id),
+            "role": "assistant",
+            "content": final_answer,
+            "retrieved_documents": [
+                {
+                    "id": doc.id,
+                    "title": doc.title,
+                    "relevance_score": doc.relevance_score,
+                }
+                for doc in retrieved_docs_raw
+            ],
+            "escalation": (
+                {"escalated": True, "reason": escalation_reason}
+                if should_escalate
+                else None
+            ),
+            "latency_ms": latency_ms,
+            "created_at": assistant_msg.created_at.isoformat() + "Z",
+        }
+
     # ── Admin: Conversas Escaladas ────────────────────────────────────────
 
     async def list_escalated_conversations(
@@ -601,6 +950,7 @@ class ChatService:
                         else None
                     ),
                     "message_count": len(conv.messages),
+                    "escalation_data": conv.escalation_data,
                 }
             )
 
