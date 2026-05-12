@@ -98,5 +98,12 @@ class User(Base):
 
     fcm_token = Column(String(500), nullable=True)
 
+    timezone = Column(
+        String(50),
+        nullable=True,
+        default=None,
+        comment="Fuso horário IANA (ex: America/Sao_Paulo). NULL = default America/Sao_Paulo"
+    )
+
     def __repr__(self) -> str:
         return f"<User(id={self.id}, name={self.name}, email={self.email}, role={self.role})>"

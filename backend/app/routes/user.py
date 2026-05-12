@@ -21,6 +21,7 @@ from app.dtos.user_dto import (
     UserResponseDTO,
     PaginatedUsersResponseDTO,
     UpdateThemePreferenceDTO,
+    UpdateTimezoneDTO,
 )
 from app.dtos.auth_dto import ChangePasswordDTO
 from app.controllers.user_controller import UserController
@@ -436,6 +437,50 @@ async def update_theme_preference(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Erro ao atualizar preferência de tema",
+        )
+
+
+@router.put(
+    "/me/timezone",
+    response_model=UserResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Atualizar fuso horário do usuário autenticado",
+    responses={
+        200: {"description": "Fuso horário atualizado"},
+        400: {"description": "Validação falhou (timezone inválido)"},
+        401: {"description": "Não autenticado"},
+    },
+)
+async def update_timezone(
+    dto: UpdateTimezoneDTO,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> UserResponseDTO:
+    """
+    Atualizar o fuso horário IANA do usuário autenticado.
+
+    Usado pelos guards de notificação (quiet hours, silent days) e pelo
+    scheduler de meal reminders para interpretar horários no fuso do usuário.
+
+    **Request body:**
+    - `timezone`: identificador IANA (ex: `America/Sao_Paulo`, `America/Manaus`).
+    """
+    controller = UserController(session)
+
+    try:
+        update_dto = UpdateUserDTO(timezone=dto.timezone)
+        return await controller.update_user(current_user.id, update_dto)
+    except UserNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuário não encontrado",
+        )
+    except Exception as e:
+        import logging
+        logging.error(f"Erro inesperado ao atualizar timezone: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro ao atualizar fuso horário",
         )
 
 
