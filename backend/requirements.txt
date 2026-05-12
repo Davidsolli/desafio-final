@@ -36,6 +36,11 @@ langchain-core>=0.2.0
 langchain-groq>=0.1.4
 langchain-huggingface>=0.0.3
 sentence-transformers>=2.7.0
+groq>=0.9.0                    # SDK direto para Whisper (áudio)
+tavily-python>=0.5.0           # Busca web para dados nutricionais
+
+# ── Upload de arquivos ────────────────────────────────────────────────────────
+python-multipart>=0.0.9
 
 # ── Integrações ──────────────────────────────────────────────────────────────
 firebase-admin>=6.5.0

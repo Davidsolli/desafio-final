@@ -174,3 +174,31 @@ class EscalatedListResponseDTO(BaseModel):
 
     escalated_conversations: list[EscalatedConversationDTO]
     total: int
+
+
+# ── DTOs para Audio Food Logging ──────────────────────────────────────────────
+
+class FoodLoggedDTO(BaseModel):
+    """Alimento registrado no diário alimentar a partir de áudio."""
+
+    food_name: str
+    quantity_g: float
+    meal_name: str
+    kcal: float
+    protein: float
+    carbs: float
+    fats: float
+    logbook_entry_id: str
+    food_source: str = "taco"   # "taco" | "web" | "estimativa"
+
+
+class AudioFoodResponseDTO(BaseModel):
+    """Resposta do endpoint de audio food logging."""
+
+    message_id: str
+    conversation_id: str
+    transcription: str              # Texto transcrito do áudio
+    content: str                    # Mensagem de confirmação do Vitali
+    food_logged: FoodLoggedDTO | None = None   # None se o parse falhou
+    parse_confidence: str           # "high" | "low" | "failed"
+    created_at: str
