@@ -293,7 +293,7 @@ class _NutritionScreenState extends State<NutritionScreen> {
 
   Widget _buildAICoachCard(NutritionProvider provider) {
     final feedback = provider.getAICoachFeedback();
-    final title = feedback['title'] ?? 'Dica do OmniAI Coach 💡';
+    final title = feedback['title'] ?? 'Dica do OmniAI Coach';
     final advice = feedback['advice'] ?? '';
     final type = feedback['type'] ?? 'info';
 

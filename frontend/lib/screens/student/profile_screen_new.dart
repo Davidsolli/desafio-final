@@ -8,8 +8,6 @@ import '../../shared/widgets/index.dart';
 import 'widgets/profile_header.dart';
 import 'widgets/profile_stats_cards.dart';
 import 'widgets/profile_body_form.dart';
-import 'widgets/profile_goals_section.dart';
-import 'widgets/profile_achievements.dart';
 import 'widgets/profile_settings.dart';
 
 class ProfileScreenV2 extends StatefulWidget {
@@ -78,10 +76,6 @@ class _ProfileScreenV2State extends State<ProfileScreenV2> {
                 ProfileStatsCards(user: user),
                 const SizedBox(height: 24),
                 ProfileBodyForm(user: user),
-                const SizedBox(height: 24),
-                const ProfileGoalsSection(),
-                const SizedBox(height: 24),
-                const ProfileAchievements(),
                 const SizedBox(height: 24),
                 const ProfileSettings(),
                 const SizedBox(height: 32),

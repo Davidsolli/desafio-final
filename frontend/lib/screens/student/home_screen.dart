@@ -153,7 +153,7 @@ class _HomeBody extends StatelessWidget {
                       ?.copyWith(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(width: 6),
-                const Text('👋', style: TextStyle(fontSize: 20)),
+                const Icon(Icons.waving_hand_outlined, color: AppColors.accentWarning, size: 20),
               ],
             ),
             if (data.workoutStreak > 0) ...[
@@ -168,7 +168,7 @@ class _HomeBody extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text('🔥', style: TextStyle(fontSize: 11)),
+                    const Icon(Icons.local_fire_department, color: AppColors.primary, size: 14),
                     const SizedBox(width: 4),
                     Text(
                       '${data.workoutStreak} ${data.workoutStreak == 1 ? 'dia' : 'dias'} consecutivos',
@@ -273,7 +273,7 @@ class _HomeBody extends StatelessWidget {
           ),
           child: Row(
             children: [
-              const Text('😴', style: TextStyle(fontSize: 32)),
+              Icon(Icons.bedtime_outlined, color: context.colors.textMuted, size: 32),
               const SizedBox(width: 12),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -600,7 +600,7 @@ class _HomeBody extends StatelessWidget {
                   ),
                   child: Row(
                     children: [
-                      const Text('🏃', style: TextStyle(fontSize: 28)),
+                      const Icon(Icons.directions_run_outlined, color: AppColors.primary, size: 28),
                       const SizedBox(width: 12),
                       Text(
                         'Nenhum treino registrado ainda',
@@ -620,7 +620,7 @@ class _HomeBody extends StatelessWidget {
                   ),
                   child: Row(
                     children: [
-                      const Text('😊', style: TextStyle(fontSize: 28)),
+                      const Icon(Icons.sentiment_satisfied_alt_outlined, color: AppColors.accentSuccess, size: 28),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(

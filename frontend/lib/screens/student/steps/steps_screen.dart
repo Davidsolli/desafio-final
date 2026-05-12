@@ -699,7 +699,7 @@ class _StepsScreenState extends State<StepsScreen> {
             const SizedBox(height: 20),
             Row(
               children: [
-                const Text('😓', style: TextStyle(fontSize: 22)),
+                const Icon(Icons.sentiment_dissatisfied_outlined, color: _kHandicapColor, size: 24),
                 const SizedBox(width: 10),
                 Text(
                   'Não estou bem hoje',
@@ -844,7 +844,7 @@ class _StepsScreenState extends State<StepsScreen> {
       ),
       child: Row(
         children: [
-          const Text('🔥', style: TextStyle(fontSize: 28)),
+          const Icon(Icons.local_fire_department, color: AppColors.primary, size: 32),
           const SizedBox(width: 12),
           Expanded(
             child: streak > 0
@@ -900,7 +900,7 @@ class _StepsScreenState extends State<StepsScreen> {
             label: 'Melhor dia',
             value: _formatNumber(history.allTimeRecord),
             highlight: true,
-            badge: '🏆',
+            badgeIcon: Icons.emoji_events_outlined,
           ),
         ),
       ],
@@ -911,7 +911,7 @@ class _StepsScreenState extends State<StepsScreen> {
     required String label,
     required String value,
     required bool highlight,
-    String? badge,
+    IconData? badgeIcon,
   }) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -931,9 +931,9 @@ class _StepsScreenState extends State<StepsScreen> {
                       color: context.colors.textSecondary,
                     ),
               ),
-              if (badge != null) ...[
+              if (badgeIcon != null) ...[
                 const SizedBox(width: 4),
-                Text(badge, style: const TextStyle(fontSize: 12)),
+                Icon(badgeIcon, color: AppColors.primary, size: 14),
               ],
             ],
           ),
@@ -1040,7 +1040,7 @@ class _StepsScreenState extends State<StepsScreen> {
           ),
           if (isRecord) ...[
             const SizedBox(width: 6),
-            const Text('🏆'),
+            const Icon(Icons.emoji_events_outlined, color: _kHandicapColor, size: 18),
           ],
         ],
       ),
