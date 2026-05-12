@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:omniconnect_fitness/config/api_config.dart';
 import 'package:omniconnect_fitness/services/api_client.dart';
@@ -157,22 +156,28 @@ class ChatService {
     );
   }
 
-  /// Envia um arquivo de áudio para o endpoint de food logging.
+  /// Envia bytes de áudio para o endpoint de food logging.
   ///
-  /// O backend transcreve o áudio (Groq Whisper), extrai o alimento e
-  /// quantidade via LLM, busca no catálogo TACO e registra no DietLogbook.
+  /// Aceita [Uint8List] para compatibilidade com Flutter Web (blob) e
+  /// mobile (arquivo lido em bytes). O [filename] determina o Content-Type
+  /// inferido pelo servidor (ex: "audio.m4a", "audio.webm").
   ///
   /// [token] deve ser o JWT atual do usuário.
   /// [conversationId] é opcional — se null, o backend cria nova conversa.
   Future<AudioFoodResponseDTO> sendAudio({
-    required File audioFile,
+    required List<int> audioBytes,
+    required String filename,
     required String token,
     String? conversationId,
   }) async {
     final uri = Uri.parse(ApiConfig.chatSendAudio);
     final request = http.MultipartRequest('POST', uri)
       ..headers['Authorization'] = 'Bearer $token'
-      ..files.add(await http.MultipartFile.fromPath('audio', audioFile.path));
+      ..files.add(http.MultipartFile.fromBytes(
+        'audio',
+        audioBytes,
+        filename: filename,
+      ));
 
     if (conversationId != null && conversationId.isNotEmpty) {
       request.fields['conversation_id'] = conversationId;

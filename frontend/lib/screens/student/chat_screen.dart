@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' show File;
 
 import 'package:animate_do/animate_do.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
@@ -298,7 +300,11 @@ class _ChatScreenState extends State<ChatScreen> {
 
   // ── Gravação de áudio ──────────────────────────────────────────────────────
 
+  /// Solicita permissão de microfone no mobile.
+  /// No web o browser gerencia a permissão automaticamente via getUserMedia,
+  /// então pulamos essa etapa para não chamar plugin não suportado.
   Future<bool> _requestMicPermission() async {
+    if (kIsWeb) return true;
     final status = await Permission.microphone.request();
     if (status.isGranted) return true;
     if (mounted) {
@@ -316,18 +322,26 @@ class _ChatScreenState extends State<ChatScreen> {
     if (_isRecording || _isSendingAudio) return;
     if (!await _requestMicPermission()) return;
 
-    final dir = await getTemporaryDirectory();
-    final path = '${dir.path}/meal_audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
+    // path é obrigatório pelo record v5:
+    //   - web: valor ignorado internamente, passamos string vazia
+    //   - mobile: caminho real no diretório temporário do SO
+    final String audioPath;
+    if (kIsWeb) {
+      audioPath = 'audio_${DateTime.now().millisecondsSinceEpoch}.webm';
+    } else {
+      final dir = await getTemporaryDirectory();  // não executa no web
+      audioPath =
+          '${dir.path}/audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
+    }
 
     await _recorder.start(
       const RecordConfig(encoder: AudioEncoder.aacLc, sampleRate: 16000),
-      path: path,
+      path: audioPath,
     );
 
     _recordingSeconds = 0;
     _recordingTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() => _recordingSeconds++);
-      // Limite de 60 segundos
       if (_recordingSeconds >= 60) _stopAndSendRecording();
     });
 
@@ -350,14 +364,38 @@ class _ChatScreenState extends State<ChatScreen> {
     _recordingTimer?.cancel();
     _recordingTimer = null;
 
-    final path = await _recorder.stop();
+    // stop() retorna:
+    //   mobile → caminho do arquivo temporário  (ex: /data/.../tmp/audio.m4a)
+    //   web    → blob URL                       (ex: blob:http://localhost/…)
+    final result = await _recorder.stop();
     setState(() { _isRecording = false; _recordingSeconds = 0; });
 
-    if (path == null) return;
-    await _sendAudioFile(File(path));
+    if (result == null || result.isEmpty) return;
+
+    // Converter resultado em bytes + nome de arquivo
+    List<int> bytes;
+    final String filename;
+    try {
+      if (kIsWeb) {
+        // No web, result é um blob URL; http.get via BrowserClient acessa blobs
+        final blobResp = await http.get(Uri.parse(result));
+        bytes = blobResp.bodyBytes;
+        filename = 'audio.webm';
+      } else {
+        // No mobile, result é caminho de arquivo — dart:io File funciona
+        bytes = await File(result).readAsBytes();  // guard: !kIsWeb
+        filename = 'audio.m4a';
+        try { File(result).deleteSync(); } catch (_) {}
+      }
+    } catch (e) {
+      debugPrint('[chat] Erro ao ler bytes do áudio: $e');
+      return;
+    }
+
+    await _sendAudioBytes(bytes, filename);
   }
 
-  Future<void> _sendAudioFile(File file) async {
+  Future<void> _sendAudioBytes(List<int> bytes, String filename) async {
     // Captura context-dependents antes de qualquer await
     final chatService = context.read<ChatService>();
 
@@ -365,7 +403,6 @@ class _ChatScreenState extends State<ChatScreen> {
     final token = prefs.getString('jwt_token');
     if (token == null) return;
 
-    // Mostrar mensagem do usuário com ícone de microfone imediatamente
     setState(() {
       _isSendingAudio = true;
       _isTyping = true;
@@ -380,33 +417,30 @@ class _ChatScreenState extends State<ChatScreen> {
 
     try {
       final response = await chatService.sendAudio(
-        audioFile: file,
+        audioBytes: bytes,
+        filename: filename,
         token: token,
         conversationId: _conversationId,
       );
 
-      // Atualizar o texto da última mensagem do usuário com a transcrição real
+      // Atualizar balão do usuário com a transcrição real
       setState(() {
-        final lastUserIdx =
-            _messages.lastIndexWhere((m) => m.role == 'user');
-        if (lastUserIdx >= 0) {
-          _messages[lastUserIdx] = _ChatMsg.text(
+        final idx = _messages.lastIndexWhere((m) => m.role == 'user');
+        if (idx >= 0) {
+          _messages[idx] = _ChatMsg.text(
             role: 'user',
             text: '🎤 ${response.transcription}',
-            time: _messages[lastUserIdx].time,
+            time: _messages[idx].time,
           );
         }
       });
 
-      // Persistir conversation_id
       if (response.conversationId.isNotEmpty) {
         _conversationId = response.conversationId;
         await _persistConversationId(response.conversationId);
       }
 
-      // Adicionar resposta do Vitali
       if (response.foodLogged != null) {
-        // Resposta com card de refeição
         setState(() {
           _isTyping = false;
           _isSendingAudio = false;
@@ -417,7 +451,6 @@ class _ChatScreenState extends State<ChatScreen> {
           ));
         });
       } else {
-        // Fallback: texto simples (parse_confidence == "failed")
         setState(() {
           _isTyping = false;
           _isSendingAudio = false;
@@ -451,9 +484,6 @@ class _ChatScreenState extends State<ChatScreen> {
     }
 
     _scrollToBottom();
-
-    // Deletar arquivo temporário
-    try { await file.delete(); } catch (_) {}
   }
 
   // ── Utilitários ────────────────────────────────────────────────────────────
