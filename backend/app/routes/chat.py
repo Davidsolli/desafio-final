@@ -183,6 +183,14 @@ async def send_audio_message(
         None,
         description="UUID de conversa existente (opcional — cria nova se omitido)",
     ),
+    log_date: str | None = Form(
+        None,
+        description="Data local do dispositivo (YYYY-MM-DD). Usada no logbook para evitar divergência de fuso.",
+    ),
+    local_hour: int | None = Form(
+        None,
+        description="Hora local do dispositivo (0-23). Usada para inferir o nome da refeição.",
+    ),
     session: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> AudioFoodResponseDTO:
@@ -247,7 +255,9 @@ async def send_audio_message(
 
     # ── 3. Parser de refeição (LLM + TACO) ───────────────────────────────
     try:
-        parse_result = await food_parser.parse(transcription, session)
+        parse_result = await food_parser.parse(
+            transcription, session, local_hour=local_hour
+        )
     except QuantityNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -265,11 +275,23 @@ async def send_audio_message(
         )
 
     # ── 4. Registrar no DietLogbook ───────────────────────────────────────
+    # Converte log_date (string "YYYY-MM-DD" enviada pelo frontend) para date.
+    # Se não fornecida, cai para date.today() do servidor — pode errar em
+    # usuários com fuso diferente de UTC, por isso o frontend sempre envia.
+    from datetime import date as _date
+    parsed_log_date: _date | None = None
+    if log_date:
+        try:
+            parsed_log_date = _date.fromisoformat(log_date)
+        except ValueError:
+            pass  # fallback para today() no service
+
     logbook_service = DietLogbookService(session)
     entry_dto = AddLogbookEntryDTO(
         meal_name=parse_result.meal_name,
         food_id=parse_result.catalog_item.id,
         quantity_g=parse_result.quantity_g,
+        log_date=parsed_log_date,
     )
     logbook_entry = await logbook_service.add_entry(
         user_id=current_user.id,

@@ -70,9 +70,15 @@ Retorne SOMENTE o número da opção (ex: "2"), sem explicações.\
 _JSON_EXTRACTION_RE = re.compile(r"\{[^{}]+\}", re.DOTALL)
 
 
-def _infer_meal_name() -> str:
-    """Infere o nome da refeição com base na hora atual (horário local do servidor)."""
-    hour = datetime.now().hour
+def _infer_meal_name(local_hour: int | None = None) -> str:
+    """
+    Infere o nome da refeição pelo horário.
+
+    Usa `local_hour` (enviado pelo cliente) quando disponível — garante
+    que a refeição reflita o horário local do usuário, não o UTC do servidor.
+    Cai para `datetime.now().hour` (UTC) apenas como fallback.
+    """
+    hour = local_hour if local_hour is not None else datetime.now().hour
     if 6 <= hour < 10:
         return "Café da Manhã"
     if 10 <= hour < 12:
@@ -251,7 +257,10 @@ class FoodParser:
     # ── Pipeline principal ────────────────────────────────────────────────────
 
     async def parse(
-        self, transcription: str, session: AsyncSession
+        self,
+        transcription: str,
+        session: AsyncSession,
+        local_hour: int | None = None,
     ) -> FoodParseResult:
         """
         Interpreta a transcrição e identifica o alimento no catálogo TACO.
@@ -274,7 +283,7 @@ class FoodParser:
 
         food_name_raw: str | None = extracted.get("food_name")
         quantity_g_raw = extracted.get("quantity_g")
-        meal_name: str = extracted.get("meal_name") or _infer_meal_name()
+        meal_name: str = extracted.get("meal_name") or _infer_meal_name(local_hour)
         confidence: str = extracted.get("confidence", "low")
 
         if not food_name_raw:

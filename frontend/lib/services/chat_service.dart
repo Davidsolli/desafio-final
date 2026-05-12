@@ -170,6 +170,14 @@ class ChatService {
     required String token,
     String? conversationId,
   }) async {
+    final now = DateTime.now();
+
+    // Data e hora LOCAL do dispositivo — evita que o servidor salve no dia
+    // errado quando o fuso horário do usuário difere do UTC do servidor.
+    final logDate =
+        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    final localHour = now.hour.toString();
+
     final uri = Uri.parse(ApiConfig.chatSendAudio);
     final request = http.MultipartRequest('POST', uri)
       ..headers['Authorization'] = 'Bearer $token'
@@ -177,7 +185,9 @@ class ChatService {
         'audio',
         audioBytes,
         filename: filename,
-      ));
+      ))
+      ..fields['log_date'] = logDate
+      ..fields['local_hour'] = localHour;
 
     if (conversationId != null && conversationId.isNotEmpty) {
       request.fields['conversation_id'] = conversationId;
