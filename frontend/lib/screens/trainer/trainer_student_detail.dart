@@ -125,7 +125,6 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
         _stepsError = 'Erro ao carregar histórico de passos: $e';
         _stepsLoading = false;
       });
->>>>>>> a3270718ca1465aa01569af92406d1f304b069b2
     }
   }
 
