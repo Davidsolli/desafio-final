@@ -203,7 +203,7 @@ class SubscriptionService:
         else:
             # InfinitePay falhou — retorna URL de fallback para o aluno copiar
             logger.warning(f"InfinitePay falhou para subscription {subscription.id}, usando fallback")
-            checkout_url = f"https://checkout.infinitepay.io/rafaelapvilela"
+            checkout_url = f"https://checkout.infinitepay.io/natalia-faria-16"
             external_id = f"manual_{subscription.id}"
 
         return CheckoutResponseDTO(

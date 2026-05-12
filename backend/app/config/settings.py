@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     CHAT_INACTIVITY_CLOSE_HOURS: int = 24       # RN-02: fechar conversa após 24h inativa
 
     # ── InfinitePay ────────────────────────────────────────────────────────
-    INFINITEPAY_HANDLE: str = "rafaelapvilela"
+    INFINITEPAY_HANDLE: str = "natalia-faria-16"
     INFINITEPAY_WEBHOOK_URL: str = ""           # URL pública do servidor (ex: https://api.seudominio.com)
 
     # ── WhatsApp (Meta Cloud API) ──────────────────────────────────────────
