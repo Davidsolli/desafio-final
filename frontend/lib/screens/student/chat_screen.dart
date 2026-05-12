@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:animate_do/animate_do.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
@@ -712,9 +713,13 @@ class _ChatScreenState extends State<ChatScreen> {
 
 // ── Widgets auxiliares ─────────────────────────────────────────────────────────
 
-/// Botão de microfone com comportamento press-and-hold.
-/// Pressionar inicia gravação; soltar envia; arrastar para fora cancela.
-class _MicButton extends StatelessWidget {
+/// Botão de microfone press-and-hold com 4 estados visuais distintos:
+///
+///   IDLE      — verde, ícone de mic, sombra suave
+///   PRESSED   — verde escuro, escala 88%, sombra pulsante (antes de gravar iniciar)
+///   RECORDING — vermelho, ícone stop, pulsa 1.0→1.12 em loop, glow vermelho
+///   BUSY      — cinza, desabilitado (enquanto IA responde ou áudio é processado)
+class _MicButton extends StatefulWidget {
   final bool isRecording;
   final bool isBusy;
   final VoidCallback onTapDown;
@@ -730,29 +735,149 @@ class _MicButton extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final active = !isBusy;
-    final color = isRecording
-        ? Colors.red
-        : (active ? AppColors.primary : Colors.grey);
+  State<_MicButton> createState() => _MicButtonState();
+}
 
-    return GestureDetector(
-      onTapDown: active ? (_) => onTapDown() : null,
-      onTapUp: active ? (_) => onTapUp() : null,
-      onTapCancel: active ? onTapCancel : null,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: isRecording ? 0.15 : 0.12),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: color, width: 1.5),
-        ),
-        child: Icon(
-          isRecording ? Icons.stop_rounded : Icons.mic_rounded,
-          color: color,
-          size: 22,
+class _MicButtonState extends State<_MicButton>
+    with SingleTickerProviderStateMixin {
+  bool _isPressed = false;
+
+  // Animação de pulso usada durante a gravação
+  late final AnimationController _pulse;
+  late final Animation<double> _pulseScale;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    );
+    _pulseScale = Tween<double>(begin: 1.0, end: 1.13).animate(
+      CurvedAnimation(parent: _pulse, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void didUpdateWidget(_MicButton old) {
+    super.didUpdateWidget(old);
+    // Inicia o pulso ao entrar no estado de gravação; para ao sair
+    if (widget.isRecording && !old.isRecording) {
+      _pulse.repeat(reverse: true);
+    } else if (!widget.isRecording && old.isRecording) {
+      _pulse.stop();
+      _pulse.reset();
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  void _handleTapDown(TapDownDetails _) {
+    setState(() => _isPressed = true);
+    HapticFeedback.mediumImpact();
+    widget.onTapDown();
+  }
+
+  void _handleTapUp(TapUpDetails _) {
+    setState(() => _isPressed = false);
+    widget.onTapUp();
+  }
+
+  void _handleTapCancel() {
+    setState(() => _isPressed = false);
+    widget.onTapCancel();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final active = !widget.isBusy;
+
+    // Cor varia por estado
+    final Color color;
+    if (!active) {
+      color = Colors.grey.shade400;
+    } else if (widget.isRecording) {
+      color = Colors.red;
+    } else if (_isPressed) {
+      color = AppColors.primaryDark;   // verde mais escuro no press
+    } else {
+      color = AppColors.primary;
+    }
+
+    // Sombra contextual: vermelho intenso em gravação, verde suave em idle
+    final List<BoxShadow> shadows;
+    if (widget.isRecording) {
+      shadows = [
+        BoxShadow(
+          color: Colors.red.withValues(alpha: 0.45),
+          blurRadius: 12,
+          spreadRadius: 1,
+        )
+      ];
+    } else if (_isPressed) {
+      shadows = [
+        BoxShadow(
+          color: AppColors.primary.withValues(alpha: 0.5),
+          blurRadius: 8,
+          spreadRadius: 1,
+        )
+      ];
+    } else if (active) {
+      shadows = [
+        BoxShadow(
+          color: AppColors.primary.withValues(alpha: 0.18),
+          blurRadius: 4,
+          spreadRadius: 0,
+        )
+      ];
+    } else {
+      shadows = [];
+    }
+
+    // Escala imediata no press (antes de isRecording virar true)
+    final double scale = (_isPressed && !widget.isRecording) ? 0.87 : 1.0;
+
+    return Tooltip(
+      message: widget.isRecording
+          ? 'Solte para enviar'
+          : (active ? 'Segure para gravar' : ''),
+      child: GestureDetector(
+        onTapDown: active ? _handleTapDown : null,
+        onTapUp: active ? _handleTapUp : null,
+        onTapCancel: active ? _handleTapCancel : null,
+        child: ScaleTransition(
+          // Pulso durante gravação; escala manual no press
+          scale: widget.isRecording
+              ? _pulseScale
+              : AlwaysStoppedAnimation(scale),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 130),
+            curve: Curves.easeOut,
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              color: color.withValues(
+                alpha: widget.isRecording
+                    ? 0.18
+                    : (_isPressed ? 0.22 : 0.12),
+              ),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: color,
+                width: widget.isRecording || _isPressed ? 2.0 : 1.5,
+              ),
+              boxShadow: shadows,
+            ),
+            child: Icon(
+              widget.isRecording ? Icons.stop_rounded : Icons.mic_rounded,
+              color: color,
+              size: 22,
+            ),
+          ),
         ),
       ),
     );
