@@ -273,14 +273,13 @@ class HomeService {
     final goalsFuture = _getGoals();
     final workoutFuture = _getTodayWorkout();
     final kcalFuture = _getTodayNutrition();
-    final streakFuture = _getWorkoutStreak();
-    final lastSessionFuture = _getLastSession();
+    // Single call: streak computation reuses the 60-session list to also extract lastSession.
+    final streakAndSessionFuture = _getStreakAndLastSession();
 
     final goals = await goalsFuture;
     final workout = await workoutFuture;
     final nutrition = await kcalFuture;
-    final streak = await streakFuture;
-    final lastSession = await lastSessionFuture;
+    final (streak, lastSession) = await streakAndSessionFuture;
 
     return HomeData(
       user: user,
@@ -307,7 +306,7 @@ class HomeService {
     try {
       return await _apiClient.get<List<HomeGoalData>>(
         '/goals',
-        queryParameters: {'status': 'active', 'limit': 2},
+        queryParameters: {'status': 'active', 'limit': '2'},
         fromJson: (data) {
           final List<dynamic> items;
           if (data is Map && data.containsKey('data')) {
@@ -350,33 +349,9 @@ class HomeService {
     }
   }
 
-  Future<HomeLastSession?> _getLastSession() async {
-    try {
-      final result = await _apiClient.get<List<dynamic>>(
-        '/logbook/sessions',
-        queryParameters: {'limit': '1', 'status': 'completed'},
-        fromJson: (data) {
-          if (data is Map && data.containsKey('data')) {
-            return data['data'] as List<dynamic>;
-          }
-          if (data is List) return data;
-          return <dynamic>[];
-        },
-      );
-      if (result.isEmpty) return null;
-      final s = result.first as Map<String, dynamic>;
-      final rawDate = s['session_date'] as String?;
-      if (rawDate == null) return null;
-      return HomeLastSession(
-        name: s['workout_name'] as String? ?? 'Sessão de Treino',
-        date: DateTime.parse(rawDate),
-      );
-    } catch (_) {
-      return null;
-    }
-  }
-
-  Future<int> _getWorkoutStreak() async {
+  // Fetches up to 60 completed sessions once and computes both the workout
+  // streak and the last session, avoiding a duplicate HTTP call.
+  Future<(int, HomeLastSession?)> _getStreakAndLastSession() async {
     try {
       final sessions = await _apiClient.get<List<dynamic>>(
         '/logbook/sessions',
@@ -390,8 +365,24 @@ class HomeService {
         },
       );
 
-      final dates = sessions
-          .whereType<Map<String, dynamic>>()
+      final sessionMaps =
+          sessions.whereType<Map<String, dynamic>>().toList();
+
+      // Extract last session from the first item (most recent, limit=60 ordered desc).
+      HomeLastSession? lastSession;
+      if (sessionMaps.isNotEmpty) {
+        final s = sessionMaps.first;
+        final rawDate = s['session_date'] as String?;
+        if (rawDate != null) {
+          lastSession = HomeLastSession(
+            name: s['workout_name'] as String? ?? 'Sessão de Treino',
+            date: DateTime.parse(rawDate),
+          );
+        }
+      }
+
+      // Compute streak from deduplicated dates sorted descending.
+      final dates = sessionMaps
           .map((s) {
             final d = s['session_date'] as String?;
             if (d == null) return null;
@@ -403,7 +394,7 @@ class HomeService {
           .toList()
         ..sort((a, b) => b.compareTo(a));
 
-      if (dates.isEmpty) return 0;
+      if (dates.isEmpty) return (0, lastSession);
 
       final today = DateTime(
           DateTime.now().year, DateTime.now().month, DateTime.now().day);
@@ -422,9 +413,9 @@ class HomeService {
           break;
         }
       }
-      return streak;
+      return (streak, lastSession);
     } catch (_) {
-      return 0;
+      return (0, null);
     }
   }
 
@@ -434,8 +425,8 @@ class HomeService {
       final listResult = await _apiClient.get<Map<String, dynamic>?>(
         '/workout-sheets',
         queryParameters: {
-          'day_of_week': _todayBackendDay,
-          'limit': 1,
+          'day_of_week': _todayBackendDay.toString(),
+          'limit': '1',
         },
         fromJson: (data) => data is Map<String, dynamic> ? data : null,
       );

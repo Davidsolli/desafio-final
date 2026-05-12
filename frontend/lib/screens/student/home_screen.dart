@@ -61,7 +61,15 @@ class _HomeBody extends StatelessWidget {
 
         // ----- Success -----
         final data = provider.data;
-        if (data == null) return const SizedBox.shrink();
+        if (data == null) {
+          return Scaffold(
+            backgroundColor: context.colors.background,
+            body: OmniErrorState(
+              message: 'Não foi possível carregar os dados',
+              onRetry: provider.fetchHomeData,
+            ),
+          );
+        }
 
         return Scaffold(
           backgroundColor: context.colors.background,
@@ -410,9 +418,9 @@ class _HomeBody extends StatelessWidget {
     if (goal != null && goal > 0) {
       final r = consumed / goal;
       if (r > 1.2) {
-        barColor = const Color(0xFFff6b6b);
+        barColor = AppColors.accentError;
       } else if (r > 1.0) {
-        barColor = const Color(0xFFffc84d);
+        barColor = AppColors.accentWarning;
       }
     }
 
@@ -442,7 +450,7 @@ class _HomeBody extends StatelessWidget {
                   Row(
                     children: [
                       const Icon(Icons.restaurant_outlined,
-                          color: Color(0xFF4db8ff), size: 18),
+                          color: AppColors.accentInfo, size: 18),
                       const SizedBox(width: 4),
                       Icon(Icons.chevron_right,
                           color: context.colors.textMuted, size: 20),
@@ -466,7 +474,7 @@ class _HomeBody extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.only(bottom: 2),
                     child: Text(
-                      goal != null ? '/ $goal kcal' : 'kcal',
+                      goal != null ? '/ $goal kcal (basal)' : 'kcal',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: context.colors.textSecondary),
                     ),
@@ -504,7 +512,7 @@ class _HomeBody extends StatelessWidget {
                       context,
                       label: 'Proteína',
                       value: data.todayProtein,
-                      color: const Color(0xFF4db8ff),
+                      color: AppColors.accentInfo,
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -513,7 +521,7 @@ class _HomeBody extends StatelessWidget {
                       context,
                       label: 'Carboidrato',
                       value: data.todayCarbs,
-                      color: const Color(0xFFffc84d),
+                      color: AppColors.accentWarning,
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -522,7 +530,7 @@ class _HomeBody extends StatelessWidget {
                       context,
                       label: 'Gordura',
                       value: data.todayFats,
-                      color: const Color(0xFFff6b6b),
+                      color: AppColors.accentError,
                     ),
                   ),
                 ],
@@ -697,7 +705,7 @@ class _HomeBody extends StatelessWidget {
                   context,
                   icon: Icons.restaurant_outlined,
                   label: 'Refeição',
-                  color: const Color(0xFFffc84d),
+                  color: AppColors.accentWarning,
                   onTap: () => context.go(AppRoutes.nutrition),
                 ),
               ),
@@ -707,7 +715,7 @@ class _HomeBody extends StatelessWidget {
                   context,
                   icon: Icons.chat_bubble_outline,
                   label: 'Chat IA',
-                  color: const Color(0xFF4db8ff),
+                  color: AppColors.accentInfo,
                   onTap: () => context.go(AppRoutes.chat),
                 ),
               ),
