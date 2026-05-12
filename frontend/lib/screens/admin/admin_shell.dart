@@ -19,7 +19,8 @@ class _AdminShellState extends State<AdminShell> {
   int _getSelectedNavIndex(String currentPath) {
     if (currentPath.contains('/admin/trainers')) return 0;
     if (currentPath.contains('/admin/whatsapp')) return 1;
-    if (currentPath.contains('/admin/settings')) return 2;
+    if (currentPath.contains('/admin/metrics')) return 2;
+    if (currentPath.contains('/admin/settings')) return 3;
     return 0;
   }
 
@@ -47,6 +48,7 @@ class _AdminShellState extends State<AdminShell> {
           final routes = [
             '/admin/trainers',
             '/admin/whatsapp',
+            '/admin/metrics',
             '/admin/settings',
           ];
           context.go(routes[index]);
@@ -58,6 +60,7 @@ class _AdminShellState extends State<AdminShell> {
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.people_outlined), label: 'Trainers'),
           BottomNavigationBarItem(icon: Icon(Icons.mark_chat_unread_outlined), label: 'WhatsApp'),
+          BottomNavigationBarItem(icon: Icon(Icons.analytics_outlined), activeIcon: Icon(Icons.analytics), label: 'Métricas'),
           BottomNavigationBarItem(icon: Icon(Icons.settings_outlined), label: 'Configurações'),
         ],
       ),

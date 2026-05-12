@@ -14,6 +14,7 @@ import 'services/nutrition_service.dart';
 import 'services/workout_sheet_service.dart';
 import 'services/invitation_service.dart';
 import 'services/admin_service.dart';
+import 'services/admin_metrics_service.dart';
 import 'services/chat_service.dart';
 import 'services/step_service.dart';
 import 'providers/auth_provider.dart';
@@ -24,6 +25,7 @@ import 'providers/nutrition_provider.dart';
 import 'providers/workout_sheet_provider.dart';
 import 'providers/invitation_provider.dart';
 import 'providers/admin_provider.dart';
+import 'providers/admin_metrics_provider.dart';
 import 'providers/step_provider.dart';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -132,6 +134,11 @@ class OmniConnectApp extends StatelessWidget {
           update: (_, apiClient, _) => StepService(apiClient: apiClient),
         ),
 
+        // Admin Metrics Service (depende de ApiClient)
+        ProxyProvider<ApiClient, AdminMetricsService>(
+          update: (_, apiClient, _) => AdminMetricsService(apiClient: apiClient),
+        ),
+
         // Auth Provider (depende de AuthService)
         ChangeNotifierProxyProvider<AuthService, AuthProvider>(
           create: (context) => AuthProvider(
@@ -219,6 +226,16 @@ class OmniConnectApp extends StatelessWidget {
           ),
           update: (_, stepService, previous) {
             return previous ?? StepProvider(stepService: stepService);
+          },
+        ),
+
+        // Admin Metrics Provider (depende de AdminMetricsService)
+        ChangeNotifierProxyProvider<AdminMetricsService, AdminMetricsProvider>(
+          create: (context) => AdminMetricsProvider(
+            service: context.read<AdminMetricsService>(),
+          ),
+          update: (_, metricsService, previous) {
+            return previous ?? AdminMetricsProvider(service: metricsService);
           },
         ),
       ],

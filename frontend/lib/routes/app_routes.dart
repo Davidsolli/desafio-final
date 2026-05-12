@@ -31,6 +31,7 @@ import '../screens/admin/admin_pt_details_screen.dart';
 import '../screens/admin/admin_settings_screen.dart';
 import '../screens/admin/admin_student_form_screen.dart';
 import '../screens/admin/admin_whatsapp_screen.dart';
+import '../screens/admin/admin_metrics_dashboard_screen.dart';
 
 class AppRoutes {
   // Auth
@@ -69,6 +70,7 @@ class AppRoutes {
   static const String adminEditStudent = '/admin/edit-student';
   static const String adminSettings = '/admin/settings';
   static const String adminWhatsApp = '/admin/whatsapp';
+  static const String adminMetrics = '/admin/metrics';
 
   // Shared
   static const String notifications = '/notifications';
@@ -202,6 +204,10 @@ class AppRoutes {
           GoRoute(
             path: adminWhatsApp,
             builder: (context, state) => const AdminWhatsAppScreen(),
+          ),
+          GoRoute(
+            path: adminMetrics,
+            builder: (context, state) => const AdminMetricsDashboardScreen(),
           ),
         ],
       ),
