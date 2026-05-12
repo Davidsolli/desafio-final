@@ -20,9 +20,13 @@ from app.dtos.logbook_dto import (
     CreateSessionDTO,
     FrequencyDataPointDTO,
     FrequencyResponseDTO,
+    MUSCLE_GROUP_DISPLAY_NAMES,
+    MUSCLE_GROUP_ORDER,
     MuscleGroupDistributionItemDTO,
     MuscleGroupDistributionResponseDTO,
     PaginatedSessionsDTO,
+    PersonalRecordDTO,
+    PersonalRecordsResponseDTO,
     ProgressionDataPointDTO,
     ProgressionResponseDTO,
     ProgressionStatisticsDTO,
@@ -31,6 +35,9 @@ from app.dtos.logbook_dto import (
     SessionListItemDTO,
     SessionResponseDTO,
     UpdateSessionDTO,
+    VolumeLoadDataPointDTO,
+    VolumeLoadResponseDTO,
+    VolumeLoadStatisticsDTO,
 )
 from app.models.logbook import SessionExercise, WorkoutSession
 from app.repositories.logbook_repository import LogbookRepository
@@ -101,7 +108,7 @@ class LogbookService:
 
         created = await self.repository.create_session(session_obj)
         await self.repository.commit()
-        return self._to_session_response(created)
+        return await self._resolve_names_and_to_response(created)
 
     # ------------------------------------------------------------------
     # Adicionar / Atualizar Exercício
@@ -209,7 +216,7 @@ class LogbookService:
 
         updated = await self.repository.update_session(session_obj)
         await self.repository.commit()
-        return self._to_session_response(updated)
+        return await self._resolve_names_and_to_response(updated)
 
     # ------------------------------------------------------------------
     # Buscar Sessão
@@ -227,7 +234,7 @@ class LogbookService:
         session_obj = await self._get_session_and_check_access(
             session_id, user_id, role, require_owner=False
         )
-        return self._to_session_response(session_obj)
+        return await self._resolve_names_and_to_response(session_obj)
 
     # ------------------------------------------------------------------
     # Listar Sessões
@@ -264,9 +271,74 @@ class LogbookService:
             limit=limit,
         )
 
+        # Bulk resolve sheet names and exercise names for the sessions
+        sheet_ids = {s.workout_sheet_id for s in sessions if s.workout_sheet_id}
+        sheet_names = {}
+        if sheet_ids:
+            from app.models.workout_sheet import WorkoutSheet
+            from sqlalchemy import select
+            stmt = select(WorkoutSheet.id, WorkoutSheet.name).where(WorkoutSheet.id.in_(sheet_ids))
+            res = await self.session.execute(stmt)
+            sheet_names = {row[0]: row[1] for row in res.all()}
+
+        exercise_ids = set()
+        for s in sessions:
+            if hasattr(s, "session_exercises") and s.session_exercises:
+                for ex in s.session_exercises:
+                    if ex.exercise_id:
+                        exercise_ids.add(ex.exercise_id)
+
+        exercise_names = {}
+        if exercise_ids:
+            from app.models.workout_sheet import Exercise
+            from sqlalchemy import select
+            stmt = select(Exercise.id, Exercise.name).where(Exercise.id.in_(exercise_ids))
+            res = await self.session.execute(stmt)
+            exercise_names = {row[0]: row[1] for row in res.all()}
+
         items = []
         for s in sessions:
             exercises = s.session_exercises if hasattr(s, "session_exercises") else []
+            sheet_name = sheet_names.get(s.workout_sheet_id, "Sessão de Treino")
+
+            # Calcular duração real em minutos (com segurança de fuso horário)
+            duration_minutes = 45
+            if s.completed_at and s.session_date:
+                from datetime import timezone
+                comp = s.completed_at
+                if comp.tzinfo is None:
+                    comp = comp.replace(tzinfo=timezone.utc)
+                else:
+                    comp = comp.astimezone(timezone.utc)
+
+                sess_date = s.session_date
+                if sess_date.tzinfo is None:
+                    sess_date = sess_date.replace(tzinfo=timezone.utc)
+                else:
+                    sess_date = sess_date.astimezone(timezone.utc)
+
+                duration_minutes = int((comp - sess_date).total_seconds() / 60)
+                if duration_minutes <= 0:
+                    duration_minutes = 1
+
+            # Estimativa de calorias queimadas baseada na duração real
+            calories_burned = float(duration_minutes * 6.0)
+
+            # Mapeamento do RPE (difficulty_level) para intensidade
+            intensity = "moderada"
+            if s.difficulty_level:
+                if s.difficulty_level <= 3:
+                    intensity = "leve"
+                elif s.difficulty_level <= 7:
+                    intensity = "moderada"
+                else:
+                    intensity = "intensa"
+
+            exercises_mapped = [
+                self._to_exercise_response(ex, exercise_names.get(ex.exercise_id))
+                for ex in exercises
+            ]
+
             items.append(
                 SessionListItemDTO(
                     id=s.id,
@@ -279,6 +351,11 @@ class LogbookService:
                     completed_at=s.completed_at,
                     created_at=s.created_at,
                     exercise_count=len(exercises),
+                    workout_name=sheet_name,
+                    duration_minutes=duration_minutes,
+                    calories_burned=calories_burned,
+                    intensity=intensity,
+                    session_exercises=exercises_mapped,
                 )
             )
 
@@ -525,15 +602,76 @@ class LogbookService:
 
         return session_obj
 
+    async def _resolve_names_and_to_response(self, session_obj: WorkoutSession) -> SessionResponseDTO:
+        """Resolve o nome da ficha e dos exercícios do banco de dados e retorna o DTO completo."""
+        sheet_name = "Sessão de Treino"
+        if session_obj.workout_sheet_id:
+            from app.models.workout_sheet import WorkoutSheet
+            from sqlalchemy import select
+            stmt = select(WorkoutSheet.name).where(WorkoutSheet.id == session_obj.workout_sheet_id)
+            res = await self.session.execute(stmt)
+            row = res.first()
+            if row:
+                sheet_name = row[0]
+
+        exercise_names_map = {}
+        if hasattr(session_obj, "session_exercises") and session_obj.session_exercises:
+            exercise_ids = {ex.exercise_id for ex in session_obj.session_exercises if ex.exercise_id}
+            if exercise_ids:
+                from app.models.workout_sheet import Exercise
+                from sqlalchemy import select
+                stmt = select(Exercise.id, Exercise.name).where(Exercise.id.in_(exercise_ids))
+                res = await self.session.execute(stmt)
+                exercise_names_map = {row[0]: row[1] for row in res.all()}
+
+        return self._to_session_response(session_obj, sheet_name, exercise_names_map)
+
     @staticmethod
-    def _to_session_response(session_obj: WorkoutSession) -> SessionResponseDTO:
+    def _to_session_response(
+        session_obj: WorkoutSession,
+        sheet_name: Optional[str] = "Sessão de Treino",
+        exercise_names_map: Optional[Dict[UUID, str]] = None,
+    ) -> SessionResponseDTO:
         """Converte WorkoutSession para SessionResponseDTO."""
         exercises = []
         if hasattr(session_obj, "session_exercises") and session_obj.session_exercises:
             exercises = [
-                LogbookService._to_exercise_response(ex)
+                LogbookService._to_exercise_response(ex, (exercise_names_map or {}).get(ex.exercise_id))
                 for ex in session_obj.session_exercises
             ]
+
+        # Calcular duração real em minutos (com segurança de fuso horário)
+        duration_minutes = 45
+        if session_obj.completed_at and session_obj.session_date:
+            from datetime import timezone
+            comp = session_obj.completed_at
+            if comp.tzinfo is None:
+                comp = comp.replace(tzinfo=timezone.utc)
+            else:
+                comp = comp.astimezone(timezone.utc)
+
+            sess_date = session_obj.session_date
+            if sess_date.tzinfo is None:
+                sess_date = sess_date.replace(tzinfo=timezone.utc)
+            else:
+                sess_date = sess_date.astimezone(timezone.utc)
+
+            duration_minutes = int((comp - sess_date).total_seconds() / 60)
+            if duration_minutes <= 0:
+                duration_minutes = 1
+
+        # Estimativa de calorias queimadas baseada na duração real
+        calories_burned = float(duration_minutes * 6.0)
+
+        # Mapeamento do RPE (difficulty_level) para intensidade
+        intensity = "moderada"
+        if session_obj.difficulty_level:
+            if session_obj.difficulty_level <= 3:
+                intensity = "leve"
+            elif session_obj.difficulty_level <= 7:
+                intensity = "moderada"
+            else:
+                intensity = "intensa"
 
         return SessionResponseDTO(
             id=session_obj.id,
@@ -548,10 +686,14 @@ class LogbookService:
             updated_at=session_obj.updated_at,
             completed_at=session_obj.completed_at,
             session_exercises=exercises,
+            workout_name=sheet_name or "Sessão de Treino",
+            duration_minutes=duration_minutes,
+            calories_burned=calories_burned,
+            intensity=intensity,
         )
 
     @staticmethod
-    def _to_exercise_response(exercise: SessionExercise) -> SessionExerciseResponseDTO:
+    def _to_exercise_response(exercise: SessionExercise, exercise_name: Optional[str] = None) -> SessionExerciseResponseDTO:
         """Converte SessionExercise para SessionExerciseResponseDTO."""
         return SessionExerciseResponseDTO(
             id=exercise.id,
@@ -571,6 +713,7 @@ class LogbookService:
             status=exercise.status,
             created_at=exercise.created_at,
             updated_at=exercise.updated_at,
+            exercise_name=exercise_name or "Exercício de Força",
         )
 
     @staticmethod
@@ -767,27 +910,185 @@ class LogbookService:
         """
         Retorna a distribuição de exercícios concluídos por grupo muscular.
 
-        Args:
-            user_id: ID do aluno
-            days: Janela de dias retroativos (padrão 30)
+        Inclui TODOS os 10 grupamentos (zerado = não treinou no período),
+        com display_name amigável e percentual relativo.
         """
         end_date = datetime.utcnow()
         start_date = end_date - timedelta(days=days)
 
-        raw_distribution = await self.repository.get_muscle_group_distribution(
+        raw = await self.repository.get_muscle_group_distribution(
             user_id=user_id,
             start_date=start_date,
             end_date=end_date,
         )
 
-        distribution_items = [
-            MuscleGroupDistributionItemDTO(muscle_group=muscle, count=count)
-            for muscle, count in raw_distribution
-        ]
+        # Mapeia muscle_group -> count
+        raw_map: Dict[str, int] = {muscle: count for muscle, count in raw}
+        total = sum(raw_map.values()) or 1  # evita div/0
+
+        # Garante todos os 10 grupos, na ordem correta
+        distribution_items = []
+        for key in MUSCLE_GROUP_ORDER:
+            count = raw_map.get(key, 0)
+            distribution_items.append(
+                MuscleGroupDistributionItemDTO(
+                    muscle_group=key,
+                    display_name=MUSCLE_GROUP_DISPLAY_NAMES.get(key, key.replace("_", " ").title()),
+                    count=count,
+                    percentage=round((count / total) * 100, 1) if count > 0 else 0.0,
+                )
+            )
 
         return MuscleGroupDistributionResponseDTO(
             user_id=user_id,
             days=days,
+            total_sets=sum(raw_map.values()),
             distribution=distribution_items,
+        )
+
+    # ------------------------------------------------------------------
+    # Recordes Pessoais (PRs)
+    # ------------------------------------------------------------------
+
+    async def get_personal_records(
+        self,
+        user_id: UUID,
+        limit: int = 10,
+    ) -> PersonalRecordsResponseDTO:
+        """
+        Retorna os recordes pessoais de carga por exercício.
+
+        Calcula 1RM estimado pela fórmula de Epley:
+            1RM = carga × (1 + reps / 30)
+        """
+        rows = await self.repository.get_personal_records(user_id=user_id, limit=limit)
+
+        records = []
+        for row in rows:
+            exercise_id, exercise_name, muscle_group, max_load, reps_at_max, achieved_at = (
+                row.exercise_id, row.exercise_name, row.muscle_group,
+                row.max_load_kg or 0.0, row.reps_at_max or 1, row.achieved_at,
+            )
+            reps = max(reps_at_max, 1)  # evita div/0
+            estimated_1rm = round(max_load * (1 + reps / 30.0), 2)
+            display = MUSCLE_GROUP_DISPLAY_NAMES.get(muscle_group, muscle_group.replace("_", " ").title())
+
+            records.append(
+                PersonalRecordDTO(
+                    exercise_id=exercise_id,
+                    exercise_name=exercise_name,
+                    muscle_group=muscle_group,
+                    display_name=display,
+                    max_load_kg=max_load,
+                    reps_at_max=reps_at_max,
+                    estimated_1rm=estimated_1rm,
+                    achieved_at=achieved_at,
+                )
+            )
+
+        return PersonalRecordsResponseDTO(user_id=user_id, records=records)
+
+    # ------------------------------------------------------------------
+    # Volume Load Semanal
+    # ------------------------------------------------------------------
+
+    async def get_volume_load(
+        self,
+        user_id: UUID,
+        exercise_id: UUID,
+        weeks: int = 8,
+    ) -> VolumeLoadResponseDTO:
+        """
+        Retorna o Volume Load (Séries × Reps × Carga) por semana.
+
+        Agrupa as sessões por semana (segunda-feira como início).
+        Cada ponto tem:
+          - total_volume_kg: soma de (séries × reps × carga) da semana
+          - max_load_kg: maior carga registrada na semana
+          - session_count: número de sessões naquela semana
+        """
+        end_date = datetime.utcnow()
+        start_date = end_date - timedelta(weeks=weeks)
+
+        rows = await self.repository.get_volume_load_data(
+            user_id=user_id,
+            exercise_id=exercise_id,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+        if not rows:
+            exercise_name = "Exercício"
+            return VolumeLoadResponseDTO(
+                exercise_id=exercise_id,
+                exercise_name=exercise_name,
+                user_id=user_id,
+                weeks=weeks,
+                data_points=[],
+                statistics=VolumeLoadStatisticsDTO(
+                    total_sessions=0,
+                    avg_volume_kg=0.0,
+                    max_volume_kg=0.0,
+                    trend="stable",
+                    improvement_percentage=0.0,
+                ),
+            )
+
+        exercise_name = rows[0].exercise_name if rows else "Exercício"
+
+        # Agrupa por semana (segunda-feira)
+        def week_key(dt: datetime) -> datetime:
+            return (dt - timedelta(days=dt.weekday())).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+
+        weekly: Dict[datetime, dict] = defaultdict(lambda: {"volume": 0.0, "max_load": 0.0, "sessions": set()})
+        for row in rows:
+            s = row.actual_series or 0
+            r = row.actual_repetitions or 0
+            l = row.actual_load_kg or 0.0
+            vol = s * r * l
+            wk = week_key(row.session_date)
+            weekly[wk]["volume"] += vol
+            weekly[wk]["max_load"] = max(weekly[wk]["max_load"], l)
+            weekly[wk]["sessions"].add(row.session_date.date())
+
+        data_points = [
+            VolumeLoadDataPointDTO(
+                week_start=wk,
+                total_volume_kg=round(data["volume"], 2),
+                max_load_kg=data["max_load"],
+                session_count=len(data["sessions"]),
+            )
+            for wk, data in sorted(weekly.items())
+        ]
+
+        volumes = [dp.total_volume_kg for dp in data_points]
+        avg_vol = sum(volumes) / len(volumes) if volumes else 0.0
+        max_vol = max(volumes) if volumes else 0.0
+        trend = "stable"
+        improvement = 0.0
+        if len(volumes) >= 2:
+            first, last = volumes[0], volumes[-1]
+            if last > first:
+                trend = "increasing"
+                improvement = round(((last - first) / first) * 100, 2) if first > 0 else 0.0
+            elif last < first:
+                trend = "decreasing"
+                improvement = round(((last - first) / first) * 100, 2) if first > 0 else 0.0
+
+        return VolumeLoadResponseDTO(
+            exercise_id=exercise_id,
+            exercise_name=exercise_name,
+            user_id=user_id,
+            weeks=weeks,
+            data_points=data_points,
+            statistics=VolumeLoadStatisticsDTO(
+                total_sessions=len(data_points),
+                avg_volume_kg=round(avg_vol, 2),
+                max_volume_kg=max_vol,
+                trend=trend,
+                improvement_percentage=improvement,
+            ),
         )
 

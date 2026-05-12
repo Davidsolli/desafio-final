@@ -233,5 +233,36 @@ class NutritionService {
       rethrow;
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // Analytics Histórico de Nutrição
+  // ---------------------------------------------------------------------------
+
+  /// Busca o sumário histórico de nutrição para um período.
+  /// [studentId]: usado pelo Personal/Admin para consultar dados de um aluno.
+  Future<NutritionAnalyticsSummary> getAnalyticsSummary({
+    required DateTime startDate,
+    required DateTime endDate,
+    String? studentId,
+  }) async {
+    try {
+      final start = startDate.toIso8601String().split('T')[0];
+      final end = endDate.toIso8601String().split('T')[0];
+      final queryParameters = <String, dynamic>{
+        'start_date': start,
+        'end_date': end,
+        if (studentId != null) 'student_id': studentId,
+      };
+      final response = await _apiClient.get<NutritionAnalyticsSummary>(
+        '/diet-logbook/analytics/summary',
+        queryParameters: queryParameters,
+        fromJson: (data) =>
+            NutritionAnalyticsSummary.fromJson(data as Map<String, dynamic>),
+      );
+      return response;
+    } catch (e) {
+      rethrow;
+    }
+  }
 }
 

@@ -73,3 +73,40 @@ class DietLogbookResponseDTO(BaseModel):
     total_fats: float
     created_at: datetime
     entries: List[LogbookEntryResponseDTO] = []
+
+
+# ---------------------------------------------------------------------------
+# DTOs de Analytics Histórico
+# ---------------------------------------------------------------------------
+
+
+class MealKcalDTO(BaseModel):
+    """Distribuição calórica de uma refeição no dia."""
+
+    meal_name: str
+    kcal: float = 0.0
+    protein: float = 0.0
+    carbs: float = 0.0
+    fats: float = 0.0
+
+
+class NutritionAnalyticsDayDTO(BaseModel):
+    """Dados nutricionais agregados de um dia para análise histórica."""
+
+    date: date
+    total_kcal: float = 0.0
+    total_protein: float = 0.0
+    total_carbs: float = 0.0
+    total_fats: float = 0.0
+    water_ml: int = 0
+    weight_kg: Optional[float] = None
+    is_fully_logged: bool = False
+    meal_distribution: List[MealKcalDTO] = []
+
+
+class NutritionAnalyticsSummaryResponseDTO(BaseModel):
+    """Resposta da sumarização histórica de nutrição."""
+
+    days: List[NutritionAnalyticsDayDTO]
+    total_days: int
+    logged_days: int

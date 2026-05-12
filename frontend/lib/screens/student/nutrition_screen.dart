@@ -7,6 +7,7 @@ import '../../theme/theme_colors.dart';
 import '../../providers/nutrition_provider.dart';
 import '../../models/diet_models.dart';
 import 'widgets/food_search_modal.dart';
+import 'widgets/nutrition_dashboard_widgets.dart';
 
 class NutritionScreen extends StatefulWidget {
   const NutritionScreen({super.key});
@@ -16,12 +17,22 @@ class NutritionScreen extends StatefulWidget {
 }
 
 class _NutritionScreenState extends State<NutritionScreen> {
+  late PageController _chartPageController;
+  int _currentChartPage = 0;
+
   @override
   void initState() {
     super.initState();
+    _chartPageController = PageController();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        context.read<NutritionProvider>().loadTodayData().catchError((e) {
+        final provider = context.read<NutritionProvider>();
+        provider.loadTodayData().then((_) {
+          // Carrega analytics de 28 dias de forma assíncrona após dados principais
+          if (mounted) {
+            provider.loadAnalyticsSummary(days: 28).catchError((_) {});
+          }
+        }).catchError((e) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(content: Text('Erro ao carregar dados: $e')),
@@ -30,6 +41,12 @@ class _NutritionScreenState extends State<NutritionScreen> {
         });
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _chartPageController.dispose();
+    super.dispose();
   }
 
   @override
@@ -148,13 +165,7 @@ class _NutritionScreenState extends State<NutritionScreen> {
           const SizedBox(height: 12),
           _buildWeeklyConsistencyGrid(provider),
           const SizedBox(height: 12),
-          _buildCalorieCard(
-            logbook?.totalKcal ?? 0.0,
-            targets['calories'] ?? 2000.0,
-            logbook?.totalProtein ?? 0.0,
-            logbook?.totalCarbs ?? 0.0,
-            logbook?.totalFats ?? 0.0,
-          ),
+          _buildPremiumChartCarousel(provider),
           const SizedBox(height: 16),
           _buildAICoachCard(provider),
           const SizedBox(height: 4),
@@ -183,6 +194,125 @@ class _NutritionScreenState extends State<NutritionScreen> {
           const SizedBox(height: 32),
         ],
       ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Carousel Premium de Gráficos de Nutrição
+  // ---------------------------------------------------------------------------
+
+  Widget _buildPremiumChartCarousel(NutritionProvider provider) {
+    final logbook = provider.currentLogbook;
+    final targets = provider.dailyTargets;
+
+    final charts = <Widget>[
+      // Página 1: Roda de Macronutrientes
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        child: MacroNutrientWheel(
+          consumedKcal: logbook?.totalKcal ?? 0,
+          targetKcal: targets['calories'] ?? 2000,
+          consumedProtein: logbook?.totalProtein ?? 0,
+          targetProtein: targets['protein'] ?? 120,
+          consumedCarbs: logbook?.totalCarbs ?? 0,
+          targetCarbs: targets['carbs'] ?? 250,
+          consumedFat: logbook?.totalFats ?? 0,
+          targetFat: targets['fat'] ?? 55,
+        ),
+      ),
+      // Página 2: Gráfico de Aderência Semanal
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        child: WeeklyAdherenceChart(
+          last7DaysCalories: provider.last7DaysCalories,
+          last7DaysLogged: provider.last7DaysLogged,
+          targetKcal: targets['calories'] ?? 2000,
+          referenceDate: provider.currentDate,
+        ),
+      ),
+      // Página 3: Heatmap de Consistência (28 dias)
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        child: _buildHeatmapFromAnalytics(provider),
+      ),
+    ];
+
+    return Column(
+      children: [
+        SizedBox(
+          height: 220,
+          child: PageView(
+            controller: _chartPageController,
+            onPageChanged: (page) => setState(() => _currentChartPage = page),
+            children: charts,
+          ),
+        ),
+        const SizedBox(height: 8),
+        // Indicadores de página (dots)
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(charts.length, (idx) {
+            return AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              margin: const EdgeInsets.symmetric(horizontal: 3),
+              width: _currentChartPage == idx ? 16 : 6,
+              height: 6,
+              decoration: BoxDecoration(
+                color: _currentChartPage == idx
+                    ? AppColors.primary
+                    : context.colors.border,
+                borderRadius: BorderRadius.circular(3),
+              ),
+            );
+          }),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHeatmapFromAnalytics(NutritionProvider provider) {
+    final analytics = provider.analyticsSummary;
+    final targets = provider.dailyTargets;
+
+    // Constrói listas de 28 dias a partir dos dados de analytics
+    const days = 28;
+    final calories28 = List.filled(days, 0.0);
+    final logged28 = List.filled(days, false);
+
+    if (analytics != null && analytics.days.isNotEmpty) {
+      final now = provider.currentDate;
+      for (int i = 0; i < days; i++) {
+        final targetDate = now.subtract(Duration(days: days - 1 - i));
+        try {
+          final dayData = analytics.days.firstWhere(
+            (d) =>
+                d.date.year == targetDate.year &&
+                d.date.month == targetDate.month &&
+                d.date.day == targetDate.day,
+          );
+          calories28[i] = dayData.totalKcal;
+          logged28[i] = dayData.isFullyLogged;
+        } catch (_) {
+          // Data sem registro — já inicializada com 0 e false
+        }
+      }
+    } else if (provider.analyticsLoading) {
+      // Mostra loader enquanto analytics carrega
+      return Container(
+        decoration: BoxDecoration(
+          color: context.colors.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: context.colors.border),
+        ),
+        child: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    return NutritionStreakHeatmap(
+      last28DaysCalories: calories28,
+      last28DaysLogged: logged28,
+      targetKcal: targets['calories'] ?? 2000,
+      referenceDate: provider.currentDate,
     );
   }
 
@@ -392,6 +522,106 @@ class _NutritionScreenState extends State<NutritionScreen> {
     );
   }
 
+  void _showCustomWaterDialog(BuildContext context, NutritionProvider provider) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: context.colors.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              const Icon(Icons.water_drop, color: Colors.blue, size: 24),
+              const SizedBox(width: 8),
+              Text(
+                'Inserir Hidratação',
+                style: TextStyle(color: context.colors.textPrimary, fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Insira o volume personalizado em ml ou use os atalhos rápidos:',
+                style: TextStyle(color: context.colors.textSecondary, fontSize: 13),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _presetWaterChip(context, controller, 300),
+                  _presetWaterChip(context, controller, 600),
+                  _presetWaterChip(context, controller, 1000),
+                ],
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: controller,
+                keyboardType: TextInputType.number,
+                autofocus: true,
+                style: TextStyle(color: context.colors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold),
+                decoration: InputDecoration(
+                  hintText: 'Ex: 400',
+                  suffixText: 'ml',
+                  suffixStyle: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
+                  filled: true,
+                  fillColor: context.colors.surfaceLight,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: context.colors.border),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Colors.blue, width: 2),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Cancelar', style: TextStyle(color: context.colors.textMuted)),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final text = controller.text;
+                if (text.isNotEmpty) {
+                  final val = int.tryParse(text);
+                  if (val != null && val > 0) {
+                    provider.addWater(val);
+                  }
+                }
+                Navigator.pop(context);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              child: const Text('Confirmar'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _presetWaterChip(BuildContext context, TextEditingController controller, int amount) {
+    return ActionChip(
+      label: Text('+$amount ml'),
+      labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue),
+      backgroundColor: Colors.blue.withOpacity(0.08),
+      side: const BorderSide(color: Colors.blue, width: 0.8),
+      onPressed: () {
+        controller.text = '$amount';
+      },
+    );
+  }
+
   Widget _buildWaterTrackerCard(NutritionProvider provider) {
     final water = provider.waterToday;
     final goal = provider.waterGoal;
@@ -469,24 +699,36 @@ class _NutritionScreenState extends State<NutritionScreen> {
           Row(
             children: [
               Expanded(
-                child: OutlinedButton.icon(
+                child: OutlinedButton(
                   onPressed: () => provider.addWater(250),
-                  icon: const Icon(Icons.local_cafe_outlined, size: 14),
-                  label: const Text('+250 ml', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.blue,
                     side: const BorderSide(color: Colors.blue),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     padding: const EdgeInsets.symmetric(vertical: 8),
                   ),
+                  child: const Text('+250 ml', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => provider.addWater(500),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.blue,
+                    side: const BorderSide(color: Colors.blue),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                  ),
+                  child: const Text('+500 ml', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                ),
+              ),
+              const SizedBox(width: 8),
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: () => provider.addWater(500),
-                  icon: const Icon(Icons.local_drink_outlined, size: 14),
-                  label: const Text('+500 ml', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                  onPressed: () => _showCustomWaterDialog(context, provider),
+                  icon: const Icon(Icons.add, size: 14),
+                  label: const Text('Outro', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blue,
                     foregroundColor: Colors.white,
@@ -582,10 +824,17 @@ class _NutritionScreenState extends State<NutritionScreen> {
             diet.totalFats,
             isDietTab: true,
           ),
-          const SizedBox(height: 24),
           const Text('Refeições Prescritas', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
-          ...diet.meals.map((meal) => _buildDietMealCard(meal)).toList(),
+          ...(() {
+            final sortedMeals = List<DietMeal>.from(diet.meals)..sort((a, b) {
+              if (a.time == null && b.time == null) return 0;
+              if (a.time == null) return 1;
+              if (b.time == null) return -1;
+              return a.time!.compareTo(b.time!);
+            });
+            return sortedMeals.map((meal) => _buildDietMealCard(meal));
+          })(),
           const SizedBox(height: 32),
         ],
       ),
@@ -593,6 +842,10 @@ class _NutritionScreenState extends State<NutritionScreen> {
   }
 
   Widget _buildDietMealCard(DietMeal meal) {
+    final nameParts = meal.name.split(' || ');
+    final displayName = nameParts.first;
+    final displayDesc = nameParts.length > 1 ? nameParts[1] : '';
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
@@ -611,18 +864,44 @@ class _NutritionScreenState extends State<NutritionScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    Icon(Icons.access_time, size: 16, color: context.colors.textMuted),
-                    const SizedBox(width: 6),
-                    Text(meal.time ?? '--:--', style: TextStyle(color: context.colors.textMuted)),
-                    const SizedBox(width: 8),
-                    Text(
-                      meal.name,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                    ),
-                  ],
+                Expanded(
+                  child: Row(
+                    children: [
+                      Icon(Icons.access_time, size: 16, color: context.colors.textMuted),
+                      const SizedBox(width: 6),
+                      Text(meal.time ?? '--:--', style: TextStyle(color: context.colors.textMuted)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              displayName,
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            if (displayDesc.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 2),
+                                child: Text(
+                                  displayDesc,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: context.colors.textMuted,
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 2,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
+                const SizedBox(width: 8),
                 Text(
                   '${meal.subtotalKcal.toStringAsFixed(0)} kcal',
                   style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),

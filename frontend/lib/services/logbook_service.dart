@@ -149,11 +149,13 @@ class LogbookService {
   Future<List<LogbookResponse>> getLogbookSessions({
     int limit = 10,
     int offset = 0,
+    String? userId,
   }) async {
     try {
       final queryParameters = <String, dynamic>{
         'limit': limit.toString(),
         'offset': offset.toString(),
+        if (userId != null) 'user_id': userId,
       };
 
       final response = await _apiClient.get<List<LogbookResponse>>(
@@ -196,7 +198,7 @@ class LogbookService {
         '/logbook/sessions',
         body: {
           'workout_sheet_id': workoutSheetId,
-          'session_date': DateTime.now().toIso8601String(),
+          'session_date': DateTime.now().toUtc().toIso8601String(),
         },
         fromJson: (data) => data as Map<String, dynamic>,
       );
@@ -343,11 +345,13 @@ class LogbookService {
   Future<FrequencyResponse> getWorkoutFrequency({
     required String period,
     int? limit,
+    String? userId,
   }) async {
     try {
       final queryParameters = <String, dynamic>{
         'period': period,
         if (limit != null) 'limit': limit.toString(),
+        if (userId != null) 'user_id': userId,
       };
 
       final response = await _apiClient.get<FrequencyResponse>(
@@ -364,10 +368,12 @@ class LogbookService {
   /// Busca a distribuição de volume de treinos por grupo muscular
   Future<MuscleGroupDistributionResponse> getMuscleGroupDistribution({
     int days = 30,
+    String? userId,
   }) async {
     try {
       final queryParameters = <String, dynamic>{
         'days': days.toString(),
+        if (userId != null) 'user_id': userId,
       };
 
       final response = await _apiClient.get<MuscleGroupDistributionResponse>(
@@ -385,16 +391,63 @@ class LogbookService {
   Future<ProgressionResponse> getExerciseProgression(
     String exerciseId, {
     int weeks = 8,
+    String? userId,
   }) async {
     try {
       final queryParameters = <String, dynamic>{
         'weeks': weeks.toString(),
+        if (userId != null) 'user_id': userId,
       };
 
       final response = await _apiClient.get<ProgressionResponse>(
         '/logbook/progression/$exerciseId',
         queryParameters: queryParameters,
         fromJson: (data) => ProgressionResponse.fromJson(data as Map<String, dynamic>),
+      );
+      return response;
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  /// Busca os recordes pessoais de carga por exercício
+  Future<PersonalRecordsResponse> getPersonalRecords({
+    int limit = 10,
+    String? userId,
+  }) async {
+    try {
+      final queryParameters = <String, dynamic>{
+        'limit': limit.toString(),
+        if (userId != null) 'user_id': userId,
+      };
+
+      final response = await _apiClient.get<PersonalRecordsResponse>(
+        '/logbook/personal-records',
+        queryParameters: queryParameters,
+        fromJson: (data) => PersonalRecordsResponse.fromJson(data as Map<String, dynamic>),
+      );
+      return response;
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  /// Busca o Volume Load semanal de um exercício
+  Future<VolumeLoadResponse> getVolumeLoad(
+    String exerciseId, {
+    int weeks = 8,
+    String? userId,
+  }) async {
+    try {
+      final queryParameters = <String, dynamic>{
+        'weeks': weeks.toString(),
+        if (userId != null) 'user_id': userId,
+      };
+
+      final response = await _apiClient.get<VolumeLoadResponse>(
+        '/logbook/volume-load/$exerciseId',
+        queryParameters: queryParameters,
+        fromJson: (data) => VolumeLoadResponse.fromJson(data as Map<String, dynamic>),
       );
       return response;
     } catch (e) {
@@ -536,17 +589,23 @@ class FrequencyResponse {
 /// Item de distribuição de treinos por grupo muscular
 class MuscleGroupDistributionItem {
   final String muscleGroup;
+  final String displayName;
   final int count;
+  final double percentage;
 
   MuscleGroupDistributionItem({
     required this.muscleGroup,
+    required this.displayName,
     required this.count,
+    required this.percentage,
   });
 
   factory MuscleGroupDistributionItem.fromJson(Map<String, dynamic> json) {
     return MuscleGroupDistributionItem(
       muscleGroup: json['muscle_group'] as String,
+      displayName: json['display_name'] as String? ?? json['muscle_group'] as String,
       count: json['count'] as int,
+      percentage: (json['percentage'] as num?)?.toDouble() ?? 0.0,
     );
   }
 }
@@ -555,11 +614,13 @@ class MuscleGroupDistributionItem {
 class MuscleGroupDistributionResponse {
   final String userId;
   final int days;
+  final int totalSets;
   final List<MuscleGroupDistributionItem> distribution;
 
   MuscleGroupDistributionResponse({
     required this.userId,
     required this.days,
+    required this.totalSets,
     required this.distribution,
   });
 
@@ -567,9 +628,154 @@ class MuscleGroupDistributionResponse {
     return MuscleGroupDistributionResponse(
       userId: json['user_id'] as String,
       days: json['days'] as int,
+      totalSets: json['total_sets'] as int? ?? 0,
       distribution: (json['distribution'] as List<dynamic>?)
           ?.map((e) => MuscleGroupDistributionItem.fromJson(e as Map<String, dynamic>))
           .toList() ?? [],
+    );
+  }
+}
+
+// ==========================================================================
+// Modelos de Personal Records (PRs)
+// ==========================================================================
+
+/// Recorde pessoal de um exercício
+class PersonalRecord {
+  final String exerciseId;
+  final String exerciseName;
+  final String muscleGroup;
+  final String displayName;
+  final double maxLoadKg;
+  final int repsAtMax;
+  final double estimated1rm;
+  final DateTime achievedAt;
+
+  PersonalRecord({
+    required this.exerciseId,
+    required this.exerciseName,
+    required this.muscleGroup,
+    required this.displayName,
+    required this.maxLoadKg,
+    required this.repsAtMax,
+    required this.estimated1rm,
+    required this.achievedAt,
+  });
+
+  factory PersonalRecord.fromJson(Map<String, dynamic> json) {
+    return PersonalRecord(
+      exerciseId: json['exercise_id'] as String,
+      exerciseName: json['exercise_name'] as String,
+      muscleGroup: json['muscle_group'] as String,
+      displayName: json['display_name'] as String? ?? json['muscle_group'] as String,
+      maxLoadKg: (json['max_load_kg'] as num).toDouble(),
+      repsAtMax: json['reps_at_max'] as int,
+      estimated1rm: (json['estimated_1rm'] as num).toDouble(),
+      achievedAt: DateTime.parse(json['achieved_at'] as String),
+    );
+  }
+}
+
+/// Resposta de recordes pessoais
+class PersonalRecordsResponse {
+  final String userId;
+  final List<PersonalRecord> records;
+
+  PersonalRecordsResponse({required this.userId, required this.records});
+
+  factory PersonalRecordsResponse.fromJson(Map<String, dynamic> json) {
+    return PersonalRecordsResponse(
+      userId: json['user_id'] as String,
+      records: (json['records'] as List<dynamic>?)
+          ?.map((e) => PersonalRecord.fromJson(e as Map<String, dynamic>))
+          .toList() ?? [],
+    );
+  }
+}
+
+// ==========================================================================
+// Modelos de Volume Load
+// ==========================================================================
+
+/// Ponto de dados de Volume Load semanal
+class VolumeLoadDataPoint {
+  final DateTime weekStart;
+  final double totalVolumeKg;
+  final double maxLoadKg;
+  final int sessionCount;
+
+  VolumeLoadDataPoint({
+    required this.weekStart,
+    required this.totalVolumeKg,
+    required this.maxLoadKg,
+    required this.sessionCount,
+  });
+
+  factory VolumeLoadDataPoint.fromJson(Map<String, dynamic> json) {
+    return VolumeLoadDataPoint(
+      weekStart: DateTime.parse(json['week_start'] as String),
+      totalVolumeKg: (json['total_volume_kg'] as num).toDouble(),
+      maxLoadKg: (json['max_load_kg'] as num).toDouble(),
+      sessionCount: json['session_count'] as int,
+    );
+  }
+}
+
+/// Estatísticas de Volume Load
+class VolumeLoadStatistics {
+  final int totalSessions;
+  final double avgVolumeKg;
+  final double maxVolumeKg;
+  final String trend;
+  final double improvementPercentage;
+
+  VolumeLoadStatistics({
+    required this.totalSessions,
+    required this.avgVolumeKg,
+    required this.maxVolumeKg,
+    required this.trend,
+    required this.improvementPercentage,
+  });
+
+  factory VolumeLoadStatistics.fromJson(Map<String, dynamic> json) {
+    return VolumeLoadStatistics(
+      totalSessions: json['total_sessions'] as int,
+      avgVolumeKg: (json['avg_volume_kg'] as num).toDouble(),
+      maxVolumeKg: (json['max_volume_kg'] as num).toDouble(),
+      trend: json['trend'] as String,
+      improvementPercentage: (json['improvement_percentage'] as num).toDouble(),
+    );
+  }
+}
+
+/// Resposta completa de Volume Load
+class VolumeLoadResponse {
+  final String exerciseId;
+  final String exerciseName;
+  final String userId;
+  final int weeks;
+  final List<VolumeLoadDataPoint> dataPoints;
+  final VolumeLoadStatistics statistics;
+
+  VolumeLoadResponse({
+    required this.exerciseId,
+    required this.exerciseName,
+    required this.userId,
+    required this.weeks,
+    required this.dataPoints,
+    required this.statistics,
+  });
+
+  factory VolumeLoadResponse.fromJson(Map<String, dynamic> json) {
+    return VolumeLoadResponse(
+      exerciseId: json['exercise_id'] as String,
+      exerciseName: json['exercise_name'] as String? ?? 'Exercício',
+      userId: json['user_id'] as String,
+      weeks: json['weeks'] as int,
+      dataPoints: (json['data_points'] as List<dynamic>?)
+          ?.map((e) => VolumeLoadDataPoint.fromJson(e as Map<String, dynamic>))
+          .toList() ?? [],
+      statistics: VolumeLoadStatistics.fromJson(json['statistics'] as Map<String, dynamic>),
     );
   }
 }

@@ -2,15 +2,18 @@
 Rotas HTTP do Diário Alimentar (Diet Logbook).
 
 Endpoints:
-- POST   /api/v1/diet-logbook                         → Registrar alimento consumido (201)
-- GET    /api/v1/diet-logbook/{date}                   → Diário do dia (200)
-- DELETE /api/v1/diet-logbook/entries/{entry_id}       → Remover registro (204)
+- POST   /api/v1/diet-logbook                              → Registrar alimento consumido (201)
+- GET    /api/v1/diet-logbook/analytics/summary            → Sumário histórico de nutrição (200)
+- GET    /api/v1/diet-logbook/{date}                       → Diário do dia (200)
+- DELETE /api/v1/diet-logbook/entries/{entry_id}           → Remover registro (204)
+- GET    /api/v1/diet-logbook/student/{user_id}/{date}     → Diário do aluno p/ Personal (200)
 """
 
 from datetime import date
+from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.database import get_db
@@ -20,6 +23,7 @@ from app.dtos.diet_logbook_dto import (
     AddLogbookEntryDTO,
     DietLogbookResponseDTO,
     LogbookEntryResponseDTO,
+    NutritionAnalyticsSummaryResponseDTO,
 )
 from app.models.user import User
 from app.services.diet_logbook_service import (
@@ -186,11 +190,76 @@ async def remove_logbook_entry(
         )
 
 
+LOGBOOK_READ_ROLES = {"admin", "personal_trainer", "professor", "gestor"}
+
+
+# ---------------------------------------------------------------------------
+# GET /diet-logbook/analytics/summary — Sumário Histórico de Nutrição
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/analytics/summary",
+    response_model=NutritionAnalyticsSummaryResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Sumário histórico de nutrição por período",
+    responses={
+        200: {"description": "Sumário agregado por dia retornado"},
+        400: {"description": "Parâmetros de data inválidos"},
+        403: {"description": "Sem permissão para acessar dados de outro aluno"},
+    },
+)
+async def get_nutrition_analytics_summary(
+    start_date: date = Query(..., description="Data de início (YYYY-MM-DD)"),
+    end_date: date = Query(..., description="Data de fim (YYYY-MM-DD)"),
+    student_id: Optional[UUID] = Query(
+        None, description="ID do aluno — apenas Personal/Admin"
+    ),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> NutritionAnalyticsSummaryResponseDTO:
+    """
+    Retorna o resumo agregado de nutrição por dia em um período.
+
+    - **Aluno autenticado**: retorna seus próprios dados (ignora `student_id`).
+    - **Personal/Admin**: pode usar `student_id` para consultar dados de um aluno
+      vinculado.
+
+    O período máximo recomendado é de **90 dias** para performance otimizada.
+    """
+    # Determina o usuário alvo
+    target_user_id = current_user.id
+    if student_id is not None:
+        if current_user.role not in LOGBOOK_READ_ROLES:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Apenas profissionais podem acessar dados de alunos.",
+            )
+        target_user_id = student_id
+
+    if start_date > end_date:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="start_date deve ser anterior ou igual a end_date.",
+        )
+
+    controller = DietController(db)
+    try:
+        return await controller.get_nutrition_analytics(
+            user_id=target_user_id,
+            start_date=start_date,
+            end_date=end_date,
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao gerar sumário de nutrição: {str(e)}",
+        )
+
+
 # ---------------------------------------------------------------------------
 # GET /diet-logbook/student/{user_id}/{date} — Personal lê logbook do aluno
 # ---------------------------------------------------------------------------
-
-LOGBOOK_READ_ROLES = {"admin", "personal_trainer", "professor", "gestor"}
 
 
 @router.get(

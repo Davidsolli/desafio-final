@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:animate_do/animate_do.dart';
 import 'package:provider/provider.dart';
-import 'package:fl_chart/fl_chart.dart';
+
 import 'dart:async';
 
 import 'package:omniconnect_fitness/theme/app_colors.dart';
@@ -13,8 +13,7 @@ import 'package:omniconnect_fitness/providers/logbook_provider.dart';
 import 'package:omniconnect_fitness/services/api_client.dart';
 import 'package:omniconnect_fitness/shared/widgets/index.dart';
 import 'package:omniconnect_fitness/screens/trainer/widgets/exercise_catalog_picker.dart';
-import 'package:omniconnect_fitness/widgets/frequency_bar_chart.dart';
-import 'package:omniconnect_fitness/widgets/progression_line_chart.dart';
+import 'package:omniconnect_fitness/widgets/progress_widgets.dart';
 
 class WorkoutsScreen extends StatefulWidget {
   const WorkoutsScreen({super.key});
@@ -44,9 +43,45 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
   int? _restTimerSeconds;
   Timer? _restTimer;
 
+  // Controladores de texto para evitar perda de foco ao digitar
+  final Map<String, TextEditingController> _loadControllers = {};
+  final Map<String, TextEditingController> _repsControllers = {};
+
+  TextEditingController _getLoadController(String exerciseId, int setIdx, double initialVal) {
+    final key = '${exerciseId}_$setIdx';
+    if (!_loadControllers.containsKey(key)) {
+      _loadControllers[key] = TextEditingController(text: initialVal.toStringAsFixed(1));
+    }
+    return _loadControllers[key]!;
+  }
+
+  TextEditingController _getRepsController(String exerciseId, int setIdx, dynamic initialVal) {
+    final key = '${exerciseId}_$setIdx';
+    if (!_repsControllers.containsKey(key)) {
+      _repsControllers[key] = TextEditingController(text: initialVal.toString());
+    }
+    return _repsControllers[key]!;
+  }
+  
+  String _getMuscleGroupName(String id) {
+    const map = {
+      'peito': 'Peito',
+      'costa': 'Costas',
+      'costas': 'Costas',
+      'ombro': 'Ombros',
+      'bíceps': 'Bíceps',
+      'tríceps': 'Tríceps',
+      'perna_anterior': 'Quadríceps',
+      'perna_posterior': 'Posterior de Coxa',
+      'panturrilha': 'Panturrilhas',
+      'abdômen': 'Abdômen',
+      'core': 'Core',
+    };
+    return map[id.toLowerCase()] ?? id;
+  }
+
   // Filtros / Seleções para Aba Progresso
   String _selectedPeriod = 'weekly';
-  String? _progressionExerciseId;
 
   // Estado para Confetes / Tela de Sucesso
   bool _showSuccessOverlay = false;
@@ -97,21 +132,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
       final logbookProvider = context.read<LogbookProvider>();
       await logbookProvider.loadFrequency(_selectedPeriod, limit: 12);
       await logbookProvider.loadMuscleGroupDistribution(days: 30);
-      
-      // Se tivermos exercícios nos treinos do usuário, seleciona o primeiro para progressão por padrão
-      final sheetProvider = context.read<WorkoutSheetProvider>();
-      if (sheetProvider.sheets.isNotEmpty && _progressionExerciseId == null) {
-        // Carrega os detalhes do primeiro treino para extrair um exercício válido
-        final firstSheet = sheetProvider.sheets.first;
-        await sheetProvider.loadSheetDetail(firstSheet.id);
-        if (sheetProvider.selectedSheet != null && sheetProvider.selectedSheet!.exercises.isNotEmpty) {
-          final exercise = sheetProvider.selectedSheet!.exercises.first;
-          setState(() {
-            _progressionExerciseId = exercise.id;
-          });
-          await logbookProvider.loadExerciseProgression(exercise.id, weeks: 8);
-        }
-      }
+      await logbookProvider.loadPersonalRecords(limit: 10);
     } catch (_) {}
   }
 
@@ -121,6 +142,8 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
     _tabController.dispose();
     _chronometerTimer?.cancel();
     _restTimer?.cancel();
+    for (var c in _loadControllers.values) { c.dispose(); }
+    for (var c in _repsControllers.values) { c.dispose(); }
     super.dispose();
   }
 
@@ -175,6 +198,10 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
     _setsChecked.clear();
     _setsLoads.clear();
     _setsReps.clear();
+    for (var c in _loadControllers.values) { c.dispose(); }
+    for (var c in _repsControllers.values) { c.dispose(); }
+    _loadControllers.clear();
+    _repsControllers.clear();
 
     for (var exercise in sheet.exercises) {
       _setsChecked[exercise.id] = List.generate(exercise.series, (_) => false);
@@ -1753,7 +1780,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        ex.muscleGroup.toUpperCase(),
+                        _getMuscleGroupName(ex.muscleGroup).toUpperCase(),
                         style: TextStyle(color: context.colors.textMuted, fontSize: 10, letterSpacing: 1.1),
                       ),
                     ],
@@ -1831,9 +1858,10 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
                               contentPadding: const EdgeInsets.all(4),
                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
                             ),
-                            controller: TextEditingController(text: loadVal.toStringAsFixed(1))
-                              ..selection = TextSelection.collapsed(offset: loadVal.toStringAsFixed(1).length),
-                            onChanged: (val) => _onLoadChanged(ex.id, setIdx, val),
+                            controller: _getLoadController(ex.id, setIdx, loadVal),
+                            onChanged: (val) {
+                              if (double.tryParse(val) != null) _onLoadChanged(ex.id, setIdx, val);
+                            },
                           ),
                         ),
                       ),
@@ -1853,9 +1881,10 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
                               contentPadding: const EdgeInsets.all(4),
                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
                             ),
-                            controller: TextEditingController(text: repsVal.toString())
-                              ..selection = TextSelection.collapsed(offset: repsVal.toString().length),
-                            onChanged: (val) => _onRepsChanged(ex.id, setIdx, val),
+                            controller: _getRepsController(ex.id, setIdx, repsVal),
+                            onChanged: (val) {
+                              if (int.tryParse(val) != null) _onRepsChanged(ex.id, setIdx, val);
+                            },
                           ),
                         ),
                       ),
@@ -1895,13 +1924,32 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
   }
 
   // ==========================================
-  // ABA "MEU PROGRESSO" (ESTATÍSTICAS & GRAFICOS)
+  // ABA "MEU PROGRESSO" — NOVA VERSÃO
   // ==========================================
   Widget _buildProgressTab() {
     return Consumer<LogbookProvider>(
       builder: (context, provider, _) {
-        if (provider.isLoading && provider.frequencyResponse == null) {
-          return const Center(child: CircularProgressIndicator());
+        final List<Map<String, String>> availableExercises = [];
+        final Set<String> addedIds = {};
+        final sheetProvider = context.read<WorkoutSheetProvider>();
+        for (var program in sheetProvider.programs) {
+          for (var sheet in program.workoutSheets) {
+            for (var ex in sheet.exercises) {
+              if (!addedIds.contains(ex.id)) {
+                addedIds.add(ex.id);
+                availableExercises.add({'id': ex.id, 'name': ex.name});
+              }
+            }
+          }
+        }
+        for (var sess in provider.sessions) {
+          for (var ex in sess.exercises) {
+            final exId = ex.exerciseId.isNotEmpty ? ex.exerciseId : ex.id;
+            if (exId.isNotEmpty && !addedIds.contains(exId)) {
+              addedIds.add(exId);
+              availableExercises.add({'id': exId, 'name': ex.exerciseName});
+            }
+          }
         }
 
         return RefreshIndicator(
@@ -1909,16 +1957,19 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              // 1. Gráfico de Frequência
-              _buildFrequencySection(provider),
+              const ActivityHeatmap(),
               const SizedBox(height: 16),
-
-              // 2. Gráfico Donut de Foco Muscular (Premium)
-              _buildMuscleFocusSection(provider),
+              const WorkoutHistorySection(),
               const SizedBox(height: 16),
-
-              // 3. Gráfico de Progressão Individual de Exercício
-              _buildExerciseProgressionSection(provider),
+              const PersonalRecordsCard(),
+              const SizedBox(height: 16),
+              const MuscleFocusBars(),
+              const SizedBox(height: 16),
+              ExerciseEvolutionCard(
+                availableExercises: availableExercises,
+                initialExerciseId:
+                    availableExercises.isNotEmpty ? availableExercises.first['id'] : null,
+              ),
               const SizedBox(height: 30),
             ],
           ),
@@ -1927,265 +1978,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
     );
   }
 
-  Widget _buildFrequencySection(LogbookProvider provider) {
-    // Mapeia para compatibilidade com o widget que espera List<Map<String, dynamic>>
-    final mappedData = provider.frequencyResponse?.dataPoints.map((dp) => {
-      'period_start': dp.periodStart.toIso8601String(),
-      'period_end': dp.periodEnd.toIso8601String(),
-      'count': dp.count,
-    }).toList() ?? [];
-
-    return Card(
-      elevation: 1,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: context.colors.border)),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('Consistência de Treinos', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                // Seleção de Período
-                DropdownButton<String>(
-                  value: _selectedPeriod,
-                  underline: const SizedBox(),
-                  style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 11),
-                  items: const [
-                    DropdownMenuItem(value: 'weekly', child: Text('Últimas 12 Semanas')),
-                    DropdownMenuItem(value: 'monthly', child: Text('Últimos 6 Meses')),
-                  ],
-                  onChanged: (val) {
-                    if (val != null) {
-                      setState(() => _selectedPeriod = val);
-                      provider.loadFrequency(val, limit: 12);
-                    }
-                  },
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            SizedBox(
-              height: 200,
-              child: FrequencyBarChart(
-                dataPoints: mappedData,
-                period: _selectedPeriod,
-                isLoading: provider.isLoading && mappedData.isEmpty,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMuscleFocusSection(LogbookProvider provider) {
-    final dist = provider.distributionResponse?.distribution ?? [];
-    
-    // Lista de Cores tailormade para o gráfico donut
-    final List<Color> donutColors = [
-      Colors.blue,
-      Colors.orange,
-      Colors.red,
-      Colors.green,
-      Colors.purple,
-      Colors.teal,
-      Colors.amber,
-      Colors.indigo,
-      Colors.brown,
-      Colors.pink,
-    ];
-
-    return Card(
-      elevation: 1,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: context.colors.border)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Foco Muscular', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-            const SizedBox(height: 4),
-            Text('Distribuição de séries completadas por grupo muscular (Últimos 30 dias)', style: TextStyle(color: context.colors.textMuted, fontSize: 10)),
-            const SizedBox(height: 20),
-
-            if (dist.isEmpty)
-              Container(
-                height: 150,
-                alignment: Alignment.center,
-                child: Text('Ainda sem histórico suficiente para focar os músculos.', style: TextStyle(color: context.colors.textMuted, fontSize: 12)),
-              )
-            else
-              Row(
-                children: [
-                  // Pie / Donut Chart
-                  Expanded(
-                    flex: 4,
-                    child: SizedBox(
-                      height: 140,
-                      child: PieChart(
-                        PieChartData(
-                          sectionsSpace: 3,
-                          centerSpaceRadius: 35,
-                          sections: List.generate(dist.length, (idx) {
-                            final item = dist[idx];
-                            final color = donutColors[idx % donutColors.length];
-                            return PieChartSectionData(
-                              color: color,
-                              value: item.count.toDouble(),
-                              title: '${item.count}',
-                              radius: 18,
-                              titleStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
-                            );
-                          }),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  // Legend
-                  Expanded(
-                    flex: 5,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: List.generate(dist.length, (idx) {
-                        final item = dist[idx];
-                        final color = donutColors[idx % donutColors.length];
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 6),
-                          child: Row(
-                            children: [
-                              Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(
-                                  item.muscleGroup.toUpperCase(), 
-                                  style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }),
-                    ),
-                  ),
-                ],
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildExerciseProgressionSection(LogbookProvider provider) {
-    // Monta lista de todos os exercícios das fichas para o dropdown de evolução
-    final List<Map<String, String>> availableExercises = [];
-    final Set<String> addedIds = {};
-
-    // 1. Coleta exercícios de todas as fichas carregadas nos programas do aluno
-    final sheetProvider = context.read<WorkoutSheetProvider>();
-    for (var program in sheetProvider.programs) {
-      for (var sheet in program.workoutSheets) {
-        for (var ex in sheet.exercises) {
-          if (!addedIds.contains(ex.id)) {
-            addedIds.add(ex.id);
-            availableExercises.add({'id': ex.id, 'name': ex.name});
-          }
-        }
-      }
-    }
-
-    // 2. Coleta exercícios de sessões anteriores gravadas no logbook histórico
-    for (var sess in provider.sessions) {
-      for (var ex in sess.exercises) {
-        final exId = ex.exerciseId.isNotEmpty ? ex.exerciseId : ex.id;
-        if (exId.isNotEmpty && !addedIds.contains(exId)) {
-          addedIds.add(exId);
-          availableExercises.add({'id': exId, 'name': ex.exerciseName});
-        }
-      }
-    }
-
-    // Se a lista continuar vazia, preenchemos com alguns padrões da base de dados
-    if (availableExercises.isEmpty) {
-      availableExercises.addAll([
-        {'id': 'e3c0490b-19b8-4c91-9540-cc5b6e206001', 'name': 'Supino Reto'},
-        {'id': 'e3c0490b-19b8-4c91-9540-cc5b6e206002', 'name': 'Agachamento Livre'},
-        {'id': 'e3c0490b-19b8-4c91-9540-cc5b6e206003', 'name': 'Levantamento Terra'},
-        {'id': 'e3c0490b-19b8-4c91-9540-cc5b6e206004', 'name': 'Puxada Pulley'},
-      ]);
-    }
-
-    // Garante que o ID selecionado esteja contido na lista para evitar falhas do Dropdown
-    final hasSelected = availableExercises.any((ex) => ex['id'] == _progressionExerciseId);
-    if (!hasSelected && availableExercises.isNotEmpty) {
-      _progressionExerciseId = availableExercises.first['id'];
-      final targetId = _progressionExerciseId!;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        provider.loadExerciseProgression(targetId, weeks: 8);
-      });
-    } else if (availableExercises.isEmpty) {
-      _progressionExerciseId = null;
-    }
-
-    // Mapeamento para o ProgressionLineChart
-    final mappedPoints = provider.progressionResponse?.dataPoints.map((dp) => {
-      'session_date': dp.sessionDate.toIso8601String(),
-      'actual_load_kg': dp.actualLoadKg,
-    }).toList() ?? [];
-
-    return Card(
-      elevation: 1,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: context.colors.border)),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('Evolução de Cargas', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                // Dropdown de Exercícios
-                DropdownButton<String>(
-                  value: _progressionExerciseId,
-                  underline: const SizedBox(),
-                  style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 11),
-                  items: availableExercises.map((ex) {
-                    return DropdownMenuItem<String>(
-                      value: ex['id'],
-                      child: Text(ex['name']!),
-                    );
-                  }).toList(),
-                  onChanged: (val) {
-                    if (val != null) {
-                      setState(() {
-                        _progressionExerciseId = val;
-                      });
-                      provider.loadExerciseProgression(val, weeks: 8);
-                    }
-                  },
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            
-            SizedBox(
-              height: 380,
-              child: ProgressionLineChart(
-                dataPoints: mappedPoints,
-                isLoading: provider.isLoading && mappedPoints.isEmpty,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ==========================================
+    // ==========================================
   // OVERLAY PREMIUM DE SUCESSO (CONFETES E CONQUISTAS)
   // ==========================================
   Widget _buildPremiumSuccessOverlay() {

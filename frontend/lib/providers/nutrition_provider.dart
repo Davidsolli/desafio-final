@@ -19,6 +19,11 @@ class NutritionProvider extends ChangeNotifier {
   List<double> _last7DaysCalories = List.filled(7, 0.0);
   List<bool> _last7DaysLogged = List.filled(7, false);
 
+  // Estado de Analytics Histórico
+  NutritionAnalyticsSummary? _analyticsSummary;
+  bool _analyticsLoading = false;
+  String? _analyticsError;
+
   bool _isLoading = false;
   String? _error;
 
@@ -37,6 +42,11 @@ class NutritionProvider extends ChangeNotifier {
   int get waterGoal => _waterGoal;
   List<double> get last7DaysCalories => _last7DaysCalories;
   List<bool> get last7DaysLogged => _last7DaysLogged;
+
+  // Getters para Analytics Histórico
+  NutritionAnalyticsSummary? get analyticsSummary => _analyticsSummary;
+  bool get analyticsLoading => _analyticsLoading;
+  String? get analyticsError => _analyticsError;
 
   /// Retorna as entradas agrupadas por meal_name para facilitar a listagem
   Map<String, List<DietLogbookEntry>> get entriesByMeal {
@@ -218,6 +228,33 @@ class NutritionProvider extends ChangeNotifier {
       rethrow;
     } finally {
       _setLoading(false);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Analytics Histórico (Backend Aggregation)
+  // ---------------------------------------------------------------------------
+
+  /// Carrega o sumário histórico de nutrição para um período.
+  /// [days]: número de dias retroativos (ex: 7, 30, 60, 90).
+  Future<void> loadAnalyticsSummary({int days = 30}) async {
+    _analyticsLoading = true;
+    _analyticsError = null;
+    notifyListeners();
+    try {
+      final endDate = DateTime.now();
+      final startDate = endDate.subtract(Duration(days: days - 1));
+      _analyticsSummary = await _nutritionService.getAnalyticsSummary(
+        startDate: startDate,
+        endDate: endDate,
+      );
+    } on NetworkException catch (e) {
+      _analyticsError = 'Erro de conexão: ${e.message}';
+    } catch (e) {
+      _analyticsError = 'Erro ao carregar histórico: ${e.toString()}';
+    } finally {
+      _analyticsLoading = false;
+      notifyListeners();
     }
   }
 
