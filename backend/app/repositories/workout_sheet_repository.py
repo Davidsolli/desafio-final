@@ -234,4 +234,3 @@ class WorkoutSheetRepository:
     async def rollback(self) -> None:
         """Rollback da transação atual."""
         await self.session.rollback()
-# reload

@@ -194,7 +194,7 @@ class _TrainerHomeScreenState extends State<TrainerHomeScreen> {
                                 child: _QuickActionButton(
                                   icon: Icons.assignment_outlined,
                                   label: 'Criar\nFicha',
-                                  color: const Color(0xFF4db8ff),
+                                  color: AppColors.accentInfo,
                                   onTap: () => context.go(AppRoutes.trainerSheets),
                                 ),
                               ),
@@ -203,7 +203,7 @@ class _TrainerHomeScreenState extends State<TrainerHomeScreen> {
                                 child: _QuickActionButton(
                                   icon: Icons.people_outlined,
                                   label: 'Ver\nAlunos',
-                                  color: const Color(0xFFffc84d),
+                                  color: AppColors.accentWarning,
                                   onTap: () => context.go(AppRoutes.trainerStudents),
                                 ),
                               ),

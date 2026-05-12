@@ -133,9 +133,7 @@ class DashboardService {
 
       final summary = response['summary'] as Map<String, dynamic>? ?? {};
       final completed = (summary['completed'] as num?)?.toInt() ?? 0;
-      final planned = (summary['planned'] as num?)?.toInt() ?? 1; // Evita divisão por zero
-
-      if (planned == 0) return 0.0;
+      final planned = (summary['planned'] as num?)?.toInt() ?? 1;
 
       final adherence = (completed / planned) * 100;
       return adherence.clamp(0, 100);
@@ -278,25 +276,6 @@ class DashboardService {
         fromJson: (data) => data as Map<String, dynamic>,
       );
       return (response['pending'] as num?)?.toInt() ?? 0;
-    } catch (_) {
-      return 0;
-    }
-  }
-
-  /// Retorna quantidade de treinos completados na semana atual (seg–dom)
-  Future<int> getWorkoutsThisWeek() async {
-    try {
-      final response = await _apiClient.get<Map<String, dynamic>>(
-        '/logbook/frequency',
-        queryParameters: {'period': 'weekly', 'limit': '1'},
-        fromJson: (data) => data as Map<String, dynamic>,
-      );
-      final points = response['data_points'] as List<dynamic>? ?? [];
-      if (points.isEmpty) return 0;
-      // O endpoint retorna os períodos mais recentes primeiro ou mais antigos?
-      // Pegamos o último ponto (semana mais recente).
-      final last = points.last as Map<String, dynamic>;
-      return (last['count'] as num?)?.toInt() ?? 0;
     } catch (_) {
       return 0;
     }
