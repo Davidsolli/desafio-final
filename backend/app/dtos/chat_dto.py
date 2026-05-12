@@ -189,6 +189,7 @@ class FoodLoggedDTO(BaseModel):
     carbs: float
     fats: float
     logbook_entry_id: str
+    food_source: str = "taco"   # "taco" | "web" | "estimativa"
 
 
 class AudioFoodResponseDTO(BaseModel):

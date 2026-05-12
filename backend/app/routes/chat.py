@@ -253,10 +253,13 @@ async def send_audio_message(
             detail={"code": "TRANSCRIPTION_FAILED", "message": "Áudio inaudível ou sem conteúdo."},
         )
 
-    # ── 3. Parser de refeição (LLM + TACO) ───────────────────────────────
+    # ── 3. Parser de refeição (TACO → web → LLM estimate) ────────────────
     try:
         parse_result = await food_parser.parse(
-            transcription, session, local_hour=local_hour
+            transcription,
+            session,
+            local_hour=local_hour,
+            user_id=current_user.id,
         )
     except QuantityNotFoundError as exc:
         raise HTTPException(
@@ -275,35 +278,54 @@ async def send_audio_message(
         )
 
     # ── 4. Registrar no DietLogbook ───────────────────────────────────────
-    # Converte log_date (string "YYYY-MM-DD" enviada pelo frontend) para date.
-    # Se não fornecida, cai para date.today() do servidor — pode errar em
-    # usuários com fuso diferente de UTC, por isso o frontend sempre envia.
     from datetime import date as _date
     parsed_log_date: _date | None = None
     if log_date:
         try:
             parsed_log_date = _date.fromisoformat(log_date)
         except ValueError:
-            pass  # fallback para today() no service
+            pass
 
+    # Determinar se a fonte é TACO (food_id) ou CustomFood (custom_food_id)
     logbook_service = DietLogbookService(session)
-    entry_dto = AddLogbookEntryDTO(
-        meal_name=parse_result.meal_name,
-        food_id=parse_result.catalog_item.id,
-        quantity_g=parse_result.quantity_g,
-        log_date=parsed_log_date,
-    )
+    if parse_result.source == "taco" and parse_result.catalog_item is not None:
+        entry_dto = AddLogbookEntryDTO(
+            meal_name=parse_result.meal_name,
+            food_id=parse_result.catalog_item.id,
+            quantity_g=parse_result.quantity_g,
+            log_date=parsed_log_date,
+        )
+        food_name_display = parse_result.catalog_item.name
+    else:
+        # fonte: "web" ou "estimativa" — usa CustomFood criado pelo parser
+        assert parse_result.custom_food is not None
+        entry_dto = AddLogbookEntryDTO(
+            meal_name=parse_result.meal_name,
+            custom_food_id=parse_result.custom_food.id,
+            quantity_g=parse_result.quantity_g,
+            log_date=parsed_log_date,
+        )
+        food_name_display = parse_result.custom_food.name
+
     logbook_entry = await logbook_service.add_entry(
         user_id=current_user.id,
         dto=entry_dto,
     )
 
     # ── 5. Montar mensagem de confirmação do Vitali ───────────────────────
-    food_name_display = parse_result.catalog_item.name
     qty = parse_result.quantity_g
     meal = parse_result.meal_name
+
+    # Sufixo contextual por fonte
+    source_note = {
+        "taco": "",
+        "web": " _(dados nutricionais encontrados na web)_",
+        "estimativa": " _(macros estimados pela IA — podem variar por marca)_",
+    }.get(parse_result.source, "")
+
     vitali_message = (
-        f"✅ Registrei **{qty:.0f}g de {food_name_display}** no seu {meal}!\n\n"
+        f"✅ Registrei **{qty:.0f}g de {food_name_display}**"
+        f" no seu {meal}!{source_note}\n\n"
         f"📊 Macros adicionados:\n"
         f"• Calorias: {logbook_entry.kcal:.0f} kcal\n"
         f"• Proteínas: {logbook_entry.protein:.1f}g\n"
@@ -320,7 +342,6 @@ async def send_audio_message(
         except ValueError:
             pass
 
-    # Get-or-create conversa
     if conv_id:
         from sqlalchemy import select as sa_select
         stmt = sa_select(ChatConversation).where(
@@ -341,7 +362,6 @@ async def send_audio_message(
         session.add(conversation)
         await session.flush()
 
-    # Mensagem do usuário (transcrição)
     user_msg = ChatMessage(
         conversation_id=conversation.id,
         role="user",
@@ -351,22 +371,25 @@ async def send_audio_message(
     session.add(user_msg)
     await session.flush()
 
-    # Mensagem do assistente (confirmação)
+    context_food: dict = {
+        "food_name": food_name_display,
+        "quantity_g": qty,
+        "meal_name": meal,
+        "food_source": parse_result.source,
+        "logbook_entry_id": str(logbook_entry.id),
+    }
+    if parse_result.source == "taco" and parse_result.catalog_item:
+        context_food["food_id"] = parse_result.catalog_item.id
+    elif parse_result.custom_food:
+        context_food["custom_food_id"] = str(parse_result.custom_food.id)
+
     assistant_msg = ChatMessage(
         conversation_id=conversation.id,
         role="assistant",
         content=vitali_message,
         channel="app",
         model_used="food_logging",
-        context_data={
-            "food_logged": {
-                "food_id": parse_result.catalog_item.id,
-                "food_name": food_name_display,
-                "quantity_g": qty,
-                "meal_name": meal,
-                "logbook_entry_id": str(logbook_entry.id),
-            }
-        },
+        context_data={"food_logged": context_food},
     )
     session.add(assistant_msg)
     await session.commit()
@@ -387,6 +410,7 @@ async def send_audio_message(
             "carbs": logbook_entry.carbs,
             "fats": logbook_entry.fats,
             "logbook_entry_id": str(logbook_entry.id),
+            "food_source": parse_result.source,
         },
         parse_confidence=parse_result.confidence,
         created_at=assistant_msg.created_at.isoformat() + "Z",

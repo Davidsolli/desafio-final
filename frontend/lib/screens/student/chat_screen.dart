@@ -1001,6 +1001,10 @@ class _FoodCard extends StatelessWidget {
                     ),
                   ),
                 ),
+                const SizedBox(width: 6),
+                // Badge de fonte: só aparece quando não é TACO
+                if (food.foodSource != 'taco')
+                  _SourceBadge(source: food.foodSource),
                 const Spacer(),
                 Text(
                   time,
@@ -1038,6 +1042,36 @@ class _FoodCard extends StatelessWidget {
             _MacroGrid(food: food),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Badge pequeno que indica a fonte dos dados nutricionais (web ou estimativa IA).
+/// Não é exibido quando a fonte é "taco" (comportamento padrão esperado).
+class _SourceBadge extends StatelessWidget {
+  final String source;
+  const _SourceBadge({required this.source});
+
+  @override
+  Widget build(BuildContext context) {
+    final (label, color) = switch (source) {
+      'web'        => ('🌐 web', Colors.blue.shade600),
+      'estimativa' => ('🤖 IA', Colors.orange.shade700),
+      _            => ('', Colors.grey),
+    };
+    if (label.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(fontSize: 9, color: color, fontWeight: FontWeight.w600),
       ),
     );
   }

@@ -51,6 +51,10 @@ class Settings(BaseSettings):
     CHAT_INACTIVITY_CLOSE_HOURS: int = 24       # RN-02: fechar conversa após 24h inativa
     CHAT_MAX_RESPONSE_LATENCY_MS: int = 10000   # Timeout máximo para o LLM (cold start + rede)
 
+    # ── Busca Web (nutrição) ──────────────────────────────────────────────
+    TAVILY_API_KEY: str = ""
+    FOOD_WEB_SEARCH_ENABLED: bool = True    # fallback web quando alimento não está na TACO
+
     # ── InfinitePay ────────────────────────────────────────────────────────
     INFINITEPAY_HANDLE: str = "natalia-faria-16"
     INFINITEPAY_WEBHOOK_URL: str = ""           # URL pública do servidor (ex: https://api.seudominio.com)

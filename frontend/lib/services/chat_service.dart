@@ -72,6 +72,7 @@ class FoodLoggedDTO {
   final double carbs;
   final double fats;
   final String logbookEntryId;
+  final String foodSource;   // "taco" | "web" | "estimativa"
 
   FoodLoggedDTO({
     required this.foodName,
@@ -82,6 +83,7 @@ class FoodLoggedDTO {
     required this.carbs,
     required this.fats,
     required this.logbookEntryId,
+    this.foodSource = 'taco',
   });
 
   factory FoodLoggedDTO.fromJson(Map<String, dynamic> json) {
@@ -94,6 +96,7 @@ class FoodLoggedDTO {
       carbs: (json['carbs'] as num?)?.toDouble() ?? 0,
       fats: (json['fats'] as num?)?.toDouble() ?? 0,
       logbookEntryId: json['logbook_entry_id'] as String? ?? '',
+      foodSource: json['food_source'] as String? ?? 'taco',
     );
   }
 }
