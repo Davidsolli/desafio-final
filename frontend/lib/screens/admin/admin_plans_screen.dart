@@ -171,13 +171,6 @@ class _AdminPlansScreenState extends State<AdminPlansScreen> {
                 '• ${plan.durationLabel}',
                 style: TextStyle(color: context.colors.textSecondary, fontSize: 13),
               ),
-              if (plan.modality != null) ...[
-                const SizedBox(width: 8),
-                Text(
-                  '• ${plan.modality}',
-                  style: TextStyle(color: context.colors.textSecondary, fontSize: 13),
-                ),
-              ],
             ],
           ),
         ],
@@ -190,7 +183,6 @@ class _AdminPlansScreenState extends State<AdminPlansScreen> {
     final descCtrl = TextEditingController();
     final priceCtrl = TextEditingController();
     int selectedDuration = 1;
-    String? selectedModality;
 
     showModalBottomSheet(
       context: context,
@@ -276,36 +268,6 @@ class _AdminPlansScreenState extends State<AdminPlansScreen> {
                     );
                   }).toList(),
                 ),
-                const SizedBox(height: 16),
-                Text(
-                  'Modalidade (opcional)',
-                  style: TextStyle(color: context.colors.textPrimary, fontSize: 14, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  children: ['Online', 'Presencial', 'Híbrido'].map((mod) {
-                    final isSelected = selectedModality == mod;
-                    return GestureDetector(
-                      onTap: () => setModalState(() =>
-                          selectedModality = isSelected ? null : mod),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                        decoration: BoxDecoration(
-                          color: isSelected ? AppColors.primary : context.colors.surfaceLight,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          mod,
-                          style: TextStyle(
-                            color: isSelected ? Colors.white : context.colors.textSecondary,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
                 const SizedBox(height: 24),
                 SizedBox(
                   width: double.infinity,
@@ -316,7 +278,6 @@ class _AdminPlansScreenState extends State<AdminPlansScreen> {
                       descCtrl.text,
                       priceCtrl.text,
                       selectedDuration,
-                      selectedModality,
                     ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
@@ -341,7 +302,6 @@ class _AdminPlansScreenState extends State<AdminPlansScreen> {
     String description,
     String priceStr,
     int durationMonths,
-    String? modality,
   ) async {
     if (name.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -366,7 +326,7 @@ class _AdminPlansScreenState extends State<AdminPlansScreen> {
       description: description.trim().isEmpty ? null : description.trim(),
       price: price,
       durationMonths: durationMonths,
-      modality: modality,
+      modality: null,
     );
 
     if (!mounted) return;
@@ -420,7 +380,6 @@ class _AdminPlansScreenState extends State<AdminPlansScreen> {
     final descCtrl = TextEditingController(text: plan.description ?? '');
     final priceCtrl = TextEditingController(text: plan.price.toStringAsFixed(2));
     int selectedDuration = plan.durationMonths;
-    String? selectedModality = plan.modality;
     bool isActive = plan.isActive;
 
     showModalBottomSheet(
@@ -508,36 +467,6 @@ class _AdminPlansScreenState extends State<AdminPlansScreen> {
                   }).toList(),
                 ),
                 const SizedBox(height: 16),
-                Text(
-                  'Modalidade (opcional)',
-                  style: TextStyle(color: context.colors.textPrimary, fontSize: 14, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  children: ['Online', 'Presencial', 'Híbrido'].map((mod) {
-                    final isSelected = selectedModality == mod;
-                    return GestureDetector(
-                      onTap: () => setModalState(() =>
-                          selectedModality = isSelected ? null : mod),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                        decoration: BoxDecoration(
-                          color: isSelected ? AppColors.primary : context.colors.surfaceLight,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          mod,
-                          style: TextStyle(
-                            color: isSelected ? Colors.white : context.colors.textSecondary,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-                const SizedBox(height: 16),
                 Row(
                   children: [
                     Text(
@@ -563,7 +492,6 @@ class _AdminPlansScreenState extends State<AdminPlansScreen> {
                       descCtrl.text,
                       priceCtrl.text,
                       selectedDuration,
-                      selectedModality,
                       isActive,
                     ),
                     style: ElevatedButton.styleFrom(
@@ -590,7 +518,6 @@ class _AdminPlansScreenState extends State<AdminPlansScreen> {
     String description,
     String priceStr,
     int durationMonths,
-    String? modality,
     bool isActive,
   ) async {
     if (name.trim().isEmpty) {
