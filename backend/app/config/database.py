@@ -173,6 +173,25 @@ async def init_db() -> None:
                 logger.warning("Erro ao executar migração de passos: %s", exc)
         logger.info("✓ Colunas de passos (daily_step_goal, handicap_level) verificadas/adicionadas")
 
+        # Migração: fuso horário do usuário
+        try:
+            await conn.execute(text(
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS timezone VARCHAR(50) DEFAULT NULL"
+            ))
+            logger.info("✓ Coluna timezone verificada/adicionada em users")
+        except Exception as exc:
+            logger.warning("Erro ao adicionar timezone em users: %s", exc)
+
+        # Migração: notificação de inatividade de alunos em notification_preferences
+        try:
+            await conn.execute(text(
+                "ALTER TABLE notification_preferences "
+                "ADD COLUMN IF NOT EXISTS student_inactivity_enabled BOOLEAN NOT NULL DEFAULT TRUE"
+            ))
+            logger.info("✓ Coluna student_inactivity_enabled verificada/adicionada em notification_preferences")
+        except Exception as exc:
+            logger.warning("Erro ao adicionar student_inactivity_enabled em notification_preferences: %s", exc)
+
     # 4. Migração manual: Adicionar food_name ao logbook entries se não existir
     # (feita APÓS criar as tabelas, em transação separada)
     # COMENTADO TEMPORARIAMENTE - será aplicado depois

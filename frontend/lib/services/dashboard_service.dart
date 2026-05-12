@@ -63,31 +63,20 @@ class DashboardService {
 
   DashboardService(this._apiClient);
 
-  /// Retorna lista de alunos do personal logado (fichas criadas por ele)
+  /// Retorna lista de alunos vinculados ao personal logado
   Future<List<Map<String, dynamic>>> getMyStudents({
     int limit = 100,
   }) async {
     try {
       final response = await _apiClient.get<Map<String, dynamic>>(
-        '/workout-sheets',
-        queryParameters: {'limit': limit.toString()},
+        '/users/students',
+        queryParameters: {'page': '1', 'limit': limit.toString()},
         fromJson: (data) => data as Map<String, dynamic>,
       );
 
       final dataRaw = response['data'];
-      final List<dynamic> workoutSheets = dataRaw is List<dynamic> ? dataRaw : [];
-      final uniqueUserIds = <String>{};
-
-      for (final sheet in workoutSheets) {
-        if (sheet is Map<String, dynamic>) {
-          final userId = sheet['user_id'];
-          if (userId != null) {
-            uniqueUserIds.add(userId.toString());
-          }
-        }
-      }
-
-      return uniqueUserIds.map((id) => {'user_id': id}).toList();
+      final List<dynamic> students = dataRaw is List<dynamic> ? dataRaw : [];
+      return students.whereType<Map<String, dynamic>>().toList();
     } catch (e) {
       return [];
     }
@@ -144,9 +133,7 @@ class DashboardService {
 
       final summary = response['summary'] as Map<String, dynamic>? ?? {};
       final completed = (summary['completed'] as num?)?.toInt() ?? 0;
-      final planned = (summary['planned'] as num?)?.toInt() ?? 1; // Evita divisão por zero
-
-      if (planned == 0) return 0.0;
+      final planned = (summary['planned'] as num?)?.toInt() ?? 1;
 
       final adherence = (completed / planned) * 100;
       return adherence.clamp(0, 100);
@@ -155,21 +142,47 @@ class DashboardService {
     }
   }
 
-  /// Retorna frequência semanal (qtd fichas ativas do aluno)
+  /// Retorna frequência semanal (dias/semana únicos nas fichas do aluno)
   Future<int> getWeeklyFrequency(String studentId) async {
     try {
       final response = await _apiClient.get<Map<String, dynamic>>(
-        '/workout-sheets',
-        queryParameters: {
-          'user_id': studentId,
-          'limit': '100',
-        },
+        '/workout-programs',
+        queryParameters: {'user_id': studentId, 'limit': '10'},
         fromJson: (data) => data as Map<String, dynamic>,
       );
 
-      final total = (response['total'] as num?)?.toInt() ?? 0;
-      return total;
+      final programs = response['data'] as List<dynamic>? ?? [];
+      final days = <int>{};
+      for (final prog in programs) {
+        if (prog is! Map<String, dynamic>) continue;
+        final sheets = prog['workout_sheets'] as List<dynamic>? ?? [];
+        for (final sheet in sheets) {
+          if (sheet is! Map<String, dynamic>) continue;
+          final day = sheet['day_of_week'];
+          if (day != null) days.add(day as int);
+        }
+      }
+      return days.length;
     } catch (e) {
+      return 0;
+    }
+  }
+
+  /// Retorna total de sessões completadas esta semana por todos os alunos
+  Future<int> getStudentsWorkoutsThisWeek(List<String> studentIds) async {
+    if (studentIds.isEmpty) return 0;
+    try {
+      final futures = studentIds.map((id) async {
+        final r = await getFrequency(period: 'weekly', limit: 1, userId: id);
+        if (r == null) return 0;
+        final points = r['data_points'] as List<dynamic>? ?? [];
+        if (points.isEmpty) return 0;
+        final last = points.last as Map<String, dynamic>;
+        return (last['count'] as num?)?.toInt() ?? 0;
+      });
+      final counts = await Future.wait(futures);
+      return counts.fold<int>(0, (sum, c) => sum + c);
+    } catch (_) {
       return 0;
     }
   }
@@ -255,57 +268,58 @@ class DashboardService {
     }
   }
 
+  /// Retorna total de convites pendentes (não utilizados) do personal logado
+  Future<int> getPendingInvites() async {
+    try {
+      final response = await _apiClient.get<Map<String, dynamic>>(
+        '/invitations',
+        fromJson: (data) => data as Map<String, dynamic>,
+      );
+      return (response['pending'] as num?)?.toInt() ?? 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
   /// Retorna lista completa de `StudentDashboardData` para todos os alunos
   Future<List<StudentDashboardData>> loadDashboard() async {
     try {
-      // 1. Pegar alunos do personal
+      // 1. Busca alunos via /users/students (já contém nome e goal_type)
       final studentRefs = await getMyStudents();
 
       if (studentRefs.isEmpty) {
         return [];
       }
 
-      // 2. Para cada aluno, agregar seus dados em paralelo
-      final futuresList = <Future<StudentDashboardData>>[];
+      // 2. Para cada aluno, agrega dados em paralelo
+      final futuresList = studentRefs.map((ref) async {
+        final studentId = ref['id'] as String;
+        final studentName = ref['name'] as String? ?? 'Sem nome';
+        final goalType = ref['goal_type'] as String?;
 
-      for (final ref in studentRefs) {
-        final studentId = ref['user_id'] as String;
+        final results = await Future.wait([
+          getLastSession(studentId).then((v) => v ?? {}),
+          getWeeklyFrequency(studentId),
+          getMonthAdherence(studentId),
+        ]);
 
-        futuresList.add(
-          Future(() async {
-            final infoFuture = getStudentInfo(studentId);
-            final lastSessionFuture = getLastSession(studentId);
-            final frequencyFuture = getWeeklyFrequency(studentId);
-            final adherenceFuture = getMonthAdherence(studentId);
+        final lastSession = results[0] as Map<String, dynamic>;
+        final frequency = results[1] as int;
+        final adherence = results[2] as double;
 
-            final results = await Future.wait([
-              infoFuture,
-              lastSessionFuture.then((v) => v ?? {}),
-              frequencyFuture,
-              adherenceFuture,
-            ]);
-
-            final info = results[0] as Map<String, dynamic>;
-            final lastSession = results[1] as Map<String, dynamic>;
-            final frequency = results[2] as int;
-            final adherence = results[3] as double;
-
-            return StudentDashboardData(
-              id: studentId,
-              name: info['name'] as String? ?? 'Sem nome',
-              goalType: info['goal_type'] as String?,
-              weeklyFrequency: frequency,
-              lastWorkout: lastSession['session_date'] != null
-                  ? DateTime.parse(lastSession['session_date'].toString())
-                  : null,
-              adherencePercent: adherence,
-            );
-          }),
+        return StudentDashboardData(
+          id: studentId,
+          name: studentName,
+          goalType: goalType,
+          weeklyFrequency: frequency,
+          lastWorkout: lastSession['session_date'] != null
+              ? DateTime.parse(lastSession['session_date'].toString())
+              : null,
+          adherencePercent: adherence,
         );
-      }
+      }).toList();
 
-      final students = await Future.wait(futuresList);
-      return students;
+      return await Future.wait(futuresList);
     } catch (e) {
       rethrow;
     }

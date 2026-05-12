@@ -85,7 +85,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     switch (role) {
       case 'personal_trainer':
-        context.go(AppRoutes.trainerStudents);
+        context.go(AppRoutes.trainerHome);
         break;
       case 'admin':
         context.go(AppRoutes.adminDashboard);
