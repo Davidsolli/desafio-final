@@ -222,6 +222,13 @@ async def init_db() -> None:
         logger.warning("Erro ao popular dados de domínio iniciais: %s", exc)
 
     try:
+        from scripts.seed_admin_metrics import seed as seed_admin_metrics
+        await seed_admin_metrics(force=False)
+        logger.info("✓ Seed de métricas administrativas concluída")
+    except Exception as exc:
+        logger.warning("Erro ao popular dados de métricas administrativas: %s", exc)
+
+    try:
         from scripts.seed_knowledge_base import seed as seed_knowledge_base
         inserted = await seed_knowledge_base(force=False)
         logger.info(

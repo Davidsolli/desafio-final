@@ -35,6 +35,7 @@ import '../screens/student/plans_screen.dart';
 import '../screens/student/subscription_screen.dart';
 import '../screens/admin/admin_plans_screen.dart';
 import '../screens/admin/admin_payment_dashboard_screen.dart';
+import '../screens/admin/admin_metrics_dashboard_screen.dart';
 
 class AppRoutes {
   // Auth
@@ -79,6 +80,7 @@ class AppRoutes {
   // Payment
   static const String plans = '/plans';
   static const String subscription = '/subscription';
+  static const String adminMetrics = '/admin/metrics';
 
   // Shared
   static const String notifications = '/notifications';
@@ -212,6 +214,10 @@ class AppRoutes {
           GoRoute(
             path: adminWhatsApp,
             builder: (context, state) => const AdminWhatsAppScreen(),
+          ),
+          GoRoute(
+            path: adminMetrics,
+            builder: (context, state) => const AdminMetricsDashboardScreen(),
           ),
           GoRoute(
             path: adminPlans,

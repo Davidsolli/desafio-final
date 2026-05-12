@@ -12,6 +12,7 @@ from app.config.database import init_db
 from app.config.limiter import limiter
 from app.config.settings import settings
 from app.routes import user, auth, chat, logbook, goal, invitation, webhooks
+from app.routes.admin_metrics import router as admin_metrics_router
 from app.routes.pages import router as pages_router
 from app.routes.workout_sheet import router as workout_sheet_router, catalog_router as exercise_catalog_router, program_router as workout_program_router
 from app.routes.food_catalog import router as food_catalog_router
@@ -101,3 +102,4 @@ app.include_router(pages_router)
 app.include_router(password_router)
 app.include_router(notification_router)
 app.include_router(steps_router)
+app.include_router(admin_metrics_router)

@@ -21,7 +21,8 @@ class _AdminShellState extends State<AdminShell> {
     if (currentPath.contains('/admin/plans')) return 1;
     if (currentPath.contains('/admin/payments')) return 2;
     if (currentPath.contains('/admin/whatsapp')) return 3;
-    if (currentPath.contains('/admin/settings')) return 4;
+    if (currentPath.contains('/admin/metrics')) return 4;
+    if (currentPath.contains('/admin/settings')) return 5;
     return 0;
   }
 
@@ -51,6 +52,7 @@ class _AdminShellState extends State<AdminShell> {
             '/admin/plans',
             '/admin/payments',
             '/admin/whatsapp',
+            '/admin/metrics',
             '/admin/settings',
           ];
           context.go(routes[index]);
@@ -64,7 +66,8 @@ class _AdminShellState extends State<AdminShell> {
           BottomNavigationBarItem(icon: Icon(Icons.card_membership_outlined), label: 'Planos'),
           BottomNavigationBarItem(icon: Icon(Icons.attach_money), label: 'Pagamentos'),
           BottomNavigationBarItem(icon: Icon(Icons.mark_chat_unread_outlined), label: 'WhatsApp'),
-          BottomNavigationBarItem(icon: Icon(Icons.settings_outlined), label: 'Config'),
+          BottomNavigationBarItem(icon: Icon(Icons.analytics_outlined), label: 'Métricas'),
+          BottomNavigationBarItem(icon: Icon(Icons.settings_outlined), label: 'Configurações'),
         ],
       ),
     );
