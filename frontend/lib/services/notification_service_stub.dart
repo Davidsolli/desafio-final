@@ -13,7 +13,7 @@ class NotificationService {
   Future<Map<String, dynamic>> getPreferences() async {
     try {
       final response = await apiClient.get<Map<String, dynamic>>(
-        '/api/v1/notifications/preferences',
+        '/notifications/preferences',
         fromJson: (json) => json is Map<String, dynamic> ? json : {},
       );
       return response;
@@ -25,7 +25,7 @@ class NotificationService {
   Future<bool> updatePreferences(Map<String, dynamic> data) async {
     try {
       await apiClient.put(
-        '/api/v1/notifications/preferences',
+        '/notifications/preferences',
         body: data,
         fromJson: (json) => json as Map<String, dynamic>,
       );
@@ -38,7 +38,7 @@ class NotificationService {
   Future<List<Map<String, dynamic>>> getHistory({String? type, int limit = 20}) async {
     try {
       final response = await apiClient.get<Map<String, dynamic>>(
-        '/api/v1/notifications/history',
+        '/notifications/history',
         queryParameters: {
           'notification_type': ?type,
           'limit': limit,
@@ -58,7 +58,7 @@ class NotificationService {
   Future<bool> markAsRead(String notificationId) async {
     try {
       await apiClient.post<Map<String, dynamic>>(
-        '/api/v1/notifications/mark-read',
+        '/notifications/mark-read',
         body: {'notification_id': notificationId},
         fromJson: (json) => json is Map<String, dynamic> ? json : {},
       );
@@ -71,7 +71,7 @@ class NotificationService {
   Future<bool> updateTimezone(String tz) async {
     try {
       await apiClient.put<Map<String, dynamic>>(
-        '/api/v1/users/me/timezone',
+        '/users/me/timezone',
         body: {'timezone': tz},
         fromJson: (json) => json is Map<String, dynamic> ? json : {},
       );

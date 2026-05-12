@@ -346,8 +346,8 @@ class TestNotifications:
         self, test_db_session: AsyncSession
     ):
         """
-        Teste 12 (Card 15.16): tentar desativar new_workout_sheet_enabled deve
-        lançar HTTPException 400. Notificações essenciais não podem ser desligadas.
+        Teste 12 (Card 15.16 - Modificado): Agora new_workout_sheet_enabled pode ser desativado
+        conforme desejo do product owner.
         """
         user_id = uuid4()
 
@@ -362,11 +362,7 @@ class TestNotifications:
         service = NotificationService(test_db_session)
         dto = UpdateNotificationPreferenceDTO(new_workout_sheet_enabled=False)
 
-        with pytest.raises(HTTPException) as exc_info:
-            await service.update_preferences(user_id, dto)
+        updated = await service.update_preferences(user_id, dto)
+        await test_db_session.commit()
 
-        assert exc_info.value.status_code == 400
-
-        # Preferência NÃO deve ter sido alterada
-        await test_db_session.refresh(pref)
-        assert pref.new_workout_sheet_enabled is True
+        assert updated.new_workout_sheet_enabled is False

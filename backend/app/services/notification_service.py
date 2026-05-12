@@ -26,7 +26,7 @@ from sqlalchemy import select, and_, delete
 logger = logging.getLogger(__name__)
 
 # Notificações essenciais que nunca podem ser desativadas (Card 15.16)
-_ESSENTIAL_FIELDS = frozenset({"new_workout_sheet_enabled"})
+_ESSENTIAL_FIELDS = frozenset()
 
 # Mapeamento de tipo de notificação para o campo de preferência correspondente
 _TYPE_TO_PREF_FIELD: Dict[str, str] = {
