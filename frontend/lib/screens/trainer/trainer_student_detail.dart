@@ -21,6 +21,7 @@ import 'widgets/edit_workout_sheet_dialog.dart';
 import '../student/widgets/food_search_modal.dart';
 import '../../providers/logbook_provider.dart';
 import '../../widgets/progress_widgets.dart';
+import 'widgets/trainer_nutrition_analytics.dart';
 
 class TrainerStudentDetail extends StatefulWidget {
   final String studentId;
@@ -831,19 +832,13 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
       );
     }
 
-    if (_studentDiets.isEmpty) {
-      return const OmniEmptyState(
-        icon: Icons.restaurant_outlined,
-        title: 'Nenhum plano nutricional',
-        subtitle: 'Nenhum plano nutricional cadastrado para este aluno.',
-      );
-    }
-
-    final activeDiet = _studentDiets.first;
+    // Usa a dieta ativa se disponível; caso contrário, cria um objeto vazio
+    // para não bloquear o acesso ao Diário e à aba de Análise.
+    final activeDiet = _studentDiets.isNotEmpty ? _studentDiets.first : null;
 
     return Column(
       children: [
-        // Premium Sub-tab Sliding Segment Switcher
+        // Premium Sub-tab Sliding Segment Switcher (3 abas)
         Container(
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           height: 44,
@@ -872,13 +867,13 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                     ),
                     alignment: Alignment.center,
                     child: Text(
-                      'Diário do Aluno',
+                      'Diário',
                       style: TextStyle(
                         color: _nutritionSubTabIndex == 0
                             ? Colors.white
                             : context.colors.textMuted,
                         fontWeight: FontWeight.bold,
-                        fontSize: 13,
+                        fontSize: 12,
                       ),
                     ),
                   ),
@@ -900,14 +895,56 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                     ),
                     alignment: Alignment.center,
                     child: Text(
-                      'Plano de Dieta',
+                      'Plano',
                       style: TextStyle(
                         color: _nutritionSubTabIndex == 1
                             ? Colors.white
                             : context.colors.textMuted,
                         fontWeight: FontWeight.bold,
-                        fontSize: 13,
+                        fontSize: 12,
                       ),
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _nutritionSubTabIndex = 2;
+                    });
+                  },
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: _nutritionSubTabIndex == 2
+                          ? AppColors.primary
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    alignment: Alignment.center,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Análise',
+                          style: TextStyle(
+                            color: _nutritionSubTabIndex == 2
+                                ? Colors.white
+                                : context.colors.textMuted,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(width: 3),
+                        Icon(
+                          Icons.analytics_outlined,
+                          size: 12,
+                          color: _nutritionSubTabIndex == 2
+                              ? Colors.white
+                              : context.colors.textMuted,
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -920,9 +957,26 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
         Expanded(
           child: _nutritionSubTabIndex == 0
               ? _buildStudentLogbookView(activeDiet)
-              : _buildDietPrescriptionView(activeDiet),
+              : _nutritionSubTabIndex == 1
+                  ? (activeDiet != null
+                      ? _buildDietPrescriptionView(activeDiet)
+                      : const OmniEmptyState(
+                          icon: Icons.restaurant_outlined,
+                          title: 'Nenhum plano nutricional',
+                          subtitle: 'Prescreva um plano para este aluno.',
+                        ))
+                  : _buildNutritionAnalyticsView(),
         ),
       ],
+    );
+  }
+
+  Widget _buildNutritionAnalyticsView() {
+    final nutritionService = context.read<NutritionService>();
+    return TrainerNutritionAnalyticsTab(
+      studentId: widget.studentId,
+      nutritionService: nutritionService,
+      studentWeightKg: _student?.weight,
     );
   }
 
@@ -1055,16 +1109,16 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
     );
   }
 
-  Widget _buildStudentLogbookView(Diet activeDiet) {
+  Widget _buildStudentLogbookView(Diet? activeDiet) {
     if (_studentLogbookLoading && _studentLogbook == null) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    final totalTargetKcal = activeDiet.totalKcal;
-    final totalTargetProtein = activeDiet.totalProtein;
-    final totalTargetCarbs = activeDiet.totalCarbs;
-    final totalTargetFats = activeDiet.totalFats;
-    final waterTargetMl = activeDiet.waterTargetMl;
+    final totalTargetKcal = activeDiet?.totalKcal ?? 2000.0;
+    final totalTargetProtein = activeDiet?.totalProtein ?? 120.0;
+    final totalTargetCarbs = activeDiet?.totalCarbs ?? 250.0;
+    final totalTargetFats = activeDiet?.totalFats ?? 55.0;
+    final waterTargetMl = activeDiet?.waterTargetMl ?? 2500;
 
     final currentKcal = _studentLogbook?.totalKcal ?? 0.0;
     final currentProtein = _studentLogbook?.totalProtein ?? 0.0;

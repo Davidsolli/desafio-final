@@ -7,6 +7,7 @@ import '../../theme/theme_colors.dart';
 import '../../providers/nutrition_provider.dart';
 import '../../models/diet_models.dart';
 import 'widgets/food_search_modal.dart';
+import 'widgets/nutrition_dashboard_widgets.dart';
 
 class NutritionScreen extends StatefulWidget {
   const NutritionScreen({super.key});
@@ -16,12 +17,22 @@ class NutritionScreen extends StatefulWidget {
 }
 
 class _NutritionScreenState extends State<NutritionScreen> {
+  late PageController _chartPageController;
+  int _currentChartPage = 0;
+
   @override
   void initState() {
     super.initState();
+    _chartPageController = PageController();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        context.read<NutritionProvider>().loadTodayData().catchError((e) {
+        final provider = context.read<NutritionProvider>();
+        provider.loadTodayData().then((_) {
+          // Carrega analytics de 28 dias de forma assíncrona após dados principais
+          if (mounted) {
+            provider.loadAnalyticsSummary(days: 28).catchError((_) {});
+          }
+        }).catchError((e) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(content: Text('Erro ao carregar dados: $e')),
@@ -30,6 +41,12 @@ class _NutritionScreenState extends State<NutritionScreen> {
         });
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _chartPageController.dispose();
+    super.dispose();
   }
 
   @override
@@ -148,13 +165,7 @@ class _NutritionScreenState extends State<NutritionScreen> {
           const SizedBox(height: 12),
           _buildWeeklyConsistencyGrid(provider),
           const SizedBox(height: 12),
-          _buildCalorieCard(
-            logbook?.totalKcal ?? 0.0,
-            targets['calories'] ?? 2000.0,
-            logbook?.totalProtein ?? 0.0,
-            logbook?.totalCarbs ?? 0.0,
-            logbook?.totalFats ?? 0.0,
-          ),
+          _buildPremiumChartCarousel(provider),
           const SizedBox(height: 16),
           _buildAICoachCard(provider),
           const SizedBox(height: 4),
@@ -183,6 +194,125 @@ class _NutritionScreenState extends State<NutritionScreen> {
           const SizedBox(height: 32),
         ],
       ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Carousel Premium de Gráficos de Nutrição
+  // ---------------------------------------------------------------------------
+
+  Widget _buildPremiumChartCarousel(NutritionProvider provider) {
+    final logbook = provider.currentLogbook;
+    final targets = provider.dailyTargets;
+
+    final charts = <Widget>[
+      // Página 1: Roda de Macronutrientes
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        child: MacroNutrientWheel(
+          consumedKcal: logbook?.totalKcal ?? 0,
+          targetKcal: targets['calories'] ?? 2000,
+          consumedProtein: logbook?.totalProtein ?? 0,
+          targetProtein: targets['protein'] ?? 120,
+          consumedCarbs: logbook?.totalCarbs ?? 0,
+          targetCarbs: targets['carbs'] ?? 250,
+          consumedFat: logbook?.totalFats ?? 0,
+          targetFat: targets['fat'] ?? 55,
+        ),
+      ),
+      // Página 2: Gráfico de Aderência Semanal
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        child: WeeklyAdherenceChart(
+          last7DaysCalories: provider.last7DaysCalories,
+          last7DaysLogged: provider.last7DaysLogged,
+          targetKcal: targets['calories'] ?? 2000,
+          referenceDate: provider.currentDate,
+        ),
+      ),
+      // Página 3: Heatmap de Consistência (28 dias)
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        child: _buildHeatmapFromAnalytics(provider),
+      ),
+    ];
+
+    return Column(
+      children: [
+        SizedBox(
+          height: 220,
+          child: PageView(
+            controller: _chartPageController,
+            onPageChanged: (page) => setState(() => _currentChartPage = page),
+            children: charts,
+          ),
+        ),
+        const SizedBox(height: 8),
+        // Indicadores de página (dots)
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(charts.length, (idx) {
+            return AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              margin: const EdgeInsets.symmetric(horizontal: 3),
+              width: _currentChartPage == idx ? 16 : 6,
+              height: 6,
+              decoration: BoxDecoration(
+                color: _currentChartPage == idx
+                    ? AppColors.primary
+                    : context.colors.border,
+                borderRadius: BorderRadius.circular(3),
+              ),
+            );
+          }),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHeatmapFromAnalytics(NutritionProvider provider) {
+    final analytics = provider.analyticsSummary;
+    final targets = provider.dailyTargets;
+
+    // Constrói listas de 28 dias a partir dos dados de analytics
+    const days = 28;
+    final calories28 = List.filled(days, 0.0);
+    final logged28 = List.filled(days, false);
+
+    if (analytics != null && analytics.days.isNotEmpty) {
+      final now = provider.currentDate;
+      for (int i = 0; i < days; i++) {
+        final targetDate = now.subtract(Duration(days: days - 1 - i));
+        try {
+          final dayData = analytics.days.firstWhere(
+            (d) =>
+                d.date.year == targetDate.year &&
+                d.date.month == targetDate.month &&
+                d.date.day == targetDate.day,
+          );
+          calories28[i] = dayData.totalKcal;
+          logged28[i] = dayData.isFullyLogged;
+        } catch (_) {
+          // Data sem registro — já inicializada com 0 e false
+        }
+      }
+    } else if (provider.analyticsLoading) {
+      // Mostra loader enquanto analytics carrega
+      return Container(
+        decoration: BoxDecoration(
+          color: context.colors.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: context.colors.border),
+        ),
+        child: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    return NutritionStreakHeatmap(
+      last28DaysCalories: calories28,
+      last28DaysLogged: logged28,
+      targetKcal: targets['calories'] ?? 2000,
+      referenceDate: provider.currentDate,
     );
   }
 
