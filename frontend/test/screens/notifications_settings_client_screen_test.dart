@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
-import 'package:omniconnect_fitness/screens/notifications_settings_screen.dart';
+import 'package:omniconnect_fitness/screens/notifications_settings_client_screen.dart';
 import 'package:omniconnect_fitness/services/notification_service.dart';
 import 'package:omniconnect_fitness/theme/app_theme.dart';
 
 import '../test_helpers/fake_notification_service.dart';
 
 void main() {
-  group('NotificationsSettingsScreen', () {
+  group('NotificationsSettingsClientScreen', () {
     late FakeNotificationService fake;
 
     setUp(() {
@@ -32,7 +32,7 @@ void main() {
             () => <String, dynamic>{},
           );
 
-      await tester.pumpWidget(wrap(const NotificationsSettingsScreen()));
+      await tester.pumpWidget(wrap(const NotificationsSettingsClientScreen()));
 
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
       // limpa o future pendente para evitar estado de teste pendurado
@@ -43,7 +43,7 @@ void main() {
         (WidgetTester tester) async {
       fake.preferencesToReturn = <String, dynamic>{};
 
-      await tester.pumpWidget(wrap(const NotificationsSettingsScreen()));
+      await tester.pumpWidget(wrap(const NotificationsSettingsClientScreen()));
       await tester.pumpAndSettle();
 
       expect(find.text('Notificações'), findsWidgets);
@@ -58,7 +58,7 @@ void main() {
         'new_workout_sheet_enabled': true,
       };
 
-      await tester.pumpWidget(wrap(const NotificationsSettingsScreen()));
+      await tester.pumpWidget(wrap(const NotificationsSettingsClientScreen()));
       await tester.pumpAndSettle();
 
       expect(find.text('Ativar Notificações'), findsOneWidget);
@@ -73,7 +73,7 @@ void main() {
         'meal_reminder_enabled': false,
       };
 
-      await tester.pumpWidget(wrap(const NotificationsSettingsScreen()));
+      await tester.pumpWidget(wrap(const NotificationsSettingsClientScreen()));
       await tester.pumpAndSettle();
 
       expect(find.text('Lembretes'), findsOneWidget);
@@ -88,7 +88,7 @@ void main() {
         'notifications_enabled': false,
       };
 
-      await tester.pumpWidget(wrap(const NotificationsSettingsScreen()));
+      await tester.pumpWidget(wrap(const NotificationsSettingsClientScreen()));
       await tester.pumpAndSettle();
 
       expect(
@@ -109,7 +109,7 @@ void main() {
       };
       fake.updateOk = true;
 
-      await tester.pumpWidget(wrap(const NotificationsSettingsScreen()));
+      await tester.pumpWidget(wrap(const NotificationsSettingsClientScreen()));
       await tester.pumpAndSettle();
 
       await tester.tap(find.byType(Switch).first);
@@ -127,7 +127,7 @@ void main() {
         'new_workout_sheet_enabled': true,
       };
 
-      await tester.pumpWidget(wrap(const NotificationsSettingsScreen()));
+      await tester.pumpWidget(wrap(const NotificationsSettingsClientScreen()));
       await tester.pumpAndSettle();
 
       expect(find.byIcon(Icons.fitness_center), findsOneWidget);
@@ -143,7 +143,7 @@ void main() {
       };
       fake.updateOk = false;
 
-      await tester.pumpWidget(wrap(const NotificationsSettingsScreen()));
+      await tester.pumpWidget(wrap(const NotificationsSettingsClientScreen()));
       await tester.pumpAndSettle();
 
       await tester.tap(find.byType(Switch).first);
@@ -157,11 +157,72 @@ void main() {
         (WidgetTester tester) async {
       fake.preferencesToReturn = <String, dynamic>{};
 
-      await tester.pumpWidget(wrap(const NotificationsSettingsScreen()));
+      await tester.pumpWidget(wrap(const NotificationsSettingsClientScreen()));
       await tester.pumpAndSettle();
 
       expect(find.byType(AppBar), findsOneWidget);
       expect(find.byType(Scaffold), findsOneWidget);
+    });
+
+    // ---- Fase 2: Timezone dropdown ----
+
+    testWidgets('exibe dropdown de timezone com fusos brasileiros',
+        (WidgetTester tester) async {
+      fake.preferencesToReturn = <String, dynamic>{
+        'notifications_enabled': true,
+        'workout_reminder_enabled': true,
+        'timezone': 'America/Sao_Paulo',
+      };
+
+      await tester.pumpWidget(wrap(const NotificationsSettingsClientScreen()));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Fuso horário'), findsOneWidget);
+      expect(find.byType(DropdownButton<String>), findsOneWidget);
+    });
+
+    testWidgets('selecionar novo fuso chama updateTimezone',
+        (WidgetTester tester) async {
+      fake.preferencesToReturn = <String, dynamic>{
+        'notifications_enabled': true,
+        'workout_reminder_enabled': true,
+        'timezone': 'America/Sao_Paulo',
+      };
+      fake.updateTimezoneOk = true;
+
+      await tester.pumpWidget(wrap(const NotificationsSettingsClientScreen()));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(DropdownButton<String>));
+      await tester.pumpAndSettle();
+
+      // Seleciona Manaus na lista de opções
+      await tester.tap(find.text('Manaus (UTC-4)').last);
+      await tester.pumpAndSettle();
+
+      expect(fake.updateTimezoneCalls, contains('America/Manaus'));
+    });
+
+    testWidgets('exibe SnackBar de erro quando updateTimezone falha',
+        (WidgetTester tester) async {
+      fake.preferencesToReturn = <String, dynamic>{
+        'notifications_enabled': true,
+        'workout_reminder_enabled': true,
+        'timezone': 'America/Sao_Paulo',
+      };
+      fake.updateTimezoneOk = false;
+
+      await tester.pumpWidget(wrap(const NotificationsSettingsClientScreen()));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(DropdownButton<String>));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Manaus (UTC-4)').last);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(find.text('Falha ao atualizar fuso horário'), findsOneWidget);
     });
   });
 }

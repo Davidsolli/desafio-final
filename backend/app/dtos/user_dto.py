@@ -11,6 +11,7 @@ import re
 from datetime import datetime
 from typing import Optional
 from uuid import UUID
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, Field, EmailStr, field_validator, ConfigDict
 
@@ -28,6 +29,22 @@ def validate_theme_value(v: Optional[str]) -> Optional[str]:
         raise ValueError(
             f"Tema deve ser um de: {', '.join(VALID_THEMES)}"
         )
+    return v
+
+
+def validate_timezone_value(v: Optional[str]) -> Optional[str]:
+    """Validar fuso horário IANA via zoneinfo."""
+    if v is None:
+        return v
+    try:
+        ZoneInfo(v)
+    except ZoneInfoNotFoundError as exc:
+        raise ValueError(
+            f"Fuso horário inválido: {v!r}. Use um identificador IANA "
+            "(ex: 'America/Sao_Paulo', 'America/Manaus')."
+        ) from exc
+    except Exception as exc:  # ZoneInfo levanta vários tipos a depender do input
+        raise ValueError(f"Fuso horário inválido: {v!r}.") from exc
     return v
 
 
@@ -176,6 +193,10 @@ class UpdateUserDTO(BaseModel):
         None,
         description="Preferência de tema: light, dark ou system",
     )
+    timezone: Optional[str] = Field(
+        None,
+        description="Fuso horário IANA (ex: America/Sao_Paulo)",
+    )
 
     @field_validator("name")
     @classmethod
@@ -203,6 +224,11 @@ class UpdateUserDTO(BaseModel):
     @classmethod
     def validate_theme_preference(cls, v: Optional[str]) -> Optional[str]:
         return validate_theme_value(v)
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_tz(cls, v: Optional[str]) -> Optional[str]:
+        return validate_timezone_value(v)
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -233,6 +259,7 @@ class UserResponseDTO(BaseModel):
     goal_type: Optional[str] = None
     trainer_id: Optional[UUID] = None
     theme_preference: Optional[str] = None
+    timezone: Optional[str] = None
 
     model_config = ConfigDict(
         from_attributes=True,
@@ -252,6 +279,29 @@ class UserResponseDTO(BaseModel):
                 "phone_whatsapp": "+55 11 99999-9999",
                 "goal_type": "gain_mass",
             }
+        }
+    )
+
+
+class UpdateTimezoneDTO(BaseModel):
+    """DTO para atualizar fuso horário do usuário (PUT /me/timezone)."""
+
+    timezone: str = Field(
+        ...,
+        description="Fuso horário IANA (ex: 'America/Sao_Paulo', 'America/Manaus')",
+    )
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, v: str) -> str:
+        result = validate_timezone_value(v)
+        if result is None:
+            raise ValueError("timezone não pode ser nulo")
+        return result
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {"timezone": "America/Sao_Paulo"}
         }
     )
 

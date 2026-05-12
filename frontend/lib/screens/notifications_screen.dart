@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import '../routes/app_routes.dart';
 import '../services/notification_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/theme_colors.dart';
 
 class NotificationsScreen extends StatefulWidget {
-  const NotificationsScreen({Key? key}) : super(key: key);
+  const NotificationsScreen({super.key});
 
   @override
   State<NotificationsScreen> createState() => _NotificationsScreenState();
@@ -75,6 +76,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             Text('Notificações', style: Theme.of(context).textTheme.headlineSmall),
           ],
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings_outlined, size: 24),
+            onPressed: () => context.push(AppRoutes.notificationsSettings),
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: SafeArea(child: _buildBody(context)),
     );

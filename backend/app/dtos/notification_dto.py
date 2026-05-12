@@ -12,6 +12,7 @@ class UpdateNotificationPreferenceDTO(BaseModel):
     new_workout_sheet_enabled: Optional[bool] = None
     achievement_enabled: Optional[bool] = None
     performance_report_enabled: Optional[bool] = None
+    student_inactivity_enabled: Optional[bool] = None
     quiet_hours_start: Optional[time] = None
     quiet_hours_end: Optional[time] = None
     silent_days: Optional[List[int]] = None
@@ -28,6 +29,7 @@ class NotificationPreferenceResponseDTO(BaseModel):
     new_workout_sheet_enabled: bool
     achievement_enabled: bool
     performance_report_enabled: bool
+    student_inactivity_enabled: bool
     quiet_hours_start: Optional[time]
     quiet_hours_end: Optional[time]
     silent_days: Optional[List[int]]

@@ -111,6 +111,8 @@ class _TrainerProfileState extends State<TrainerProfile> {
                     children: [
                       _buildPersonalDataSection(),
                       const SizedBox(height: 24),
+                      _buildNotificationTile(),
+                      const SizedBox(height: 16),
                       _buildThemeToggle(),
                       const SizedBox(height: 16),
                       SizedBox(
@@ -321,6 +323,62 @@ class _TrainerProfileState extends State<TrainerProfile> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildNotificationTile() {
+    return GestureDetector(
+      onTap: () => context.push(AppRoutes.notificationsSettings),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: context.colors.surface,
+          border: Border.all(color: context.colors.border),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.notifications_active_outlined,
+                color: AppColors.primary,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Configurações de Notificações',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                  Text(
+                    'Gerenciar alertas de alunos e fuso horário',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: context.colors.textSecondary,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.chevron_right_rounded,
+              color: context.colors.textMuted,
+              size: 20,
+            ),
+          ],
+        ),
+      ),
     );
   }
 
