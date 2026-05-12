@@ -4,6 +4,8 @@
 	<dict>
 		<key>CADisableMinimumFrameDurationOnPhone</key>
 		<true/>
+		<key>NSMicrophoneUsageDescription</key>
+		<string>Precisamos do microfone para registrar suas refeições por voz.</string>
 		<key>NSMotionUsageDescription</key>
 		<string>Precisamos acessar o sensor de movimento para contar seus passos diários e calcular sua distância percorrida.</string>
 		<key>CFBundleDevelopmentRegion</key>
