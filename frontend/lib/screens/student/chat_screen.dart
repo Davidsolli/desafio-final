@@ -335,7 +335,11 @@ class _ChatScreenState extends State<ChatScreen> {
     }
 
     await _recorder.start(
-      const RecordConfig(encoder: AudioEncoder.aacLc, sampleRate: 16000),
+      RecordConfig(
+        // Web só suporta opus/webm; mobile usa AAC
+        encoder: kIsWeb ? AudioEncoder.opus : AudioEncoder.aacLc,
+        sampleRate: 16000,
+      ),
       path: audioPath,
     );
 
