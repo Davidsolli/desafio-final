@@ -406,4 +406,17 @@ class PaymentService {
       return false;
     }
   }
+
+  Future<bool> changePlan(String subscriptionId, String newPlanId) async {
+    try {
+      await _apiClient.put<Map>(
+        '/admin/subscriptions/$subscriptionId/change-plan',
+        body: {'plan_id': newPlanId},
+        fromJson: (data) => data as Map,
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
 }

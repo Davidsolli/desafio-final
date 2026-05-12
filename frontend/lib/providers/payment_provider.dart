@@ -161,6 +161,12 @@ class PaymentProvider extends ChangeNotifier {
     return success;
   }
 
+  Future<bool> changePlan(String subscriptionId, String newPlanId) async {
+    final success = await _service.changePlan(subscriptionId, newPlanId);
+    if (success) await loadDashboard();
+    return success;
+  }
+
   void clearError() {
     _error = null;
     notifyListeners();

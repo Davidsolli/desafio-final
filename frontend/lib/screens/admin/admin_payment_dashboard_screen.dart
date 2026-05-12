@@ -21,6 +21,7 @@ class _AdminPaymentDashboardScreenState extends State<AdminPaymentDashboardScree
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<PaymentProvider>().loadDashboard();
+      context.read<PaymentProvider>().loadAdminPlans();
     });
   }
 
@@ -331,58 +332,271 @@ class _AdminPaymentDashboardScreenState extends State<AdminPaymentDashboardScree
             ),
           ],
           // Ações
-          if (item.isPending || !item.isActive) ...[
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                if (!item.isActive)
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => _confirmAction(
-                        context,
-                        title: 'Ativar assinatura?',
-                        message: 'Ativar manualmente a assinatura de ${item.studentName}?',
-                        confirmLabel: 'Ativar',
-                        confirmColor: AppColors.accentSuccess,
-                        onConfirm: () => provider.manualActivate(item.id),
-                      ),
-                      icon: const Icon(Icons.check_circle_outline, size: 16),
-                      label: const Text('Ativar'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.accentSuccess,
-                        side: const BorderSide(color: AppColors.accentSuccess),
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              // Ativar / Reativar (Se não for ativo)
+              if (!item.isActive)
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _confirmAction(
+                      context,
+                      title: 'Ativar assinatura?',
+                      message: 'Ativar manualmente a assinatura de ${item.studentName}?',
+                      confirmLabel: 'Ativar',
+                      confirmColor: AppColors.accentSuccess,
+                      onConfirm: () => provider.manualActivate(item.id),
+                    ),
+                    icon: const Icon(Icons.check_circle_outline, size: 16),
+                    label: const Text('Ativar'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.accentSuccess,
+                      side: const BorderSide(color: AppColors.accentSuccess),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     ),
                   ),
-                if (!item.isActive && item.isPending) const SizedBox(width: 8),
-                if (item.isActive || item.isPending)
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => _confirmAction(
-                        context,
-                        title: 'Cancelar assinatura?',
-                        message: 'Cancelar a assinatura de ${item.studentName}?',
-                        confirmLabel: 'Cancelar',
-                        confirmColor: AppColors.accentError,
-                        onConfirm: () => provider.manualCancel(item.id),
-                      ),
-                      icon: const Icon(Icons.cancel_outlined, size: 16),
-                      label: const Text('Cancelar'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.accentError,
-                        side: const BorderSide(color: AppColors.accentError),
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
+                ),
+              if (!item.isActive && item.isPending) const SizedBox(width: 8),
+
+              // Cancelar / Desativar (se ativo ou pendente)
+              if (item.isActive || item.isPending)
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _confirmAction(
+                      context,
+                      title: item.isActive ? 'Desativar plano?' : 'Cancelar assinatura?',
+                      message: item.isActive 
+                          ? 'Desativar o plano de ${item.studentName}? Ele perderá o acesso aos recursos do aplicativo.' 
+                          : 'Cancelar a assinatura de ${item.studentName}?',
+                      confirmLabel: item.isActive ? 'Desativar' : 'Cancelar',
+                      confirmColor: AppColors.accentError,
+                      onConfirm: () => provider.manualCancel(item.id),
+                    ),
+                    icon: Icon(item.isActive ? Icons.power_settings_new : Icons.cancel_outlined, size: 16),
+                    label: Text(item.isActive ? 'Desativar' : 'Cancelar'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.accentError,
+                      side: const BorderSide(color: AppColors.accentError),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     ),
                   ),
-              ],
-            ),
-          ],
+                ),
+              if (item.isActive || !item.isActive && !item.isPending) const SizedBox(width: 8),
+
+              // Mudar Plano (Se ativo ou expirado/cancelado, não pendente)
+              if (!item.isPending)
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _showChangePlanSheet(context, item, provider),
+                    icon: const Icon(Icons.swap_horiz, size: 16),
+                    label: const Text('Mudar Plano'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.primary,
+                      side: const BorderSide(color: AppColors.primary),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ],
       ),
+    );
+  }
+
+  void _showChangePlanSheet(
+    BuildContext context,
+    AdminSubscriptionItem item,
+    PaymentProvider provider,
+  ) {
+    provider.loadAdminPlans();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: context.colors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      isScrollControlled: true,
+      builder: (context) {
+        return AnimatedBuilder(
+          animation: provider,
+          builder: (context, _) {
+            final activePlans = provider.plans.where((p) => p.isActive).toList();
+
+            return Container(
+              padding: const EdgeInsets.all(16),
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.75,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: context.colors.textSecondary.withOpacity(0.3),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  Text(
+                    'Alterar Plano',
+                    style: TextStyle(
+                      color: context.colors.textPrimary,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Selecione o novo plano para ${item.studentName}',
+                    style: TextStyle(
+                      color: context.colors.textSecondary,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: context.colors.textSecondary.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Text(
+                          'Plano Atual: ',
+                          style: TextStyle(color: context.colors.textSecondary, fontSize: 13),
+                        ),
+                        Text(
+                          item.planName,
+                          style: TextStyle(
+                            color: context.colors.textPrimary,
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  if (provider.isLoading)
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(32),
+                        child: CircularProgressIndicator(color: AppColors.primary),
+                      ),
+                    )
+                  else if (activePlans.isEmpty)
+                    Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(32),
+                        child: Text(
+                          'Nenhum outro plano ativo cadastrado.',
+                          style: TextStyle(color: context.colors.textSecondary),
+                        ),
+                      ),
+                    )
+                  else
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: activePlans.length,
+                        itemBuilder: (context, idx) {
+                          final plan = activePlans[idx];
+                          final isCurrent = plan.name == item.planName;
+
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            decoration: BoxDecoration(
+                              border: Border.all(
+                                color: isCurrent 
+                                    ? AppColors.primary.withOpacity(0.5) 
+                                    : context.colors.textSecondary.withOpacity(0.1),
+                              ),
+                              borderRadius: BorderRadius.circular(10),
+                              color: isCurrent 
+                                  ? AppColors.primary.withOpacity(0.05) 
+                                  : null,
+                            ),
+                            child: ListTile(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                              title: Row(
+                                children: [
+                                  Text(
+                                    plan.name,
+                                    style: TextStyle(
+                                      color: context.colors.textPrimary,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 15,
+                                    ),
+                                  ),
+                                  if (isCurrent) ...[
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.primary,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: const Text(
+                                        'Atual',
+                                        style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              subtitle: Text(
+                                '${plan.durationLabel} • ${plan.modality ?? "Completo"}',
+                                style: TextStyle(color: context.colors.textSecondary, fontSize: 12),
+                              ),
+                              trailing: Text(
+                                plan.priceFormatted,
+                                style: const TextStyle(
+                                  color: AppColors.primary,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15,
+                                ),
+                              ),
+                              onTap: isCurrent
+                                  ? null
+                                  : () => _confirmChangePlan(context, item, plan, provider),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _confirmChangePlan(
+    BuildContext context,
+    AdminSubscriptionItem item,
+    PlanModel newPlan,
+    PaymentProvider provider,
+  ) {
+    Navigator.pop(context); // fechar bottom sheet
+    _confirmAction(
+      context,
+      title: 'Mudar Plano?',
+      message: 'Confirmar a alteração do plano de ${item.studentName} para ${newPlan.name}?',
+      confirmLabel: 'Confirmar',
+      confirmColor: AppColors.primary,
+      onConfirm: () => provider.changePlan(item.id, newPlan.id),
     );
   }
 
