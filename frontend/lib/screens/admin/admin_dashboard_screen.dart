@@ -90,11 +90,20 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      OmniButton(
-                        text: '➕',
-                        onPressed: () => context.push('/admin/add-trainer'),
+                      SizedBox(
                         width: 56,
                         height: 56,
+                        child: ElevatedButton(
+                          onPressed: () => context.push('/admin/add-trainer'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                            padding: EdgeInsets.zero,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            elevation: 0,
+                          ),
+                          child: const Icon(Icons.add, size: 24),
+                        ),
                       ),
                     ],
                   ),
