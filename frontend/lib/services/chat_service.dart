@@ -135,6 +135,43 @@ class AudioFoodResponseDTO {
   }
 }
 
+/// Resposta do endpoint de photo food logging.
+class PhotoFoodResponseDTO {
+  final String messageId;
+  final String conversationId;
+  final String description;
+  final String content;
+  final List<FoodLoggedDTO> foodsLogged;
+  final String parseConfidence;
+  final String createdAt;
+
+  PhotoFoodResponseDTO({
+    required this.messageId,
+    required this.conversationId,
+    required this.description,
+    required this.content,
+    required this.foodsLogged,
+    required this.parseConfidence,
+    required this.createdAt,
+  });
+
+  factory PhotoFoodResponseDTO.fromJson(Map<String, dynamic> json) {
+    final foods = (json['foods_logged'] as List<dynamic>? ?? [])
+        .whereType<Map<String, dynamic>>()
+        .map(FoodLoggedDTO.fromJson)
+        .toList();
+    return PhotoFoodResponseDTO(
+      messageId: json['message_id'] as String? ?? '',
+      conversationId: json['conversation_id'] as String? ?? '',
+      description: json['description'] as String? ?? '',
+      content: json['content'] as String? ?? '',
+      foodsLogged: foods,
+      parseConfidence: json['parse_confidence'] as String? ?? 'low',
+      createdAt: json['created_at'] as String? ?? '',
+    );
+  }
+}
+
 // ── Service ───────────────────────────────────────────────────────────────────
 
 /// Cliente HTTP do módulo de chat.
@@ -216,6 +253,55 @@ class ChatService {
       rethrow;
     } catch (e) {
       throw NetworkException(message: 'Falha ao enviar áudio: $e');
+    }
+  }
+
+  /// Envia bytes de imagem para o endpoint de photo food logging.
+  Future<PhotoFoodResponseDTO> sendPhoto({
+    required List<int> imageBytes,
+    required String filename,
+    required String token,
+    String? conversationId,
+  }) async {
+    final now = DateTime.now();
+    final logDate =
+        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    final localHour = now.hour.toString();
+
+    final uri = Uri.parse(ApiConfig.chatSendPhoto);
+    final request = http.MultipartRequest('POST', uri)
+      ..headers['Authorization'] = 'Bearer $token'
+      ..files.add(http.MultipartFile.fromBytes(
+        'photo',
+        imageBytes,
+        filename: filename,
+      ))
+      ..fields['log_date'] = logDate
+      ..fields['local_hour'] = localHour;
+
+    if (conversationId != null && conversationId.isNotEmpty) {
+      request.fields['conversation_id'] = conversationId;
+    }
+
+    try {
+      final streamed =
+          await request.send().timeout(const Duration(seconds: 60));
+      final body = await streamed.stream.bytesToString();
+
+      if (streamed.statusCode == 200) {
+        final json = jsonDecode(body) as Map<String, dynamic>;
+        return PhotoFoodResponseDTO.fromJson(json);
+      }
+
+      final errMsg = _extractErrorMessage(body);
+      if (streamed.statusCode == 401) {
+        throw UnauthorizedException(message: errMsg);
+      }
+      throw ApiException(message: errMsg, statusCode: streamed.statusCode);
+    } on ApiException {
+      rethrow;
+    } catch (e) {
+      throw NetworkException(message: 'Falha ao enviar foto: $e');
     }
   }
 
