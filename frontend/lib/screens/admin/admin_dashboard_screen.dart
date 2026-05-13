@@ -8,7 +8,7 @@ import '../../providers/admin_provider.dart';
 import '../../shared/widgets/index.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
-  const AdminDashboardScreen({Key? key}) : super(key: key);
+  const AdminDashboardScreen({super.key});
 
   @override
   State<AdminDashboardScreen> createState() => _AdminDashboardScreenState();
@@ -90,20 +90,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      SizedBox(
+                      OmniButton(
+                        icon: Icons.add,
+                        onPressed: () => context.push('/admin/add-trainer'),
                         width: 56,
                         height: 56,
-                        child: ElevatedButton(
-                          onPressed: () => context.push('/admin/add-trainer'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            foregroundColor: Colors.white,
-                            padding: EdgeInsets.zero,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            elevation: 0,
-                          ),
-                          child: const Icon(Icons.add, size: 24),
-                        ),
+                        padding: EdgeInsets.zero,
                       ),
                     ],
                   ),
