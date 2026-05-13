@@ -17,11 +17,13 @@ from app.dtos.logbook_dto import (
     FrequencyResponseDTO,
     MuscleGroupDistributionResponseDTO,
     PaginatedSessionsDTO,
+    PersonalRecordsResponseDTO,
     ProgressionResponseDTO,
     SessionExerciseDTO,
     SessionExerciseResponseDTO,
     SessionResponseDTO,
     UpdateSessionDTO,
+    VolumeLoadResponseDTO,
 )
 from app.services.logbook_service import LogbookService
 
@@ -156,5 +158,26 @@ class LogbookController:
         return await self.service.get_muscle_group_distribution(
             user_id=user_id,
             days=days,
+        )
+
+    async def get_personal_records(
+        self,
+        user_id: UUID,
+        limit: int = 10,
+    ) -> PersonalRecordsResponseDTO:
+        """Retorna os recordes pessoais de carga por exercício."""
+        return await self.service.get_personal_records(user_id=user_id, limit=limit)
+
+    async def get_volume_load(
+        self,
+        user_id: UUID,
+        exercise_id: UUID,
+        weeks: int = 8,
+    ) -> VolumeLoadResponseDTO:
+        """Retorna o Volume Load semanal de um exercício."""
+        return await self.service.get_volume_load(
+            user_id=user_id,
+            exercise_id=exercise_id,
+            weeks=weeks,
         )
 

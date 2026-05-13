@@ -12,17 +12,20 @@ from app.config.database import init_db
 from app.config.limiter import limiter
 from app.config.settings import settings
 from app.routes import user, auth, chat, logbook, goal, invitation, webhooks
+from app.routes.admin_metrics import router as admin_metrics_router
 from app.routes.pages import router as pages_router
 from app.routes.workout_sheet import router as workout_sheet_router, catalog_router as exercise_catalog_router, program_router as workout_program_router
 from app.routes.food_catalog import router as food_catalog_router
 from app.routes.diet import custom_food_router, diet_router
 from app.routes.diet_logbook import router as diet_logbook_router
+from app.routes.payment import router as payment_router
 from app.routes.password import router as password_router
 from app.routes.notification import router as notification_router
+from app.routes.steps import router as steps_router
 
 from app.tasks.notification_scheduler import NotificationScheduler
 
-# Rota básica de Health Check
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
@@ -49,7 +52,6 @@ async def lifespan(app: FastAPI):
     NotificationScheduler.stop()
 
 
-# Inicialização da aplicação
 app = FastAPI(
     title="OmniConnect API",
     version="1.0.0",
@@ -64,16 +66,15 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # Configurar CORS para permitir requisições do Flutter web (desenvolvimento)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Permitir todas as origens em desenvolvimento
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Health Check
+
 @app.get("/")
 async def health_check():
-    """Health check da API."""
     return {
         "status": "online",
         "message": "Servidor OmniConnect rodando com sucesso!",
@@ -81,7 +82,7 @@ async def health_check():
         "version": "1.0.1"
     }
 
-# Registrar rotas
+
 app.include_router(auth.router)
 app.include_router(user.router)
 app.include_router(invitation.router)
@@ -95,7 +96,10 @@ app.include_router(food_catalog_router)
 app.include_router(custom_food_router)
 app.include_router(diet_router)
 app.include_router(diet_logbook_router)
+app.include_router(payment_router)
 app.include_router(webhooks.router)
 app.include_router(pages_router)
 app.include_router(password_router)
 app.include_router(notification_router)
+app.include_router(steps_router)
+app.include_router(admin_metrics_router)

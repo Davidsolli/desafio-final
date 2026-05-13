@@ -11,7 +11,20 @@ import 'create_custom_food_dialog.dart';
 import '../barcode_scanner_screen.dart';
 
 class FoodSearchModal extends StatefulWidget {
-  const FoodSearchModal({super.key});
+  final void Function(FoodCatalogItem food, double quantity, String meal)? onFoodSelected;
+  final String? initialMeal;
+  final DateTime? initialDate;
+  final bool isTrainer;
+  final Diet? activeDiet;
+
+  const FoodSearchModal({
+    super.key,
+    this.onFoodSelected,
+    this.initialMeal,
+    this.initialDate,
+    this.isTrainer = false,
+    this.activeDiet,
+  });
 
   @override
   State<FoodSearchModal> createState() => _FoodSearchModalState();
@@ -40,13 +53,15 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
   bool _filterHighProtein = false;
   bool _filterLowCarb = false;
   bool _filterLowFat = false;
+  bool _filterPrescribed = false;
 
   bool get _hasActiveFilters =>
       _selectedCategory != null ||
       _selectedSource != null ||
       _filterHighProtein ||
       _filterLowCarb ||
-      _filterLowFat;
+      _filterLowFat ||
+      _filterPrescribed;
 
   // Exact categories present in the TACO.json database
   static const Map<String, Map<String, String>> _categories = {
@@ -79,6 +94,9 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
   @override
   void initState() {
     super.initState();
+    if (widget.initialMeal != null && _mealOptions.contains(widget.initialMeal)) {
+      _selectedMeal = widget.initialMeal!;
+    }
     _quantityController.addListener(() {
       setState(() {}); // Rebuild to update real-time macro calculation
     });
@@ -183,12 +201,18 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
       return;
     }
 
+    if (widget.onFoodSelected != null) {
+      widget.onFoodSelected!(_selectedFood!, quantity, _selectedMeal);
+      Navigator.pop(context);
+      return;
+    }
+
     final dto = CreateDietLogbookEntryDTO(
       mealName: _selectedMeal,
       foodId: _selectedFood!.source == 'taco' ? int.tryParse(_selectedFood!.id) : null,
       customFoodId: _selectedFood!.source == 'custom' ? _selectedFood!.id : null,
       quantityG: quantity,
-      logDate: DateTime.now(), 
+      logDate: widget.initialDate ?? context.read<NutritionProvider>().currentDate, 
     );
 
     context.read<NutritionProvider>().addLogbookEntry(dto).then((_) {
@@ -230,6 +254,78 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
         );
       });
     }
+  }
+
+  bool _isFoodPrescribed(FoodCatalogItem item) {
+    try {
+      final provider = context.read<NutritionProvider>();
+      final activeDiet = provider.activeDiet;
+      if (activeDiet == null) return false;
+
+      final Set<int> prescribedTacoIds = {};
+      final Set<String> prescribedCustomIds = {};
+      final Set<String> prescribedNames = {};
+
+      for (var meal in activeDiet.meals) {
+        for (var it in meal.items) {
+          prescribedNames.add(it.foodName.toLowerCase().trim());
+          if (it.foodId != null) prescribedTacoIds.add(it.foodId!);
+          if (it.customFoodId != null) prescribedCustomIds.add(it.customFoodId!);
+        }
+      }
+
+      if (item.source == 'taco') {
+        final parsedId = int.tryParse(item.id);
+        if (parsedId != null && prescribedTacoIds.contains(parsedId)) return true;
+      } else if (item.source == 'custom') {
+        if (prescribedCustomIds.contains(item.id)) return true;
+      }
+      return prescribedNames.contains(item.name.toLowerCase().trim());
+    } catch (_) {
+      return false;
+    }
+  }
+
+  List<FoodCatalogItem> _processFoodList(List<FoodCatalogItem> originalList) {
+    List<FoodCatalogItem> list = originalList;
+    if (_filterPrescribed) {
+      list = list.where(_isFoodPrescribed).toList();
+    }
+
+    final List<FoodCatalogItem> prescribedList = [];
+    final List<FoodCatalogItem> otherList = [];
+
+    for (var item in list) {
+      if (_isFoodPrescribed(item)) {
+        prescribedList.add(item);
+      } else {
+        otherList.add(item);
+      }
+    }
+
+    return [...prescribedList, ...otherList];
+  }
+
+  Widget _prescribedBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFF10B981).withOpacity(0.12),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFF10B981).withOpacity(0.3)),
+      ),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.assignment_turned_in, size: 12, color: Color(0xFF059669)),
+          SizedBox(width: 4),
+          Text(
+            'DIETA',
+            style: TextStyle(fontSize: 9, color: Color(0xFF059669), fontWeight: FontWeight.bold),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -360,6 +456,16 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
               _triggerSearch();
             },
           ),
+          _buildFilterChip(
+            label: widget.isTrainer ? '📋 Do Plano do Aluno' : '📋 Da Minha Dieta',
+            isSelected: _filterPrescribed,
+            onSelected: (selected) {
+              setState(() {
+                _filterPrescribed = selected;
+              });
+              _triggerSearch();
+            },
+          ),
           Container(
             margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
             width: 1,
@@ -429,6 +535,32 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
   Widget _buildSearchView(ScrollController controller) {
     final showInitialState = _searchController.text.isEmpty && !_hasActiveFilters;
 
+    final provider = context.read<NutritionProvider>();
+    final activeDiet = widget.activeDiet ?? provider.activeDiet;
+    final List<FoodCatalogItem> dietCatalogItems = [];
+    if (activeDiet != null) {
+      final Set<String> uniqueFoodNames = {};
+      for (var meal in activeDiet.meals) {
+        for (var it in meal.items) {
+          final normalizedName = it.foodName.toLowerCase().trim();
+          if (uniqueFoodNames.contains(normalizedName)) continue;
+          uniqueFoodNames.add(normalizedName);
+          
+          dietCatalogItems.add(FoodCatalogItem(
+            id: it.foodId != null ? '${it.foodId}' : (it.customFoodId ?? ''),
+            name: it.foodName,
+            category: 'Recomendado na Dieta',
+            energyKcal: it.kcal,
+            proteinG: it.protein,
+            carbohydrateG: it.carbs,
+            lipidG: it.fats,
+            fiberG: 0.0,
+            source: it.foodId != null ? 'taco' : 'custom',
+          ));
+        }
+      }
+    }
+
     return Expanded(
       child: Column(
         children: [
@@ -455,6 +587,7 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
                                   _filterHighProtein = false;
                                   _filterLowCarb = false;
                                   _filterLowFat = false;
+                                  _filterPrescribed = false;
                                 });
                                 _onSearchChanged('');
                               },
@@ -532,9 +665,97 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
               child: ListView(
                 controller: controller,
                 children: [
-                  if (_recentCustomFoods.isNotEmpty) ...[
+                  if (dietCatalogItems.isNotEmpty) ...[
                     Padding(
                       padding: const EdgeInsets.only(left: 16, top: 12, bottom: 8),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.star_rounded, size: 20, color: Colors.green),
+                          const SizedBox(width: 6),
+                          Text(
+                            widget.isTrainer ? 'Prescritos Recentemente 📋' : 'Recomendados na Dieta 📋',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: context.colors.textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    SizedBox(
+                      height: 105,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        itemCount: dietCatalogItems.length,
+                        itemBuilder: (context, idx) {
+                          final item = dietCatalogItems[idx];
+                          return Container(
+                            width: 170,
+                            margin: const EdgeInsets.only(right: 10),
+                            child: Card(
+                              elevation: 0,
+                              color: Colors.green.withOpacity(0.08),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                side: BorderSide(color: Colors.green.withOpacity(0.3)),
+                              ),
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(12),
+                                onTap: () {
+                                  setState(() {
+                                    _selectedFood = item;
+                                  });
+                                },
+                                child: Padding(
+                                  padding: const EdgeInsets.all(10.0),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        item.name,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                          color: context.colors.textPrimary,
+                                        ),
+                                      ),
+                                      Text(
+                                        widget.isTrainer ? 'Já no plano' : 'Prescrito pelo Personal',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: Colors.green[700],
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Row(
+                                        children: [
+                                          _macroMiniBadge('${item.energyKcal.toStringAsFixed(0)} kcal', AppColors.primary),
+                                          const SizedBox(width: 4),
+                                          _macroMiniBadge('${item.proteinG.toStringAsFixed(1)}g P', Colors.orange),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const Divider(height: 24),
+                  ],
+                  if (_recentCustomFoods.isNotEmpty) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(left: 16, top: 4, bottom: 8),
                       child: Row(
                         children: [
                           const Icon(Icons.history, size: 18, color: AppColors.primary),
@@ -646,7 +867,7 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
                       ),
                     )
                   else
-                    ..._allAvailableFoods.map((item) {
+                    ..._processFoodList(_allAvailableFoods).map((item) {
                       return Column(
                         children: [
                           ListTile(
@@ -666,9 +887,11 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
                                 ),
                               ],
                             ),
-                            trailing: item.source == 'custom' 
-                                ? const Icon(Icons.person, size: 16, color: AppColors.primary)
-                                : null,
+                            trailing: _isFoodPrescribed(item)
+                                ? _prescribedBadge()
+                                : (item.source == 'custom' 
+                                    ? const Icon(Icons.person, size: 16, color: AppColors.primary)
+                                    : null),
                             isThreeLine: true,
                             onTap: () {
                               setState(() {
@@ -685,40 +908,58 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
             )
           else
             Expanded(
-              child: ListView.separated(
-                controller: controller,
-                itemCount: _searchResults.length,
-                separatorBuilder: (context, index) => const Divider(height: 1),
-                itemBuilder: (context, index) {
-                  final item = _searchResults[index];
-                  return ListTile(
-                    title: Text(item.name),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(item.category ?? "Sem Categoria", style: const TextStyle(fontSize: 12)),
-                        const SizedBox(height: 4),
-                        Row(
+              child: Builder(
+                builder: (context) {
+                  final processedResults = _processFoodList(_searchResults);
+                  if (processedResults.isEmpty) {
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24.0),
+                        child: Text(
+                          'Nenhum alimento correspondente encontrado.',
+                          style: TextStyle(color: context.colors.textSecondary),
+                        ),
+                      ),
+                    );
+                  }
+                  return ListView.separated(
+                    controller: controller,
+                    itemCount: processedResults.length,
+                    separatorBuilder: (context, index) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final item = processedResults[index];
+                      return ListTile(
+                        title: Text(item.name),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            _macroInfoItem('Kcal', item.energyKcal, AppColors.primary),
-                            _macroInfoItem('P', item.proteinG, Colors.orange),
-                            _macroInfoItem('C', item.carbohydrateG, Colors.blue),
-                            _macroInfoItem('G', item.lipidG, Colors.red),
+                            Text(item.category ?? "Sem Categoria", style: const TextStyle(fontSize: 12)),
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                _macroInfoItem('Kcal', item.energyKcal, AppColors.primary),
+                                _macroInfoItem('P', item.proteinG, Colors.orange),
+                                _macroInfoItem('C', item.carbohydrateG, Colors.blue),
+                                _macroInfoItem('G', item.lipidG, Colors.red),
+                              ],
+                            ),
                           ],
                         ),
-                      ],
-                    ),
-                    trailing: item.source == 'custom' 
-                        ? const Icon(Icons.person, size: 16, color: AppColors.primary)
-                        : null,
-                    isThreeLine: true,
-                    onTap: () {
-                      setState(() {
-                        _selectedFood = item;
-                      });
+                        trailing: _isFoodPrescribed(item)
+                            ? _prescribedBadge()
+                            : (item.source == 'custom' 
+                                ? const Icon(Icons.person, size: 16, color: AppColors.primary)
+                                : null),
+                        isThreeLine: true,
+                        onTap: () {
+                          setState(() {
+                            _selectedFood = item;
+                          });
+                        },
+                      );
                     },
                   );
-                },
+                }
               ),
             ),
         ],

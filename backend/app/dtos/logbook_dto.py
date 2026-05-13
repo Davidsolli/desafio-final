@@ -139,6 +139,7 @@ class SessionExerciseResponseDTO(BaseModel):
     status: str
     created_at: datetime
     updated_at: datetime
+    exercise_name: Optional[str] = "Exercício de Força"
 
     model_config = {"from_attributes": True}
 
@@ -192,6 +193,7 @@ class SessionListItemDTO(BaseModel):
     duration_minutes: Optional[int] = 45
     calories_burned: Optional[float] = 200.0
     intensity: Optional[str] = "moderada"
+    session_exercises: List[SessionExerciseResponseDTO] = []
 
     model_config = {"from_attributes": True}
 
@@ -300,12 +302,34 @@ class FrequencyResponseDTO(BaseModel):
 # DTOs de Foco Muscular (Muscle Group Distribution)
 # ---------------------------------------------------------------------------
 
+# Nomes amigáveis para exibição no app
+MUSCLE_GROUP_DISPLAY_NAMES = {
+    "peito": "Peito",
+    "costa": "Costas",
+    "ombro": "Ombros",
+    "bíceps": "Bíceps",
+    "tríceps": "Tríceps",
+    "antebraço": "Antebraço",
+    "core": "Core / Abdômen",
+    "perna_anterior": "Quadríceps",
+    "perna_posterior": "Posterior / Glúteo",
+    "panturrilha": "Panturrilha",
+}
+
+# Ordem de exibição sugerida (grande → pequeno)
+MUSCLE_GROUP_ORDER = [
+    "costa", "peito", "perna_anterior", "perna_posterior",
+    "ombro", "core", "bíceps", "tríceps", "panturrilha", "antebraço",
+]
+
 
 class MuscleGroupDistributionItemDTO(BaseModel):
     """Item de distribuição de treinos por grupo muscular."""
 
     muscle_group: str
+    display_name: str
     count: int
+    percentage: float = 0.0
 
 
 class MuscleGroupDistributionResponseDTO(BaseModel):
@@ -313,5 +337,66 @@ class MuscleGroupDistributionResponseDTO(BaseModel):
 
     user_id: UUID
     days: int
+    total_sets: int = 0
     distribution: List[MuscleGroupDistributionItemDTO]
+
+
+# ---------------------------------------------------------------------------
+# DTOs de Volume Load
+# ---------------------------------------------------------------------------
+
+
+class VolumeLoadDataPointDTO(BaseModel):
+    """Ponto de dados de Volume Load semanal de um exercício."""
+
+    week_start: datetime
+    total_volume_kg: float  # soma de (séries × reps × carga)
+    max_load_kg: float  # maior carga registrada na semana
+    session_count: int  # quantas sessões na semana
+
+
+class VolumeLoadStatisticsDTO(BaseModel):
+    """Estatísticas de Volume Load."""
+
+    total_sessions: int
+    avg_volume_kg: float
+    max_volume_kg: float
+    trend: str  # "increasing" | "decreasing" | "stable"
+    improvement_percentage: float
+
+
+class VolumeLoadResponseDTO(BaseModel):
+    """Resposta de Volume Load semanal de um exercício."""
+
+    exercise_id: UUID
+    exercise_name: str
+    user_id: UUID
+    weeks: int
+    data_points: List[VolumeLoadDataPointDTO]
+    statistics: VolumeLoadStatisticsDTO
+
+
+# ---------------------------------------------------------------------------
+# DTOs de Recordes Pessoais (Personal Records)
+# ---------------------------------------------------------------------------
+
+
+class PersonalRecordDTO(BaseModel):
+    """Recorde pessoal de um exercício específico."""
+
+    exercise_id: UUID
+    exercise_name: str
+    muscle_group: str
+    display_name: str
+    max_load_kg: float
+    reps_at_max: int
+    estimated_1rm: float  # Epley: load × (1 + reps/30)
+    achieved_at: datetime
+
+
+class PersonalRecordsResponseDTO(BaseModel):
+    """Resposta com a lista de recordes pessoais."""
+
+    user_id: UUID
+    records: List[PersonalRecordDTO]
 

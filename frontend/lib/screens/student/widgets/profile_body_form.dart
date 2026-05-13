@@ -30,9 +30,9 @@ class _ProfileBodyFormState extends State<ProfileBodyForm> {
 
   void _initControllers(UserResponse user) {
     nameController = TextEditingController(text: user.name);
-    weightController = TextEditingController(text: (user.weight ?? 0.0).toStringAsFixed(1));
-    heightController = TextEditingController(text: (user.height ?? 0.0).toStringAsFixed(0));
-    ageController = TextEditingController(text: (user.age ?? 0).toString());
+    weightController = TextEditingController(text: user.weight.toStringAsFixed(1));
+    heightController = TextEditingController(text: user.height.toStringAsFixed(0));
+    ageController = TextEditingController(text: user.age.toString());
     selectedGender = user.gender ?? 'male';
   }
 

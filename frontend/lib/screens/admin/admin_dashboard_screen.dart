@@ -79,6 +79,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       Expanded(
                         child: OmniTextField(
@@ -92,7 +93,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       OmniButton(
                         text: '➕',
                         onPressed: () => context.push('/admin/add-trainer'),
-                        width: 48,
+                        width: 56,
+                        height: 56,
                       ),
                     ],
                   ),

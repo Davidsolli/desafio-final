@@ -14,7 +14,11 @@ import 'services/nutrition_service.dart';
 import 'services/workout_sheet_service.dart';
 import 'services/invitation_service.dart';
 import 'services/admin_service.dart';
+import 'services/admin_metrics_service.dart';
 import 'services/chat_service.dart';
+import 'services/payment_service.dart';
+import 'providers/payment_provider.dart';
+import 'services/step_service.dart';
 import 'providers/auth_provider.dart';
 import 'providers/user_provider.dart';
 import 'providers/goal_provider.dart';
@@ -23,6 +27,8 @@ import 'providers/nutrition_provider.dart';
 import 'providers/workout_sheet_provider.dart';
 import 'providers/invitation_provider.dart';
 import 'providers/admin_provider.dart';
+import 'providers/admin_metrics_provider.dart';
+import 'providers/step_provider.dart';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'services/notification_service.dart';
@@ -39,15 +45,15 @@ void main() async {
   final themeProvider = ThemeProvider();
   await themeProvider.init();
 
-  // Notificações push só em plataformas móveis (Web não suporta FCM com firebase_messaging v14)
-  NotificationService? notificationService;
+  // NotificationService é registrado em todas as plataformas para que telas
+  // de notificações/preferências consumam o Provider sem branching por plataforma.
+  // Em Web pulamos apenas initialize() (firebase_messaging v14 não suporta).
+  final notificationService = NotificationService(apiClient: apiClient);
   if (!kIsWeb) {
     try {
-      notificationService = NotificationService(apiClient: apiClient);
       await notificationService.initialize();
     } catch (e) {
       debugPrint('Erro ao inicializar notificações: $e');
-      notificationService = null;
     }
   }
 
@@ -61,13 +67,13 @@ void main() async {
 class OmniConnectApp extends StatelessWidget {
   final ApiClient apiClient;
   final ThemeProvider themeProvider;
-  final NotificationService? notificationService;
+  final NotificationService notificationService;
 
   const OmniConnectApp({
     Key? key,
     required this.apiClient,
     required this.themeProvider,
-    this.notificationService,
+    required this.notificationService,
   }) : super(key: key);
 
   @override
@@ -77,9 +83,8 @@ class OmniConnectApp extends StatelessWidget {
         // API Client (singleton)
         Provider<ApiClient>.value(value: apiClient),
 
-        // Notification Service (apenas em mobile)
-        if (notificationService != null)
-          Provider<NotificationService>.value(value: notificationService!),
+        // Notification Service (registrado em todas as plataformas; Web usa stub)
+        Provider<NotificationService>.value(value: notificationService),
 
         // Auth Service (depende de ApiClient)
         ProxyProvider<ApiClient, AuthService>(
@@ -124,6 +129,21 @@ class OmniConnectApp extends StatelessWidget {
         // Chat Service (depende de ApiClient)
         ProxyProvider<ApiClient, ChatService>(
           update: (_, apiClient, _) => ChatService(apiClient: apiClient),
+        ),
+
+        // Step Service (depende de ApiClient)
+        ProxyProvider<ApiClient, StepService>(
+          update: (_, apiClient, _) => StepService(apiClient: apiClient),
+        ),
+
+        // Admin Metrics Service (depende de ApiClient)
+        ProxyProvider<ApiClient, AdminMetricsService>(
+          update: (_, apiClient, _) => AdminMetricsService(apiClient: apiClient),
+        ),
+
+        // Payment Service (depende de ApiClient)
+        ProxyProvider<ApiClient, PaymentService>(
+          update: (_, apiClient, __) => PaymentService(apiClient: apiClient),
         ),
 
         // Auth Provider (depende de AuthService)
@@ -203,6 +223,36 @@ class OmniConnectApp extends StatelessWidget {
           ),
           update: (_, adminService, previous) {
             return previous ?? AdminProvider(service: adminService);
+          },
+        ),
+
+        // Step Provider (depende de StepService) — sensor de passos
+        ChangeNotifierProxyProvider<StepService, StepProvider>(
+          create: (context) => StepProvider(
+            stepService: context.read<StepService>(),
+          ),
+          update: (_, stepService, previous) {
+            return previous ?? StepProvider(stepService: stepService);
+          },
+        ),
+
+        // Payment Provider (depende de PaymentService)
+        ChangeNotifierProxyProvider<PaymentService, PaymentProvider>(
+          create: (context) => PaymentProvider(
+            paymentService: context.read<PaymentService>(),
+          ),
+          update: (_, paymentService, previous) {
+            return previous ?? PaymentProvider(paymentService: paymentService);
+          },
+        ),
+
+        // Admin Metrics Provider (depende de AdminMetricsService)
+        ChangeNotifierProxyProvider<AdminMetricsService, AdminMetricsProvider>(
+          create: (context) => AdminMetricsProvider(
+            service: context.read<AdminMetricsService>(),
+          ),
+          update: (_, metricsService, previous) {
+            return previous ?? AdminMetricsProvider(service: metricsService);
           },
         ),
       ],

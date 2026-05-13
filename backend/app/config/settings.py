@@ -37,12 +37,31 @@ class Settings(BaseSettings):
     RAG_LLM_TEMPERATURE: float = 0.3            # RN PRD: temperatura baixa para consistência
     RAG_HISTORY_MAX_TOKENS: int = 80            # RN-05: máximo de tokens do histórico
 
+    # ── RAG Melhorias ──────────────────────────────────────────────────────
+    RAG_HYBRID_SEARCH: bool = True              # BM25 (PostgreSQL FTS) + vetorial com RRF
+    RAG_HYBRID_FETCH_K: int = 10               # Candidatos extras antes do re-ranking
+    RAG_QUERY_REWRITE: bool = False            # LLM reformula query (desligado: +1 chamada Groq)
+    RAG_RERANK_ENABLED: bool = True            # Cross-encoder após RETRIEVE
+    RAG_RERANK_MODEL: str = "cross-encoder/ms-marco-MiniLM-L-2-v2"  # Configurável via env
+
     # ── Chat Service ───────────────────────────────────────────────────────
     CHAT_RATE_LIMIT_MESSAGES: int = 30          # RN-16: max mensagens por hora por usuário
     CHAT_RATE_LIMIT_WINDOW_HOURS: int = 1
     CHAT_MAX_MESSAGE_LENGTH: int = 500          # RN segurança: máximo de caracteres
     CHAT_INACTIVITY_CLOSE_HOURS: int = 24       # RN-02: fechar conversa após 24h inativa
     CHAT_MAX_RESPONSE_LATENCY_MS: int = 10000   # Timeout máximo para o LLM (cold start + rede)
+
+    # ── Busca Web (nutrição) ──────────────────────────────────────────────
+    TAVILY_API_KEY: str = ""
+    FOOD_WEB_SEARCH_ENABLED: bool = True    # fallback web quando alimento não está na TACO
+
+    # ── InfinitePay ────────────────────────────────────────────────────────
+    INFINITEPAY_HANDLE: str = "natalia-faria-16"
+    INFINITEPAY_WEBHOOK_URL: str = ""           # URL pública do servidor (ex: https://api.seudominio.com)
+
+    # ── WhatsApp (Meta Cloud API) ──────────────────────────────────────────
+    WHATSAPP_TOKEN: str = ""
+    WHATSAPP_PHONE_NUMBER_ID: str = ""
 
     # ── Firebase ──────────────────────────────────────────────────────────
     FIREBASE_CREDENTIALS_PATH: str = "./firebase-credentials.json"

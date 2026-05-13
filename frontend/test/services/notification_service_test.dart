@@ -22,7 +22,7 @@ void main() {
 
       when(
         mockApiClient.put<Map<String, dynamic>>(
-          '/api/v1/notifications/token',
+          '/notifications/token',
           body: anyNamed('body'),
           fromJson: anyNamed('fromJson'),
         ),
@@ -32,7 +32,7 @@ void main() {
 
       final captured = verify(
         mockApiClient.put<Map<String, dynamic>>(
-          '/api/v1/notifications/token',
+          '/notifications/token',
           body: captureAnyNamed('body'),
           fromJson: anyNamed('fromJson'),
         ),
@@ -55,7 +55,7 @@ void main() {
 
       when(
         mockApiClient.get<Map<String, dynamic>>(
-          '/api/v1/notifications/preferences',
+          '/notifications/preferences',
           fromJson: anyNamed('fromJson'),
         ),
       ).thenAnswer((_) async => mockPrefs);
@@ -77,7 +77,7 @@ void main() {
 
       when(
         mockApiClient.put<Map<String, dynamic>>(
-          '/api/v1/notifications/preferences',
+          '/notifications/preferences',
           body: anyNamed('body'),
           fromJson: anyNamed('fromJson'),
         ),
@@ -88,7 +88,7 @@ void main() {
       expect(success, isTrue);
       verify(
         mockApiClient.put<Map<String, dynamic>>(
-          '/api/v1/notifications/preferences',
+          '/notifications/preferences',
           body: anyNamed('body'),
           fromJson: anyNamed('fromJson'),
         ),
@@ -99,7 +99,7 @@ void main() {
         () async {
       when(
         mockApiClient.get<Map<String, dynamic>>(
-          '/api/v1/notifications/preferences',
+          '/notifications/preferences',
           fromJson: anyNamed('fromJson'),
         ),
       ).thenThrow(Exception('Network error'));
@@ -112,7 +112,7 @@ void main() {
     test('updatePreferences retorna false quando a API lança exceção', () async {
       when(
         mockApiClient.put<Map<String, dynamic>>(
-          '/api/v1/notifications/preferences',
+          '/notifications/preferences',
           body: anyNamed('body'),
           fromJson: anyNamed('fromJson'),
         ),
@@ -122,6 +122,101 @@ void main() {
           await notificationService.updatePreferences({'notifications_enabled': true});
 
       expect(success, isFalse);
+    });
+
+    // ----- Fase 1: getHistory + markAsRead -----
+
+    test('getHistory chama GET /history e retorna lista de notificações',
+        () async {
+      final mockResponse = {
+        'total': 2,
+        'data': [
+          {
+            'id': 'n1',
+            'notification_type': 'workout_reminder',
+            'title': 'Hora do treino',
+            'body': 'Treino A',
+            'created_at': '2026-05-08T10:00:00Z',
+            'read_at': null,
+          },
+          {
+            'id': 'n2',
+            'notification_type': 'achievement',
+            'title': 'Meta concluída',
+            'body': 'Parabéns!',
+            'created_at': '2026-05-07T18:30:00Z',
+            'read_at': '2026-05-07T19:00:00Z',
+          },
+        ],
+      };
+
+      when(
+        mockApiClient.get<Map<String, dynamic>>(
+          '/notifications/history',
+          queryParameters: anyNamed('queryParameters'),
+          fromJson: anyNamed('fromJson'),
+        ),
+      ).thenAnswer((_) async => mockResponse);
+
+      final history = await notificationService.getHistory();
+
+      expect(history, isA<List<Map<String, dynamic>>>());
+      expect(history.length, equals(2));
+      expect(history[0]['title'], equals('Hora do treino'));
+      expect(history[1]['read_at'], isNotNull);
+    });
+
+    test('getHistory retorna lista vazia quando a API lança', () async {
+      when(
+        mockApiClient.get<Map<String, dynamic>>(
+          '/notifications/history',
+          queryParameters: anyNamed('queryParameters'),
+          fromJson: anyNamed('fromJson'),
+        ),
+      ).thenThrow(Exception('Network error'));
+
+      final history = await notificationService.getHistory();
+
+      expect(history, isEmpty);
+    });
+
+    test('markAsRead chama POST /mark-read e retorna true em sucesso',
+        () async {
+      const notificationId = 'abc-123';
+
+      when(
+        mockApiClient.post<Map<String, dynamic>>(
+          '/notifications/mark-read',
+          body: anyNamed('body'),
+          fromJson: anyNamed('fromJson'),
+        ),
+      ).thenAnswer((_) async => {'status': 'success'});
+
+      final ok = await notificationService.markAsRead(notificationId);
+
+      expect(ok, isTrue);
+      final captured = verify(
+        mockApiClient.post<Map<String, dynamic>>(
+          '/notifications/mark-read',
+          body: captureAnyNamed('body'),
+          fromJson: anyNamed('fromJson'),
+        ),
+      )..called(1);
+      final sent = captured.captured.first as Map<String, dynamic>;
+      expect(sent['notification_id'], equals(notificationId));
+    });
+
+    test('markAsRead retorna false quando API lança', () async {
+      when(
+        mockApiClient.post<Map<String, dynamic>>(
+          '/notifications/mark-read',
+          body: anyNamed('body'),
+          fromJson: anyNamed('fromJson'),
+        ),
+      ).thenThrow(Exception('500'));
+
+      final ok = await notificationService.markAsRead('xyz');
+      expect(ok, isFalse);
     });
   });
 }

@@ -24,6 +24,7 @@ from app.dtos.diet_logbook_dto import (
     AddLogbookEntryDTO,
     DietLogbookResponseDTO,
     LogbookEntryResponseDTO,
+    NutritionAnalyticsSummaryResponseDTO,
 )
 from app.services.diet_service import DietService
 from app.services.diet_logbook_service import DietLogbookService
@@ -33,6 +34,7 @@ class DietController:
     """Orquestrador do módulo de Dieta."""
 
     def __init__(self, session: AsyncSession) -> None:
+        self.session = session
         self.diet_service = DietService(session)
         self.logbook_service = DietLogbookService(session)
 
@@ -121,3 +123,23 @@ class DietController:
     ) -> None:
         """Remove registro do diário."""
         return await self.logbook_service.remove_entry(entry_id, user_id)
+
+    async def get_nutrition_analytics(
+        self,
+        user_id: UUID,
+        start_date: date,
+        end_date: date,
+    ) -> NutritionAnalyticsSummaryResponseDTO:
+        """Retorna sumário histórico de nutrição com distribuição por refeição."""
+        from app.models.user import User  # importação local para evitar ciclo
+
+        # Enriquece com o peso atual do usuário (não há tracking histórico de peso)
+        user = await self.session.get(User, user_id)
+        weight_kg = user.weight if user and user.weight else None
+
+        return await self.logbook_service.get_analytics_summary(
+            user_id=user_id,
+            start_date=start_date,
+            end_date=end_date,
+            weight_kg=weight_kg,
+        )

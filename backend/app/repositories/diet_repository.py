@@ -207,6 +207,22 @@ class DietRepository:
         await self.session.delete(entry)
         await self.session.flush()
 
+    async def get_logbooks_in_range(
+        self, user_id: UUID, start_date: date, end_date: date
+    ) -> List[DietLogbook]:
+        """Retorna todos os logbooks de um período (inclusive nos limites)."""
+        stmt = (
+            select(DietLogbook)
+            .where(
+                DietLogbook.user_id == user_id,
+                DietLogbook.date >= start_date,
+                DietLogbook.date <= end_date,
+            )
+            .order_by(DietLogbook.date.asc())
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
     async def get_logbook_by_date(
         self, user_id: UUID, log_date: date
     ) -> Optional[DietLogbook]:

@@ -19,6 +19,11 @@ class NutritionProvider extends ChangeNotifier {
   List<double> _last7DaysCalories = List.filled(7, 0.0);
   List<bool> _last7DaysLogged = List.filled(7, false);
 
+  // Estado de Analytics Histórico
+  NutritionAnalyticsSummary? _analyticsSummary;
+  bool _analyticsLoading = false;
+  String? _analyticsError;
+
   bool _isLoading = false;
   String? _error;
 
@@ -37,6 +42,11 @@ class NutritionProvider extends ChangeNotifier {
   int get waterGoal => _waterGoal;
   List<double> get last7DaysCalories => _last7DaysCalories;
   List<bool> get last7DaysLogged => _last7DaysLogged;
+
+  // Getters para Analytics Histórico
+  NutritionAnalyticsSummary? get analyticsSummary => _analyticsSummary;
+  bool get analyticsLoading => _analyticsLoading;
+  String? get analyticsError => _analyticsError;
 
   /// Retorna as entradas agrupadas por meal_name para facilitar a listagem
   Map<String, List<DietLogbookEntry>> get entriesByMeal {
@@ -222,6 +232,33 @@ class NutritionProvider extends ChangeNotifier {
   }
 
   // ---------------------------------------------------------------------------
+  // Analytics Histórico (Backend Aggregation)
+  // ---------------------------------------------------------------------------
+
+  /// Carrega o sumário histórico de nutrição para um período.
+  /// [days]: número de dias retroativos (ex: 7, 30, 60, 90).
+  Future<void> loadAnalyticsSummary({int days = 30}) async {
+    _analyticsLoading = true;
+    _analyticsError = null;
+    notifyListeners();
+    try {
+      final endDate = DateTime.now();
+      final startDate = endDate.subtract(Duration(days: days - 1));
+      _analyticsSummary = await _nutritionService.getAnalyticsSummary(
+        startDate: startDate,
+        endDate: endDate,
+      );
+    } on NetworkException catch (e) {
+      _analyticsError = 'Erro de conexão: ${e.message}';
+    } catch (e) {
+      _analyticsError = 'Erro ao carregar histórico: ${e.toString()}';
+    } finally {
+      _analyticsLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Hidratação (Persistência Local SharedPreferences)
   // ---------------------------------------------------------------------------
 
@@ -305,29 +342,29 @@ class NutritionProvider extends ChangeNotifier {
     final proteinConsumed = _currentLogbook?.totalProtein ?? 0.0;
     final proteinTarget = dailyTargets['protein'] ?? 120.0;
 
-    String title = "Dica do OmniAI Coach 💡";
+    String title = "Dica do OmniAI Coach";
     String advice = "Registrar seus alimentos e manter a hidratação constante são os passos mais importantes para a consistência diária. Continue assim!";
     String type = "info"; // info, warning, success, alert
 
     // Lógica inteligente local por regras para simulação perfeita do comportamento
     if (caloriesConsumed == 0) {
-      title = "Inicie seu diário alimentar 🍳";
+      title = "Inicie seu diário alimentar";
       advice = "Seu diário para hoje está vazio. Comece adicionando sua refeição para receber insights automáticos de IA sobre seu progresso!";
       type = "info";
     } else if (_waterToday < _waterGoal * 0.5) {
-      title = "Atenção com a hidratação! 💧";
+      title = "Atenção com a hidratação!";
       advice = "Seu consumo de água está abaixo de 50% da meta recomendada. Beber água é essencial para manter o metabolismo ativo, otimizar a digestão e evitar retenção líquida!";
       type = "warning";
     } else if (proteinConsumed < proteinTarget * 0.7) {
-      title = "Foco nas proteínas 💪";
+      title = "Foco nas proteínas";
       advice = "Você consumiu apenas ${proteinConsumed.toStringAsFixed(0)}g de proteína hoje. Para manter a massa magra e saciedade, tente incluir uma fonte de proteína magra na próxima refeição!";
       type = "alert";
     } else if (caloriesConsumed > caloriesTarget * 1.1) {
-      title = "Limite calórico atingido ⚠️";
+      title = "Limite calórico atingido";
       advice = "Você ultrapassou a sua meta calórica planejada em ${(caloriesConsumed - caloriesTarget).toStringAsFixed(0)} kcal. Opte por alimentos com menor densidade calórica e ricos em fibras nas próximas horas.";
       type = "warning";
     } else if (proteinConsumed >= proteinTarget && caloriesConsumed <= caloriesTarget) {
-      title = "Metas perfeitamente batidas! 🏆";
+      title = "Metas perfeitamente batidas!";
       advice = "Excelente equilíbrio de nutrientes! Você bateu a sua meta diária de proteínas permanecendo dentro do orçamento de calorias. Excelente trabalho!";
       type = "success";
     }

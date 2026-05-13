@@ -1,8 +1,9 @@
 from uuid import UUID
 from typing import List, Optional
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
+from sqlalchemy import select, update, func
 
 from app.models.notification import NotificationPreference, NotificationLog, WorkoutReminderSchedule
 
@@ -50,3 +51,42 @@ class NotificationRepository:
             await self.session.flush()
 
         return log
+
+    async def has_log_today_local(
+        self,
+        user_id: UUID,
+        notification_type: str,
+        tz_name: str,
+    ) -> bool:
+        """
+        Retorna True se já existe um NotificationLog do tipo dado para o
+        usuário cujo `created_at` cai no mesmo dia local (no fuso `tz_name`).
+
+        Usado pela idempotência diária do meal_reminder (RN05/RN08 da Fase 2).
+        Não delega ao banco a conversão de timezone para evitar dependência de
+        dialeto (alguns testes rodam em SQLite); calcula limites em UTC e
+        filtra por `created_at` no intervalo.
+        """
+        try:
+            tz = ZoneInfo(tz_name)
+        except Exception:
+            tz = ZoneInfo("America/Sao_Paulo")
+
+        now_local = datetime.now(tz)
+        start_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_local = start_local + timedelta(days=1)
+        start_utc = start_local.astimezone(timezone.utc)
+        end_utc = end_local.astimezone(timezone.utc)
+
+        query = (
+            select(NotificationLog.id)
+            .where(
+                NotificationLog.user_id == user_id,
+                NotificationLog.notification_type == notification_type,
+                NotificationLog.created_at >= start_utc,
+                NotificationLog.created_at < end_utc,
+            )
+            .limit(1)
+        )
+        result = await self.session.execute(query)
+        return result.scalars().first() is not None

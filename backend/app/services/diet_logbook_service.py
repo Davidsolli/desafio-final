@@ -5,7 +5,7 @@ Camada de lógica de negócio para registrar, consultar e remover
 entradas do diário alimentar, com snapshot de macros.
 """
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Optional
 from uuid import UUID
 
@@ -15,6 +15,9 @@ from app.dtos.diet_logbook_dto import (
     AddLogbookEntryDTO,
     DietLogbookResponseDTO,
     LogbookEntryResponseDTO,
+    MealKcalDTO,
+    NutritionAnalyticsDayDTO,
+    NutritionAnalyticsSummaryResponseDTO,
 )
 from app.models.diet_logbook import DietLogbook, DietLogbookEntry
 from app.repositories.diet_repository import DietRepository
@@ -195,6 +198,95 @@ class DietLogbookService:
             total_fats=logbook.total_fats,
             created_at=logbook.created_at,
             entries=entries,
+        )
+
+    # ------------------------------------------------------------------
+    # Analytics Histórico
+    # ------------------------------------------------------------------
+
+    async def get_analytics_summary(
+        self,
+        user_id: UUID,
+        start_date: date,
+        end_date: date,
+        weight_kg: Optional[float] = None,
+    ) -> NutritionAnalyticsSummaryResponseDTO:
+        """
+        Retorna o resumo histórico de nutrição por dia para um período.
+
+        Agrega macros diários e distribuição calórica por refeição a partir
+        dos registros persistidos no DietLogbook. Evita múltiplas chamadas
+        sequenciais ao banco, buscando todo o intervalo em uma única query.
+
+        Args:
+            user_id: UUID do aluno cujos dados serão consultados.
+            start_date: Início do período (inclusive).
+            end_date: Fim do período (inclusive).
+            weight_kg: Peso atual do aluno (opcional, enriquece a correlação).
+        """
+        logbooks = await self.repository.get_logbooks_in_range(
+            user_id, start_date, end_date
+        )
+        # Map para acesso O(1) por data
+        logbook_map: dict[date, DietLogbook] = {lb.date: lb for lb in logbooks}
+
+        days: list[NutritionAnalyticsDayDTO] = []
+        logged_days = 0
+        current = start_date
+
+        while current <= end_date:
+            logbook = logbook_map.get(current)
+
+            if logbook and logbook.entries:
+                # Agrupa distribuição calórica por refeição
+                meal_map: dict[str, MealKcalDTO] = {}
+                for entry in logbook.entries:
+                    mn = entry.meal_name
+                    if mn not in meal_map:
+                        meal_map[mn] = MealKcalDTO(
+                            meal_name=mn, kcal=0.0, protein=0.0, carbs=0.0, fats=0.0
+                        )
+                    meal_map[mn].kcal += entry.kcal
+                    meal_map[mn].protein += entry.protein
+                    meal_map[mn].carbs += entry.carbs
+                    meal_map[mn].fats += entry.fats
+
+                days.append(
+                    NutritionAnalyticsDayDTO(
+                        date=current,
+                        total_kcal=round(logbook.total_kcal, 2),
+                        total_protein=round(logbook.total_protein, 2),
+                        total_carbs=round(logbook.total_carbs, 2),
+                        total_fats=round(logbook.total_fats, 2),
+                        water_ml=0,  # Hidratação é local no dispositivo (SharedPreferences)
+                        weight_kg=weight_kg,
+                        is_fully_logged=True,
+                        meal_distribution=list(meal_map.values()),
+                    )
+                )
+                logged_days += 1
+            else:
+                # Dia sem registro: inclui entrada vazia para manter série contínua
+                days.append(
+                    NutritionAnalyticsDayDTO(
+                        date=current,
+                        total_kcal=0.0,
+                        total_protein=0.0,
+                        total_carbs=0.0,
+                        total_fats=0.0,
+                        water_ml=0,
+                        weight_kg=weight_kg,
+                        is_fully_logged=False,
+                        meal_distribution=[],
+                    )
+                )
+
+            current += timedelta(days=1)
+
+        return NutritionAnalyticsSummaryResponseDTO(
+            days=days,
+            total_days=len(days),
+            logged_days=logged_days,
         )
 
     # ------------------------------------------------------------------

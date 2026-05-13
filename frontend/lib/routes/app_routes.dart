@@ -14,6 +14,7 @@ import '../screens/student/metrics_screen.dart';
 import '../screens/student/goals_screen.dart';
 import '../screens/student/chat_screen.dart';
 import '../screens/student/profile_screen_new.dart';
+import '../screens/student/steps/steps_screen.dart';
 import '../screens/notifications_screen.dart';
 import '../screens/notifications_settings_screen.dart';
 import '../screens/trainer/trainer_shell.dart';
@@ -30,6 +31,11 @@ import '../screens/admin/admin_pt_details_screen.dart';
 import '../screens/admin/admin_settings_screen.dart';
 import '../screens/admin/admin_student_form_screen.dart';
 import '../screens/admin/admin_whatsapp_screen.dart';
+import '../screens/student/plans_screen.dart';
+import '../screens/student/subscription_screen.dart';
+import '../screens/admin/admin_plans_screen.dart';
+import '../screens/admin/admin_payment_dashboard_screen.dart';
+import '../screens/admin/admin_metrics_dashboard_screen.dart';
 
 class AppRoutes {
   // Auth
@@ -50,6 +56,7 @@ class AppRoutes {
   static const String goals = '/goals';
   static const String chat = '/chat';
   static const String profile = '/profile';
+  static const String steps = '/steps';
 
   // Trainer
   static const String trainerHome = '/trainer/home';
@@ -67,6 +74,13 @@ class AppRoutes {
   static const String adminEditStudent = '/admin/edit-student';
   static const String adminSettings = '/admin/settings';
   static const String adminWhatsApp = '/admin/whatsapp';
+  static const String adminPlans = '/admin/plans';
+  static const String adminPayments = '/admin/payments';
+
+  // Payment
+  static const String plans = '/plans';
+  static const String subscription = '/subscription';
+  static const String adminMetrics = '/admin/metrics';
 
   // Shared
   static const String notifications = '/notifications';
@@ -145,6 +159,10 @@ class AppRoutes {
             path: profile,
             builder: (context, state) => const ProfileScreenV2(),
           ),
+          GoRoute(
+            path: steps,
+            builder: (context, state) => const StepsScreen(),
+          ),
         ],
       ),
       GoRoute(
@@ -197,7 +215,27 @@ class AppRoutes {
             path: adminWhatsApp,
             builder: (context, state) => const AdminWhatsAppScreen(),
           ),
+          GoRoute(
+            path: adminMetrics,
+            builder: (context, state) => const AdminMetricsDashboardScreen(),
+          ),
+          GoRoute(
+            path: adminPlans,
+            builder: (context, state) => const AdminPlansScreen(),
+          ),
+          GoRoute(
+            path: adminPayments,
+            builder: (context, state) => const AdminPaymentDashboardScreen(),
+          ),
         ],
+      ),
+      GoRoute(
+        path: plans,
+        builder: (context, state) => const PlansScreen(),
+      ),
+      GoRoute(
+        path: subscription,
+        builder: (context, state) => const SubscriptionScreen(),
       ),
       GoRoute(
         path: adminAddTrainer,

@@ -10,6 +10,8 @@ class DashboardProvider extends ChangeNotifier {
   bool isLoading = false;
   String? error;
   String trainerName = '';
+  int pendingInvites = 0;
+  int workoutsThisWeek = 0;
 
   /// Carrega todos os dados do dashboard
   Future<void> loadDashboard({String? trainerName}) async {
@@ -19,12 +21,19 @@ class DashboardProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      print('Carregando dashboard para $trainerName...');
-      students = await _service.loadDashboard();
-      print('Dashboard carregado com ${students.length} alunos');
+      // Inicia alunos e convites em paralelo
+      final studentsFuture = _service.loadDashboard();
+      final invitesFuture = _service.getPendingInvites();
+
+      students = await studentsFuture;
+      pendingInvites = await invitesFuture;
+
+      // Calcula treinos desta semana somando os de cada aluno
+      workoutsThisWeek = await _service.getStudentsWorkoutsThisWeek(
+        students.map((s) => s.id).toList(),
+      );
       error = null;
     } catch (e) {
-      print('Erro ao carregar dashboard: $e');
       error = 'Erro ao carregar dashboard: ${e.toString()}';
       students = [];
     }
@@ -53,5 +62,14 @@ class DashboardProvider extends ChangeNotifier {
     final sorted = List<StudentDashboardData>.from(students);
     sorted.sort((a, b) => b.adherencePercent.compareTo(a.adherencePercent));
     return sorted;
+  }
+
+  /// Alunos inativos: sem treino registrado há 7+ dias ou nunca treinaram
+  List<StudentDashboardData> get studentsNeedingAttention {
+    final threshold = DateTime.now().subtract(const Duration(days: 7));
+    return students.where((s) {
+      if (s.lastWorkout == null) return true;
+      return s.lastWorkout!.isBefore(threshold);
+    }).toList();
   }
 }

@@ -360,6 +360,117 @@ class LogbookRepository:
 
         return [(row[0], row[1]) for row in rows]
 
+
+    # ------------------------------------------------------------------
+    # Recordes Pessoais (PRs)
+    # ------------------------------------------------------------------
+
+    async def get_personal_records(
+        self,
+        user_id: UUID,
+        limit: int = 10,
+    ):
+        """
+        Retorna o recorde de carga por exercício do aluno.
+
+        Para cada exercise_id, busca a SessionExercise com maior actual_load_kg
+        em sessões completadas. Retorna até `limit` registros.
+
+        Returns:
+            List de Row com colunas:
+              (exercise_id, exercise_name, muscle_group,
+               max_load_kg, reps_at_max, achieved_at)
+        """
+        from sqlalchemy import text
+        from app.models.workout_sheet import Exercise
+
+        # Subquery: maior carga por exercise_id
+        subq = (
+            select(
+                SessionExercise.exercise_id,
+                func.max(SessionExercise.actual_load_kg).label("max_load_kg"),
+            )
+            .join(WorkoutSession, SessionExercise.session_id == WorkoutSession.id)
+            .where(
+                WorkoutSession.user_id == user_id,
+                WorkoutSession.status == "completed",
+                SessionExercise.actual_load_kg.isnot(None),
+                SessionExercise.actual_load_kg > 0,
+            )
+            .group_by(SessionExercise.exercise_id)
+            .subquery()
+        )
+
+        # Busca linha completa com reps e data
+        stmt = (
+            select(
+                SessionExercise.exercise_id,
+                Exercise.name.label("exercise_name"),
+                Exercise.muscle_group,
+                SessionExercise.actual_load_kg.label("max_load_kg"),
+                SessionExercise.actual_repetitions.label("reps_at_max"),
+                WorkoutSession.session_date.label("achieved_at"),
+            )
+            .join(WorkoutSession, SessionExercise.session_id == WorkoutSession.id)
+            .join(Exercise, SessionExercise.exercise_id == Exercise.id)
+            .join(
+                subq,
+                (SessionExercise.exercise_id == subq.c.exercise_id)
+                & (SessionExercise.actual_load_kg == subq.c.max_load_kg),
+            )
+            .where(
+                WorkoutSession.user_id == user_id,
+                WorkoutSession.status == "completed",
+            )
+            .order_by(SessionExercise.actual_load_kg.desc())
+            .limit(limit)
+        )
+        result = await self.session.execute(stmt)
+        return result.all()
+
+    # ------------------------------------------------------------------
+    # Volume Load Semanal
+    # ------------------------------------------------------------------
+
+    async def get_volume_load_data(
+        self,
+        user_id: UUID,
+        exercise_id: UUID,
+        start_date: datetime,
+        end_date: datetime,
+    ):
+        """
+        Retorna dados brutos para calcular Volume Load semanal.
+
+        Returns:
+            List de Row com (session_date, actual_series, actual_repetitions,
+                             actual_load_kg, exercise_name)
+        """
+        from app.models.workout_sheet import Exercise
+
+        stmt = (
+            select(
+                WorkoutSession.session_date,
+                SessionExercise.actual_series,
+                SessionExercise.actual_repetitions,
+                SessionExercise.actual_load_kg,
+                Exercise.name.label("exercise_name"),
+            )
+            .join(WorkoutSession, SessionExercise.session_id == WorkoutSession.id)
+            .join(Exercise, SessionExercise.exercise_id == Exercise.id)
+            .where(
+                WorkoutSession.user_id == user_id,
+                SessionExercise.exercise_id == exercise_id,
+                WorkoutSession.status == "completed",
+                SessionExercise.actual_load_kg.isnot(None),
+                WorkoutSession.session_date >= start_date,
+                WorkoutSession.session_date <= end_date,
+            )
+            .order_by(WorkoutSession.session_date.asc())
+        )
+        result = await self.session.execute(stmt)
+        return result.all()
+
     # ------------------------------------------------------------------
     # Transação
     # ------------------------------------------------------------------

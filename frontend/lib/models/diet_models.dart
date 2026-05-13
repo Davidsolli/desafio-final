@@ -396,3 +396,96 @@ class CreateDietLogbookEntryDTO {
     };
   }
 }
+
+// ---------------------------------------------------------------------------
+// Analytics Histórico de Nutrição
+// ---------------------------------------------------------------------------
+
+class MealKcalData {
+  final String mealName;
+  final double kcal;
+  final double protein;
+  final double carbs;
+  final double fats;
+
+  MealKcalData({
+    required this.mealName,
+    required this.kcal,
+    required this.protein,
+    required this.carbs,
+    required this.fats,
+  });
+
+  factory MealKcalData.fromJson(Map<String, dynamic> json) {
+    return MealKcalData(
+      mealName: json['meal_name'] as String,
+      kcal: (json['kcal'] as num?)?.toDouble() ?? 0.0,
+      protein: (json['protein'] as num?)?.toDouble() ?? 0.0,
+      carbs: (json['carbs'] as num?)?.toDouble() ?? 0.0,
+      fats: (json['fats'] as num?)?.toDouble() ?? 0.0,
+    );
+  }
+}
+
+class NutritionAnalyticsDay {
+  final DateTime date;
+  final double totalKcal;
+  final double totalProtein;
+  final double totalCarbs;
+  final double totalFats;
+  final int waterMl;
+  final double? weightKg;
+  final bool isFullyLogged;
+  final List<MealKcalData> mealDistribution;
+
+  NutritionAnalyticsDay({
+    required this.date,
+    required this.totalKcal,
+    required this.totalProtein,
+    required this.totalCarbs,
+    required this.totalFats,
+    required this.waterMl,
+    this.weightKg,
+    required this.isFullyLogged,
+    required this.mealDistribution,
+  });
+
+  factory NutritionAnalyticsDay.fromJson(Map<String, dynamic> json) {
+    return NutritionAnalyticsDay(
+      date: DateTime.parse(json['date'] as String),
+      totalKcal: (json['total_kcal'] as num?)?.toDouble() ?? 0.0,
+      totalProtein: (json['total_protein'] as num?)?.toDouble() ?? 0.0,
+      totalCarbs: (json['total_carbs'] as num?)?.toDouble() ?? 0.0,
+      totalFats: (json['total_fats'] as num?)?.toDouble() ?? 0.0,
+      waterMl: (json['water_ml'] as int?) ?? 0,
+      weightKg: (json['weight_kg'] as num?)?.toDouble(),
+      isFullyLogged: json['is_fully_logged'] as bool? ?? false,
+      mealDistribution: (json['meal_distribution'] as List<dynamic>?)
+              ?.map((e) => MealKcalData.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
+    );
+  }
+}
+
+class NutritionAnalyticsSummary {
+  final List<NutritionAnalyticsDay> days;
+  final int totalDays;
+  final int loggedDays;
+
+  NutritionAnalyticsSummary({
+    required this.days,
+    required this.totalDays,
+    required this.loggedDays,
+  });
+
+  factory NutritionAnalyticsSummary.fromJson(Map<String, dynamic> json) {
+    return NutritionAnalyticsSummary(
+      days: (json['days'] as List<dynamic>)
+          .map((e) => NutritionAnalyticsDay.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      totalDays: json['total_days'] as int,
+      loggedDays: json['logged_days'] as int,
+    );
+  }
+}

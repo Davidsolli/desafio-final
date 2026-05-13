@@ -212,15 +212,44 @@ class HomeWorkoutData {
   }
 }
 
+class HomeLastSession {
+  final String name;
+  final DateTime date;
+
+  HomeLastSession({required this.name, required this.date});
+
+  String get displayDate {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final d = DateTime(date.year, date.month, date.day);
+    final diff = today.difference(d).inDays;
+    if (diff == 0) return 'Hoje';
+    if (diff == 1) return 'Ontem';
+    return '$diff dias atrás';
+  }
+}
+
 class HomeData {
   final HomeUserData user;
   final List<HomeGoalData> goals;
   final HomeWorkoutData? todayWorkout;
+  final int todayKcal;
+  final double todayProtein;
+  final double todayCarbs;
+  final double todayFats;
+  final int workoutStreak;
+  final HomeLastSession? lastSession;
 
   HomeData({
     required this.user,
     required this.goals,
     this.todayWorkout,
+    this.todayKcal = 0,
+    this.todayProtein = 0,
+    this.todayCarbs = 0,
+    this.todayFats = 0,
+    this.workoutStreak = 0,
+    this.lastSession,
   });
 }
 
@@ -240,15 +269,29 @@ class HomeService {
     // User must succeed – propagate any error to the provider.
     final user = await _getUser();
 
-    // Iniciar os dois futures antes de qualquer await para rodar em paralelo.
-    // Variáveis tipadas eliminam o cast dinâmico do Future.wait.
+    // Start all futures in parallel before any await.
     final goalsFuture = _getGoals();
     final workoutFuture = _getTodayWorkout();
+    final kcalFuture = _getTodayNutrition();
+    // Single call: streak computation reuses the 60-session list to also extract lastSession.
+    final streakAndSessionFuture = _getStreakAndLastSession();
 
     final goals = await goalsFuture;
     final workout = await workoutFuture;
+    final nutrition = await kcalFuture;
+    final (streak, lastSession) = await streakAndSessionFuture;
 
-    return HomeData(user: user, goals: goals, todayWorkout: workout);
+    return HomeData(
+      user: user,
+      goals: goals,
+      todayWorkout: workout,
+      todayKcal: nutrition['kcal'] as int,
+      todayProtein: nutrition['protein'] as double,
+      todayCarbs: nutrition['carbs'] as double,
+      todayFats: nutrition['fats'] as double,
+      workoutStreak: streak,
+      lastSession: lastSession,
+    );
   }
 
   Future<HomeUserData> _getUser() async {
@@ -263,7 +306,7 @@ class HomeService {
     try {
       return await _apiClient.get<List<HomeGoalData>>(
         '/goals',
-        queryParameters: {'status': 'active', 'limit': 2},
+        queryParameters: {'status': 'active', 'limit': '2'},
         fromJson: (data) {
           final List<dynamic> items;
           if (data is Map && data.containsKey('data')) {
@@ -285,14 +328,105 @@ class HomeService {
     }
   }
 
+  Future<Map<String, dynamic>> _getTodayNutrition() async {
+    final empty = {'kcal': 0, 'protein': 0.0, 'carbs': 0.0, 'fats': 0.0};
+    try {
+      final now = DateTime.now();
+      final dateString =
+          '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      final result = await _apiClient.get<Map<String, dynamic>>(
+        '/diet-logbook/$dateString',
+        fromJson: (data) => data as Map<String, dynamic>,
+      );
+      return {
+        'kcal': (result['total_kcal'] as num?)?.toInt() ?? 0,
+        'protein': (result['total_protein'] as num?)?.toDouble() ?? 0.0,
+        'carbs': (result['total_carbs'] as num?)?.toDouble() ?? 0.0,
+        'fats': (result['total_fats'] as num?)?.toDouble() ?? 0.0,
+      };
+    } catch (_) {
+      return empty;
+    }
+  }
+
+  // Fetches up to 60 completed sessions once and computes both the workout
+  // streak and the last session, avoiding a duplicate HTTP call.
+  Future<(int, HomeLastSession?)> _getStreakAndLastSession() async {
+    try {
+      final sessions = await _apiClient.get<List<dynamic>>(
+        '/logbook/sessions',
+        queryParameters: {'limit': '60', 'status': 'completed'},
+        fromJson: (data) {
+          if (data is Map && data.containsKey('data')) {
+            return data['data'] as List<dynamic>;
+          }
+          if (data is List) return data;
+          return <dynamic>[];
+        },
+      );
+
+      final sessionMaps =
+          sessions.whereType<Map<String, dynamic>>().toList();
+
+      // Extract last session from the first item (most recent, limit=60 ordered desc).
+      HomeLastSession? lastSession;
+      if (sessionMaps.isNotEmpty) {
+        final s = sessionMaps.first;
+        final rawDate = s['session_date'] as String?;
+        if (rawDate != null) {
+          lastSession = HomeLastSession(
+            name: s['workout_name'] as String? ?? 'Sessão de Treino',
+            date: DateTime.parse(rawDate),
+          );
+        }
+      }
+
+      // Compute streak from deduplicated dates sorted descending.
+      final dates = sessionMaps
+          .map((s) {
+            final d = s['session_date'] as String?;
+            if (d == null) return null;
+            final dt = DateTime.parse(d);
+            return DateTime(dt.year, dt.month, dt.day);
+          })
+          .whereType<DateTime>()
+          .toSet()
+          .toList()
+        ..sort((a, b) => b.compareTo(a));
+
+      if (dates.isEmpty) return (0, lastSession);
+
+      final today = DateTime(
+          DateTime.now().year, DateTime.now().month, DateTime.now().day);
+
+      // Streak starts from today if trained today, otherwise from yesterday.
+      DateTime check = dates.contains(today)
+          ? today
+          : today.subtract(const Duration(days: 1));
+
+      int streak = 0;
+      for (final d in dates) {
+        if (d == check) {
+          streak++;
+          check = check.subtract(const Duration(days: 1));
+        } else if (d.isBefore(check)) {
+          break;
+        }
+      }
+      return (streak, lastSession);
+    } catch (_) {
+      return (0, null);
+    }
+  }
+
   Future<HomeWorkoutData?> _getTodayWorkout() async {
     try {
       // Step 1: list sheets for today (no exercises in list response).
       final listResult = await _apiClient.get<Map<String, dynamic>?>(
         '/workout-sheets',
         queryParameters: {
-          'day_of_week': _todayBackendDay,
-          'limit': 1,
+          'day_of_week': _todayBackendDay.toString(),
+          'limit': '1',
         },
         fromJson: (data) => data is Map<String, dynamic> ? data : null,
       );

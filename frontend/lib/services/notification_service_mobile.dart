@@ -5,16 +5,21 @@ import 'api_client.dart';
 
 class NotificationService {
   final ApiClient apiClient;
-  final FirebaseMessaging _firebaseMessaging;
+  final FirebaseMessaging? _firebaseMessagingOverride;
   final FlutterLocalNotificationsPlugin _localNotifications;
 
   NotificationService({
     required this.apiClient,
     FirebaseMessaging? firebaseMessaging,
     FlutterLocalNotificationsPlugin? localNotifications,
-  })  : _firebaseMessaging = firebaseMessaging ?? FirebaseMessaging.instance,
+  })  : _firebaseMessagingOverride = firebaseMessaging,
         _localNotifications =
             localNotifications ?? FlutterLocalNotificationsPlugin();
+
+  /// Lazy: só acessa FirebaseMessaging.instance dentro de initialize/handlers
+  /// para que testes que não tocam FCM não exijam Firebase inicializado.
+  FirebaseMessaging get _firebaseMessaging =>
+      _firebaseMessagingOverride ?? FirebaseMessaging.instance;
 
   Future<void> initialize() async {
     await Firebase.initializeApp();
@@ -40,7 +45,7 @@ class NotificationService {
   Future<void> sendTokenToBackend(String token) async {
     try {
       await apiClient.put(
-        '/api/v1/notifications/token',
+        '/notifications/token',
         body: {'fcm_token': token},
         fromJson: (json) => json as Map<String, dynamic>,
       );
@@ -67,7 +72,7 @@ class NotificationService {
   Future<Map<String, dynamic>> getPreferences() async {
     try {
       final response = await apiClient.get<Map<String, dynamic>>(
-        '/api/v1/notifications/preferences',
+        '/notifications/preferences',
         fromJson: (json) => json is Map<String, dynamic> ? json : {},
       );
       return response;
@@ -79,12 +84,62 @@ class NotificationService {
   Future<bool> updatePreferences(Map<String, dynamic> data) async {
     try {
       await apiClient.put(
-        '/api/v1/notifications/preferences',
+        '/notifications/preferences',
         body: data,
         fromJson: (json) => json as Map<String, dynamic>,
       );
       return true;
     } catch (e) {
+      return false;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getHistory({String? type, int limit = 20}) async {
+    try {
+      final queryParams = <String, String>{
+        'limit': limit.toString(),
+      };
+      if (type != null) {
+        queryParams['notification_type'] = type;
+      }
+
+      final response = await apiClient.get<Map<String, dynamic>>(
+        '/notifications/history',
+        queryParameters: queryParams,
+        fromJson: (json) => json is Map<String, dynamic> ? json : {},
+      );
+      final data = response['data'];
+      if (data is List) {
+        return data.whereType<Map<String, dynamic>>().toList();
+      }
+      return [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<bool> markAsRead(String notificationId) async {
+    try {
+      await apiClient.post<Map<String, dynamic>>(
+        '/notifications/mark-read',
+        body: {'notification_id': notificationId},
+        fromJson: (json) => json is Map<String, dynamic> ? json : {},
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> updateTimezone(String tz) async {
+    try {
+      await apiClient.put<Map<String, dynamic>>(
+        '/users/me/timezone',
+        body: {'timezone': tz},
+        fromJson: (json) => json is Map<String, dynamic> ? json : {},
+      );
+      return true;
+    } catch (_) {
       return false;
     }
   }
