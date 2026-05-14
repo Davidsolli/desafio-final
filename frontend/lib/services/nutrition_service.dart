@@ -234,6 +234,49 @@ class NutritionService {
     }
   }
 
+  /// Atualiza um alimento personalizado existente
+  Future<CustomFood> updateCustomFood({
+    required String customFoodId,
+    required String name,
+    String? category,
+    required double energyKcal,
+    required double proteinG,
+    required double carbohydrateG,
+    required double lipidG,
+    double fiberG = 0.0,
+  }) async {
+    try {
+      final response = await _apiClient.put<CustomFood>(
+        '/custom-foods/$customFoodId',
+        body: {
+          'name': name,
+          if (category != null && category.trim().isNotEmpty) 'category': category,
+          'energy_kcal': energyKcal,
+          'protein_g': proteinG,
+          'carbohydrate_g': carbohydrateG,
+          'lipid_g': lipidG,
+          'fiber_g': fiberG,
+        },
+        fromJson: (data) => CustomFood.fromJson(data as Map<String, dynamic>),
+      );
+      return response;
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  /// Deleta um alimento personalizado
+  Future<void> deleteCustomFood(String customFoodId) async {
+    try {
+      await _apiClient.delete<void>(
+        '/custom-foods/$customFoodId',
+        fromJson: (_) {},
+      );
+    } catch (e) {
+      rethrow;
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Analytics Histórico de Nutrição
   // ---------------------------------------------------------------------------

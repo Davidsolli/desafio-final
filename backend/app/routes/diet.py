@@ -136,6 +136,82 @@ async def list_custom_foods(
 
 
 # ---------------------------------------------------------------------------
+# PUT /custom-foods/{id} — Atualizar Alimento Personalizado
+# ---------------------------------------------------------------------------
+
+
+@custom_food_router.put(
+    "/{custom_food_id}",
+    response_model=CustomFoodResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Atualizar alimento personalizado",
+    responses={
+        200: {"description": "Alimento atualizado"},
+        403: {"description": "Sem permissão para editar"},
+        404: {"description": "Alimento não encontrado"},
+    },
+)
+async def update_custom_food(
+    custom_food_id: UUID,
+    dto: CreateCustomFoodDTO,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> CustomFoodResponseDTO:
+    """Atualiza um alimento personalizado existente."""
+    controller = DietController(db)
+    try:
+        return await controller.update_custom_food(
+            food_id=custom_food_id, user_id=current_user.id, dto=dto
+        )
+    except DietNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except DietForbiddenError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro ao atualizar alimento personalizado.",
+        )
+
+
+# ---------------------------------------------------------------------------
+# DELETE /custom-foods/{id} — Deletar Alimento Personalizado
+# ---------------------------------------------------------------------------
+
+
+@custom_food_router.delete(
+    "/{custom_food_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Deletar alimento personalizado",
+    responses={
+        204: {"description": "Alimento deletado com sucesso"},
+        403: {"description": "Sem permissão para deletar"},
+        404: {"description": "Alimento não encontrado"},
+    },
+)
+async def delete_custom_food(
+    custom_food_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Deleta um alimento personalizado."""
+    controller = DietController(db)
+    try:
+        await controller.delete_custom_food(
+            food_id=custom_food_id, user_id=current_user.id
+        )
+    except DietNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except DietForbiddenError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro ao deletar alimento personalizado.",
+        )
+
+
+# ---------------------------------------------------------------------------
 # POST /diets — Criar Dieta
 # ---------------------------------------------------------------------------
 

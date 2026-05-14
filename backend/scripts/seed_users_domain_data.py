@@ -535,8 +535,8 @@ async def seed(force: bool = False) -> None:
                 session.add(diet)
                 await session.flush()
 
-                breakfast = DietMeal(diet_id=diet.id, name="Cafe da Manha", time="07:30", order=1)
-                lunch = DietMeal(diet_id=diet.id, name="Almoco", time="12:30", order=2)
+                breakfast = DietMeal(diet_id=diet.id, name="Café da Manhã", time="07:30", order=1)
+                lunch = DietMeal(diet_id=diet.id, name="Almoço", time="12:30", order=2)
                 session.add_all([breakfast, lunch])
                 await session.flush()
 
@@ -620,7 +620,7 @@ async def seed(force: bool = False) -> None:
                         [
                             DietLogbookEntry(
                                 logbook_id=logbook.id,
-                                meal_name="Cafe da Manha",
+                                meal_name="Café da Manhã",
                                 food_name=breakfast_food.name,
                                 food_id=breakfast_food.id,
                                 quantity_g=breakfast_qty,
@@ -631,7 +631,7 @@ async def seed(force: bool = False) -> None:
                             ),
                             DietLogbookEntry(
                                 logbook_id=logbook.id,
-                                meal_name="Almoco",
+                                meal_name="Almoço",
                                 food_name=lunch_food.name,
                                 food_id=lunch_food.id,
                                 quantity_g=lunch_qty,
