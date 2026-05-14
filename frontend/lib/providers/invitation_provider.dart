@@ -129,9 +129,9 @@ class InvitationProvider extends ChangeNotifier {
   }
 
   /// Aprova um pré-cadastro WhatsApp (admin)
-  Future<bool> approveWhatsApp(String phone) async {
+  Future<bool> approveWhatsApp(String phone, {String? trainerId}) async {
     try {
-      await _invitationService.approveWhatsApp(phone: phone);
+      await _invitationService.approveWhatsApp(phone: phone, trainerId: trainerId);
       // Remove da lista local imediatamente
       if (_whatsappPending != null) {
         final updated = _whatsappPending!.items

@@ -107,24 +107,36 @@ class WhatsAppPrefillResponse {
 
 /// Item de pré-cadastro WhatsApp pendente de aprovação
 class WhatsAppPendingItem {
+  final String id;
   final String phone;
   final String? name;
   final String? email;
+  final String state;
   final DateTime createdAt;
+  final String? paymentStatus;
 
   WhatsAppPendingItem({
+    required this.id,
     required this.phone,
     this.name,
     this.email,
+    required this.state,
     required this.createdAt,
+    this.paymentStatus,
   });
+
+  bool get canApprove => state == 'pending_approval';
+  bool get awaitingPayment => state == 'awaiting_payment';
 
   factory WhatsAppPendingItem.fromJson(Map<String, dynamic> json) {
     return WhatsAppPendingItem(
+      id: json['id'] as String,
       phone: json['phone'] as String,
       name: json['name'] as String?,
       email: json['email'] as String?,
+      state: json['state'] as String? ?? 'pending_approval',
       createdAt: DateTime.parse(json['created_at'] as String),
+      paymentStatus: json['payment_status'] as String?,
     );
   }
 }
@@ -237,10 +249,14 @@ class InvitationService {
   /// Aprova um pré-cadastro WhatsApp e envia o código ao usuário (admin)
   Future<GenerateInvitationResponse> approveWhatsApp({
     required String phone,
+    String? trainerId,
   }) async {
     return await _apiClient.post<GenerateInvitationResponse>(
       '/invitations/whatsapp-approve',
-      body: {'phone': phone},
+      body: {
+        'phone': phone,
+        if (trainerId != null) 'trainer_id': trainerId,
+      },
       fromJson: (data) =>
           GenerateInvitationResponse.fromJson(data as Map<String, dynamic>),
     );
