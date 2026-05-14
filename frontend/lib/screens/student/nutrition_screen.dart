@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
@@ -55,32 +56,38 @@ class _NutritionScreenState extends State<NutritionScreen> {
       length: 2,
       child: Scaffold(
         backgroundColor: context.colors.background,
-        appBar: AppBar(
-          backgroundColor: context.colors.background,
-          elevation: 0,
-          title: TabBar(
-            labelColor: AppColors.primary,
-            unselectedLabelColor: context.colors.textSecondary,
-            indicatorColor: AppColors.primary,
-            tabs: [
-              Tab(icon: Icon(Icons.menu_book), text: 'Diário Alimentar'),
-              Tab(icon: Icon(Icons.assignment), text: 'Plano Alimentar'),
+        body: SafeArea(
+          child: Column(
+            children: [
+              TabBar(
+                labelColor: AppColors.primary,
+                unselectedLabelColor: context.colors.textSecondary,
+                indicatorColor: AppColors.primary,
+                indicatorSize: TabBarIndicatorSize.tab,
+                tabs: const [
+                  Tab(icon: Icon(Icons.menu_book), text: 'Diário Alimentar'),
+                  Tab(icon: Icon(Icons.assignment), text: 'Plano Alimentar'),
+                ],
+              ),
+              Divider(height: 1, color: context.colors.border.withValues(alpha: 0.5)),
+              Expanded(
+                child: Consumer<NutritionProvider>(
+                  builder: (context, provider, _) {
+                    if (provider.isLoading && provider.currentLogbook == null && provider.activeDiet == null) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+
+                    return TabBarView(
+                      children: [
+                        _buildLogbookTab(provider),
+                        _buildDietTab(provider),
+                      ],
+                    );
+                  },
+                ),
+              ),
             ],
           ),
-        ),
-        body: Consumer<NutritionProvider>(
-          builder: (context, provider, _) {
-            if (provider.isLoading && provider.currentLogbook == null && provider.activeDiet == null) {
-              return const Center(child: CircularProgressIndicator());
-            }
-
-            return TabBarView(
-              children: [
-                _buildLogbookTab(provider),
-                _buildDietTab(provider),
-              ],
-            );
-          },
         ),
       ),
     );
@@ -92,7 +99,6 @@ class _NutritionScreenState extends State<NutritionScreen> {
 
   Widget _buildLogbookTab(NutritionProvider provider) {
     final logbook = provider.currentLogbook;
-    final targets = provider.dailyTargets;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -231,9 +237,16 @@ class _NutritionScreenState extends State<NutritionScreen> {
     return Column(
       children: [
         SizedBox(
-          height: 220,
+          height: 260,
           child: PageView(
             controller: _chartPageController,
+            scrollBehavior: ScrollConfiguration.of(context).copyWith(
+              dragDevices: {
+                PointerDeviceKind.touch,
+                PointerDeviceKind.mouse,
+                PointerDeviceKind.trackpad,
+              },
+            ),
             onPageChanged: (page) => setState(() => _currentChartPage = page),
             children: charts,
           ),
@@ -243,16 +256,25 @@ class _NutritionScreenState extends State<NutritionScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: List.generate(charts.length, (idx) {
-            return AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              margin: const EdgeInsets.symmetric(horizontal: 3),
-              width: _currentChartPage == idx ? 16 : 6,
-              height: 6,
-              decoration: BoxDecoration(
-                color: _currentChartPage == idx
-                    ? AppColors.primary
-                    : context.colors.border,
-                borderRadius: BorderRadius.circular(3),
+            return GestureDetector(
+              onTap: () {
+                _chartPageController.animateToPage(
+                  idx,
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeInOut,
+                );
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                margin: const EdgeInsets.symmetric(horizontal: 3),
+                width: _currentChartPage == idx ? 16 : 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: _currentChartPage == idx
+                      ? AppColors.primary
+                      : context.colors.border,
+                  borderRadius: BorderRadius.circular(3),
+                ),
               ),
             );
           }),
@@ -639,6 +661,9 @@ class _NutritionScreenState extends State<NutritionScreen> {
 
   Widget _buildMealGroup(String mealName, List<DietLogbookEntry> entries) {
     final mealKcal = entries.fold<double>(0, (sum, e) => sum + e.kcal);
+    final mealProtein = entries.fold<double>(0, (sum, e) => sum + e.protein);
+    final mealCarbs = entries.fold<double>(0, (sum, e) => sum + e.carbs);
+    final mealFats = entries.fold<double>(0, (sum, e) => sum + e.fats);
     
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -655,28 +680,65 @@ class _NutritionScreenState extends State<NutritionScreen> {
             decoration: BoxDecoration(
               border: Border(bottom: BorderSide(color: context.colors.border)),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  mealName,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      mealName,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+                    Text(
+                      '${mealKcal.toStringAsFixed(0)} kcal',
+                      style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
+                    ),
+                  ],
                 ),
-                Text(
-                  '${mealKcal.toStringAsFixed(0)} kcal',
-                  style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('P: ${mealProtein.toStringAsFixed(1)}g', style: TextStyle(fontSize: 12, color: context.colors.textMuted)),
+                    Text('C: ${mealCarbs.toStringAsFixed(1)}g', style: TextStyle(fontSize: 12, color: context.colors.textMuted)),
+                    Text('G: ${mealFats.toStringAsFixed(1)}g', style: TextStyle(fontSize: 12, color: context.colors.textMuted)),
+                  ],
                 ),
               ],
             ),
           ),
-          ...entries.map((entry) => ListTile(
-                title: Text(entry.foodName, style: const TextStyle(fontSize: 14)),
-                subtitle: Text('${entry.quantityG}g • ${entry.kcal.toStringAsFixed(0)} kcal', style: const TextStyle(fontSize: 12)),
-                trailing: IconButton(
-                  icon: Icon(Icons.delete_outline, size: 20, color: context.colors.textMuted),
-                  onPressed: () => _deleteLogbookEntry(context, entry.id),
+          ...entries.map((entry) => Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(entry.foodName, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${entry.quantityG.toStringAsFixed(0)}g • P:${entry.protein.toStringAsFixed(1)}g C:${entry.carbs.toStringAsFixed(1)}g G:${entry.fats.toStringAsFixed(1)}g',
+                        style: TextStyle(fontSize: 11, color: context.colors.textMuted),
+                      ),
+                    ],
+                  ),
                 ),
-              )),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('${entry.kcal.toStringAsFixed(0)} kcal', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    IconButton(
+                      icon: Icon(Icons.delete_outline, size: 20, color: context.colors.textMuted),
+                      onPressed: () => _deleteLogbookEntry(context, entry.id),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          )),
         ],
       ),
     );
@@ -753,50 +815,64 @@ class _NutritionScreenState extends State<NutritionScreen> {
             decoration: BoxDecoration(
               border: Border(bottom: BorderSide(color: context.colors.border)),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Row(
-                    children: [
-                      Icon(Icons.access_time, size: 16, color: context.colors.textMuted),
-                      const SizedBox(width: 6),
-                      Text(meal.time ?? '--:--', style: TextStyle(color: context.colors.textMuted)),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              displayName,
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            if (displayDesc.isNotEmpty)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 2),
-                                child: Text(
-                                  displayDesc,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: context.colors.textMuted,
-                                    fontStyle: FontStyle.italic,
-                                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Icon(Icons.access_time, size: 16, color: context.colors.textMuted),
+                          const SizedBox(width: 6),
+                          Text(meal.time ?? '--:--', style: TextStyle(color: context.colors.textMuted)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  displayName,
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                                   overflow: TextOverflow.ellipsis,
-                                  maxLines: 2,
                                 ),
-                              ),
-                          ],
-                        ),
+                                if (displayDesc.isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 2),
+                                    child: Text(
+                                      displayDesc,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: context.colors.textMuted,
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 2,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${meal.subtotalKcal.toStringAsFixed(0)} kcal',
+                      style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  '${meal.subtotalKcal.toStringAsFixed(0)} kcal',
-                  style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('P: ${meal.subtotalProtein.toStringAsFixed(1)}g', style: TextStyle(fontSize: 12, color: context.colors.textMuted)),
+                    Text('C: ${meal.subtotalCarbs.toStringAsFixed(1)}g', style: TextStyle(fontSize: 12, color: context.colors.textMuted)),
+                    Text('G: ${meal.subtotalFats.toStringAsFixed(1)}g', style: TextStyle(fontSize: 12, color: context.colors.textMuted)),
+                  ],
                 ),
               ],
             ),
@@ -810,7 +886,16 @@ class _NutritionScreenState extends State<NutritionScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Expanded(child: Text(item.foodName, style: const TextStyle(fontWeight: FontWeight.w500))),
-                    Text('${item.quantityG}g', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    Text('${item.quantityG.toStringAsFixed(0)}g • ${item.kcal.toStringAsFixed(0)} kcal', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('P: ${item.protein.toStringAsFixed(1)}g', style: TextStyle(fontSize: 11, color: context.colors.textMuted)),
+                    Text('C: ${item.carbs.toStringAsFixed(1)}g', style: TextStyle(fontSize: 11, color: context.colors.textMuted)),
+                    Text('G: ${item.fats.toStringAsFixed(1)}g', style: TextStyle(fontSize: 11, color: context.colors.textMuted)),
                   ],
                 ),
                 if (item.observations != null && item.observations!.isNotEmpty)
@@ -900,9 +985,9 @@ class _NutritionScreenState extends State<NutritionScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _buildMacroItem('Proteína', '${p.toStringAsFixed(0)}g', const Color(0xFF3dba5e)),
-              _buildMacroItem('Carbs', '${c.toStringAsFixed(0)}g', const Color(0xFF4db8ff)),
-              _buildMacroItem('Gordura', '${f.toStringAsFixed(0)}g', const Color(0xFFffc84d)),
+              _buildMacroItem('Proteína', '${p.toStringAsFixed(0)}g', AppColors.macroProtein),
+              _buildMacroItem('Carbs', '${c.toStringAsFixed(0)}g', AppColors.macroCarbs),
+              _buildMacroItem('Gordura', '${f.toStringAsFixed(0)}g', AppColors.macroFat),
             ],
           ),
         ],
