@@ -18,7 +18,7 @@ from __future__ import annotations
 import logging
 import os
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timezone, timedelta
 from typing import Optional
 from uuid import UUID
 
@@ -168,6 +168,19 @@ def _sanitize_phone(phone: str) -> Optional[str]:
     if len(digits) >= 12:
         return digits
     return None
+
+
+def _local_now(user: "User") -> datetime:
+    """Retorna datetime atual no fuso do usuário (fallback: UTC-3 / BRT)."""
+    tz_name = getattr(user, "timezone", None)
+    if tz_name:
+        try:
+            from zoneinfo import ZoneInfo
+            return datetime.now(tz=ZoneInfo(tz_name))
+        except Exception:
+            pass
+    # Fallback: Brasília UTC-3
+    return datetime.now(tz=timezone(timedelta(hours=-3)))
 
 
 def _first_name(full_name: str | None) -> str:
@@ -347,7 +360,7 @@ class WhatsAppService:
 
         elif text == "3":
             await self.send_message(
-                phone, await self._get_daily_summary(user.id)
+                phone, await self._get_daily_summary(user.id, user)
             )
 
         else:
@@ -471,10 +484,11 @@ class WhatsAppService:
                 content_type=content_type,
             )
 
+            local_dt = _local_now(user)
             parse_result = await food_parser.parse(
                 transcription,
                 self.session,
-                local_hour=datetime.now().hour,
+                local_hour=local_dt.hour,
                 user_id=user.id,
             )
 
@@ -484,7 +498,7 @@ class WhatsAppService:
                     meal_name=parse_result.meal_name,
                     food_id=parse_result.catalog_item.id,
                     quantity_g=parse_result.quantity_g,
-                    log_date=date.today(),
+                    log_date=local_dt.date(),
                 )
                 food_name = parse_result.catalog_item.name
             else:
@@ -493,7 +507,7 @@ class WhatsAppService:
                     meal_name=parse_result.meal_name,
                     custom_food_id=parse_result.custom_food.id,
                     quantity_g=parse_result.quantity_g,
-                    log_date=date.today(),
+                    log_date=local_dt.date(),
                 )
                 food_name = parse_result.custom_food.name
 
@@ -555,7 +569,7 @@ class WhatsAppService:
                 content_type=content_type,
             )
 
-            local_hour = datetime.now().hour
+            local_dt = _local_now(user)
             logbook_service = DietLogbookService(self.session)
             foods_logged: list[str] = []
             foods_failed: list[str] = []
@@ -566,7 +580,7 @@ class WhatsAppService:
                     parse_result = await food_parser.parse(
                         photo_food.description_text,
                         self.session,
-                        local_hour=local_hour,
+                        local_hour=local_dt.hour,
                         user_id=user.id,
                     )
 
@@ -575,7 +589,7 @@ class WhatsAppService:
                             meal_name=parse_result.meal_name,
                             food_id=parse_result.catalog_item.id,
                             quantity_g=parse_result.quantity_g,
-                            log_date=date.today(),
+                            log_date=local_dt.date(),
                         )
                         food_name = parse_result.catalog_item.name
                     else:
@@ -584,7 +598,7 @@ class WhatsAppService:
                             meal_name=parse_result.meal_name,
                             custom_food_id=parse_result.custom_food.id,
                             quantity_g=parse_result.quantity_g,
-                            log_date=date.today(),
+                            log_date=local_dt.date(),
                         )
                         food_name = parse_result.custom_food.name
 
@@ -683,14 +697,15 @@ class WhatsAppService:
             logger.exception("Erro ao buscar treino WhatsApp user=%s", user_id)
             return "❌ Não consegui buscar seu treino. Acesse o app para ver."
 
-    async def _get_daily_summary(self, user_id: UUID) -> str:
+    async def _get_daily_summary(self, user_id: UUID, user: "User") -> str:
         try:
             from app.models.diet_logbook import DietLogbook
 
+            today = _local_now(user).date()
             logbook_result = await self.session.execute(
                 select(DietLogbook).where(
                     DietLogbook.user_id == user_id,
-                    DietLogbook.date == date.today(),
+                    DietLogbook.date == today,
                 )
             )
             logbook = logbook_result.scalar_one_or_none()
