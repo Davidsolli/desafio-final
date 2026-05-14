@@ -63,11 +63,15 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# Configurar CORS para permitir requisições do Flutter web (desenvolvimento)
+# CORS — origens configuradas via CORS_ORIGINS no .env
+# Em dev: CORS_ORIGINS=*   Em prod: CORS_ORIGINS=https://meudominio.com,http://192.168.x.x
+_raw_origins = settings.CORS_ORIGINS.strip()
+_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()] if _raw_origins != "*" else ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_origins,
+    allow_credentials=False,   # Não necessário para JWT Bearer token
     allow_methods=["*"],
     allow_headers=["*"],
 )

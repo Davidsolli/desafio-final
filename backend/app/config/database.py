@@ -151,18 +151,23 @@ async def init_db() -> None:
     except Exception as exc:
         logger.warning("Erro ao popular catálogo de alimentos: %s", exc)
 
-    try:
-        await seed_users_domain_data(force=False)
-        logger.info("✓ Seed de usuários e dados de domínio concluída")
-    except Exception as exc:
-        logger.warning("Erro ao popular dados de domínio iniciais: %s", exc)
+    from app.config.settings import settings as _settings
 
-    try:
-        from scripts.seed_admin_metrics import seed as seed_admin_metrics
-        await seed_admin_metrics(force=False)
-        logger.info("✓ Seed de métricas administrativas concluída")
-    except Exception as exc:
-        logger.warning("Erro ao popular dados de métricas administrativas: %s", exc)
+    if _settings.SEED_DEMO_DATA:
+        try:
+            await seed_users_domain_data(force=False)
+            logger.info("✓ Seed de usuários e dados de domínio concluída")
+        except Exception as exc:
+            logger.warning("Erro ao popular dados de domínio iniciais: %s", exc)
+
+        try:
+            from scripts.seed_admin_metrics import seed as seed_admin_metrics
+            await seed_admin_metrics(force=False)
+            logger.info("✓ Seed de métricas administrativas concluída")
+        except Exception as exc:
+            logger.warning("Erro ao popular dados de métricas administrativas: %s", exc)
+    else:
+        logger.info("SEED_DEMO_DATA=False — seed de usuários de demo ignorado")
 
     try:
         from scripts.seed_knowledge_base import seed as seed_knowledge_base

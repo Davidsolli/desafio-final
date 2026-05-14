@@ -75,6 +75,15 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = "http://localhost:3000"
     FRONTEND_RESET_PASSWORD_ROUTE: str = "/reset-password"
 
+    # ── CORS ──────────────────────────────────────────────────────────────
+    # Lista de origens separadas por vírgula, ex: "http://localhost:5000,https://meuapp.com"
+    # Use "*" apenas em desenvolvimento
+    CORS_ORIGINS: str = "*"
+
+    # ── Seed ──────────────────────────────────────────────────────────────
+    # Em produção, desabilitar o seed de dados de demo (alunos/personais de teste)
+    SEED_DEMO_DATA: bool = True
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
