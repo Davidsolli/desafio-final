@@ -30,6 +30,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
   WorkoutSheetResponse? _activeSheet;
   Timer? _chronometerTimer;
   int _elapsedSeconds = 0;
+  bool _isSessionPaused = false;
   
   // Mapas para salvar dados digitados em tempo real na sessão de treino
   // exerciseId -> List de flags de conclusão de séries
@@ -218,6 +219,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
       setState(() {
         _activeSessionId = sessionData['id'] as String;
         _activeSheet = sheet;
+        _isSessionPaused = false;
         _initializeActiveSheetData(sheet);
         _startChronometer();
       });
@@ -1163,7 +1165,7 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
       body: Stack(
         children: [
           SafeArea(
-            child: _activeSheet != null ? _buildActiveSessionView() : _buildMainLayout(),
+            child: (_activeSheet != null && !_isSessionPaused) ? _buildActiveSessionView() : _buildMainLayout(),
           ),
           if (_showSuccessOverlay) _buildPremiumSuccessOverlay(),
           if (_isSaving) _buildSavingOverlay(),
@@ -1247,6 +1249,10 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
+              // Banner de sessão pausada (se houver)
+              if (_activeSheet != null && _isSessionPaused)
+                _buildPausedSessionBanner(),
+
               // 1. Ativo Program Selector
               _buildActiveProgramSelector(provider),
               const SizedBox(height: 16),
@@ -1291,6 +1297,131 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
                 ...provider.sheets.map((sheet) => _buildSheetCard(sheet)),
             ],
           ),
+        );
+      },
+    );
+  }
+
+  Widget _buildPausedSessionBanner() {
+    if (_activeSheet == null) return const SizedBox.shrink();
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withOpacity(0.15),
+        border: Border.all(color: AppColors.primary, width: 1.5),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppColors.primary,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.pause_circle_filled, color: Colors.white, size: 28),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'TREINO PAUSADO',
+                  style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1.1),
+                ),
+                Text(
+                  _activeSheet!.name,
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Tempo corrido: ${_formatDuration(_elapsedSeconds)}',
+                  style: TextStyle(color: context.colors.textSecondary, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            ),
+            icon: const Icon(Icons.play_arrow, size: 18),
+            label: const Text('Continuar', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+            onPressed: () {
+              setState(() {
+                _isSessionPaused = false;
+              });
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showExitActiveSessionModal() {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: context.colors.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Sessão em Andamento', style: TextStyle(color: context.colors.textPrimary, fontWeight: FontWeight.bold, fontSize: 18)),
+              IconButton(
+                icon: Icon(Icons.close, color: context.colors.textSecondary),
+                onPressed: () => Navigator.pop(ctx),
+              ),
+            ],
+          ),
+          content: Text(
+            'Você deseja cancelar esta sessão atual e perder o progresso, ou terminar depois?',
+            style: TextStyle(color: context.colors.textSecondary, fontSize: 14),
+          ),
+          actionsAlignment: MainAxisAlignment.spaceBetween,
+          actions: [
+            TextButton(
+              style: TextButton.styleFrom(foregroundColor: AppColors.accentError),
+              onPressed: () async {
+                Navigator.pop(ctx);
+                if (_activeSessionId != null) {
+                  try {
+                    await context.read<LogbookProvider>().deleteSession(_activeSessionId!);
+                  } catch (_) {}
+                }
+                setState(() {
+                  _activeSheet = null;
+                  _activeSessionId = null;
+                  _isSessionPaused = false;
+                  _chronometerTimer?.cancel();
+                  _restTimer?.cancel();
+                  _restTimerSeconds = null;
+                });
+              },
+              child: const Text('Cancelar Sessão', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              onPressed: () {
+                Navigator.pop(ctx);
+                setState(() {
+                  _isSessionPaused = true;
+                });
+              },
+              child: const Text('Terminar Depois', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
         );
       },
     );
@@ -1545,6 +1676,10 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProvid
       backgroundColor: context.colors.background,
       appBar: AppBar(
         automaticallyImplyLeading: false,
+        leading: IconButton(
+          icon: const Icon(Icons.close),
+          onPressed: _showExitActiveSessionModal,
+        ),
         title: Row(
           children: [
             const Icon(Icons.circle, color: AppColors.accentError, size: 10),
