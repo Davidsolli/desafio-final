@@ -41,6 +41,7 @@ from app.dtos.chat_dto import (
     EscalatedListResponseDTO,
     KnowledgeListResponseDTO,
     MessageFeedbackDTO,
+    PhotoFoodResponseDTO,
     RateConversationDTO,
     SendMessageDTO,
     SendMessageResponseDTO,
@@ -413,6 +414,254 @@ async def send_audio_message(
             "food_source": parse_result.source,
         },
         parse_confidence=parse_result.confidence,
+        created_at=assistant_msg.created_at.isoformat() + "Z",
+    )
+
+
+@router.post(
+    "/send-photo",
+    response_model=PhotoFoodResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Registrar refeição por foto",
+    description=(
+        "Recebe uma foto do prato. O modelo de visão identifica os alimentos "
+        "e estima as quantidades. Cada alimento é buscado no catálogo TACO "
+        "e registrado automaticamente no diário alimentar do dia."
+    ),
+)
+async def send_photo_message(
+    photo: UploadFile = File(
+        ...,
+        description="Foto do prato (jpg, png, webp — máx 20 MB)",
+    ),
+    conversation_id: str | None = Form(
+        None,
+        description="UUID de conversa existente (opcional — cria nova se omitido)",
+    ),
+    log_date: str | None = Form(
+        None,
+        description="Data local do dispositivo (YYYY-MM-DD).",
+    ),
+    local_hour: int | None = Form(
+        None,
+        description="Hora local do dispositivo (0-23). Usada para inferir o nome da refeição.",
+    ),
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> PhotoFoodResponseDTO:
+    """
+    Fluxo:
+    1. Groq Vision analisa a foto → lista de alimentos com quantidades estimadas
+    2. Para cada alimento: FoodParser (TACO → web → LLM estimate)
+    3. Registra cada alimento no DietLogbook do dia
+    4. Salva mensagem na conversa e retorna confirmação
+    """
+    from datetime import date as _date, datetime, timezone
+    from uuid import UUID
+
+    from app.ai.food_parser import (
+        FoodNotFoundError,
+        FoodParseError,
+        QuantityNotFoundError,
+        food_parser,
+    )
+    from app.ai.photo_food_parser import (
+        PhotoFormatError,
+        PhotoParseError,
+        PhotoTooLargeError,
+        photo_food_parser,
+    )
+    from app.dtos.chat_dto import PhotoFoodResponseDTO
+    from app.dtos.diet_logbook_dto import AddLogbookEntryDTO
+    from app.models.chatbot import ChatConversation, ChatMessage
+    from app.services.diet_logbook_service import DietLogbookService
+
+    # ── 1. Ler imagem ─────────────────────────────────────────────────────
+    image_bytes = await photo.read()
+
+    # ── 2. Análise visual (Groq Vision) ───────────────────────────────────
+    try:
+        photo_result = await photo_food_parser.analyze(
+            image_bytes=image_bytes,
+            filename=photo.filename or "foto.jpg",
+            content_type=photo.content_type,
+        )
+    except PhotoTooLargeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": "PHOTO_TOO_LARGE", "message": str(exc)},
+        )
+    except PhotoFormatError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": "PHOTO_FORMAT_ERROR", "message": str(exc)},
+        )
+    except PhotoParseError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "PHOTO_PARSE_ERROR", "message": str(exc)},
+        )
+
+    # ── 3. Processar cada alimento com FoodParser + registrar no logbook ──
+    parsed_log_date: _date | None = None
+    if log_date:
+        try:
+            parsed_log_date = _date.fromisoformat(log_date)
+        except ValueError:
+            pass
+
+    logbook_service = DietLogbookService(session)
+    foods_logged = []
+    foods_failed = []
+
+    for photo_food in photo_result.foods:
+        try:
+            parse_result = await food_parser.parse(
+                photo_food.description_text,
+                session,
+                local_hour=local_hour,
+                user_id=current_user.id,
+            )
+        except (FoodParseError, FoodNotFoundError, QuantityNotFoundError) as exc:
+            logger.warning("FoodParser falhou para %r: %s", photo_food.name, exc)
+            foods_failed.append(photo_food.name)
+            continue
+
+        if parse_result.source == "taco" and parse_result.catalog_item is not None:
+            entry_dto = AddLogbookEntryDTO(
+                meal_name=parse_result.meal_name,
+                food_id=parse_result.catalog_item.id,
+                quantity_g=parse_result.quantity_g,
+                log_date=parsed_log_date,
+            )
+            food_name_display = parse_result.catalog_item.name
+        else:
+            assert parse_result.custom_food is not None
+            entry_dto = AddLogbookEntryDTO(
+                meal_name=parse_result.meal_name,
+                custom_food_id=parse_result.custom_food.id,
+                quantity_g=parse_result.quantity_g,
+                log_date=parsed_log_date,
+            )
+            food_name_display = parse_result.custom_food.name
+
+        try:
+            logbook_entry = await logbook_service.add_entry(
+                user_id=current_user.id,
+                dto=entry_dto,
+            )
+        except Exception as exc:
+            logger.error("Logbook add_entry falhou para %r: %s", photo_food.name, exc)
+            foods_failed.append(photo_food.name)
+            continue
+
+        foods_logged.append({
+            "food_name": food_name_display,
+            "quantity_g": parse_result.quantity_g,
+            "meal_name": parse_result.meal_name,
+            "kcal": logbook_entry.kcal,
+            "protein": logbook_entry.protein,
+            "carbs": logbook_entry.carbs,
+            "fats": logbook_entry.fats,
+            "logbook_entry_id": str(logbook_entry.id),
+            "food_source": parse_result.source,
+        })
+
+    if not foods_logged:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "FOOD_NOT_FOUND",
+                "message": "Não consegui registrar nenhum alimento da foto. "
+                "Tente descrever o prato por áudio ou texto.",
+            },
+        )
+
+    # ── 4. Montar mensagem de confirmação ─────────────────────────────────
+    meal_name = foods_logged[0]["meal_name"]
+    total_kcal = sum(f["kcal"] for f in foods_logged)
+    total_protein = sum(f["protein"] for f in foods_logged)
+    total_carbs = sum(f["carbs"] for f in foods_logged)
+    total_fats = sum(f["fats"] for f in foods_logged)
+
+    items_text = "\n".join(
+        f"• {f['food_name']}: {f['quantity_g']:.0f}g "
+        f"({f['kcal']:.0f} kcal)"
+        for f in foods_logged
+    )
+    failed_note = (
+        f"\n\n⚠️ Não consegui identificar: {', '.join(foods_failed)}"
+        if foods_failed
+        else ""
+    )
+
+    vitali_message = (
+        f"📸 Analisei sua foto e registrei no seu {meal_name}!\n\n"
+        f"{items_text}{failed_note}\n\n"
+        f"📊 Total:\n"
+        f"• Calorias: {total_kcal:.0f} kcal\n"
+        f"• Proteínas: {total_protein:.1f}g\n"
+        f"• Carboidratos: {total_carbs:.1f}g\n"
+        f"• Gorduras: {total_fats:.1f}g"
+    )
+
+    # ── 5. Salvar na conversa do chatbot ──────────────────────────────────
+    conv_id: UUID | None = None
+    if conversation_id:
+        try:
+            conv_id = UUID(conversation_id)
+        except ValueError:
+            pass
+
+    if conv_id:
+        from sqlalchemy import select as sa_select
+        stmt = sa_select(ChatConversation).where(
+            ChatConversation.id == conv_id,
+            ChatConversation.user_id == current_user.id,
+        )
+        result = await session.execute(stmt)
+        conversation = result.scalar_one_or_none()
+    else:
+        conversation = None
+
+    if conversation is None:
+        conversation = ChatConversation(
+            user_id=current_user.id,
+            channel="app",
+            status="active",
+        )
+        session.add(conversation)
+        await session.flush()
+
+    user_msg = ChatMessage(
+        conversation_id=conversation.id,
+        role="user",
+        content=f"📸 {photo_result.description}",
+        channel="app",
+    )
+    session.add(user_msg)
+    await session.flush()
+
+    assistant_msg = ChatMessage(
+        conversation_id=conversation.id,
+        role="assistant",
+        content=vitali_message,
+        channel="app",
+        model_used="photo_food_logging",
+        context_data={"foods_logged": foods_logged},
+    )
+    session.add(assistant_msg)
+    await session.commit()
+    await session.refresh(assistant_msg)
+
+    # ── 6. Resposta ───────────────────────────────────────────────────────
+    return PhotoFoodResponseDTO(
+        message_id=str(assistant_msg.id),
+        conversation_id=str(conversation.id),
+        description=photo_result.description,
+        content=vitali_message,
+        foods_logged=foods_logged,
+        parse_confidence=photo_result.confidence,
         created_at=assistant_msg.created_at.isoformat() + "Z",
     )
 

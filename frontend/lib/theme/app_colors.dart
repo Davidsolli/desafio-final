@@ -18,6 +18,11 @@ class AppColors {
   static const Color chartColor4 = Color(0xFFd977ff);
   static const Color chartColor5 = Color(0xFFff6b6b);
 
+  // ── Macronutrientes (Padronizados) ────────────────────────────────────────
+  static const Color macroProtein = Color(0xFF3dba5e);
+  static const Color macroCarbs = Color(0xFF4db8ff);
+  static const Color macroFat = Color(0xFFffc84d);
+
   static const LinearGradient gradientPrimary = LinearGradient(
     colors: [primary, primaryLight],
     begin: Alignment.topLeft,

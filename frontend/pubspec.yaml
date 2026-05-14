@@ -47,10 +47,12 @@ dependencies:
   firebase_messaging: ^15.2.5
   flutter_local_notifications: ^17.0.0
   health: ^12.0.0
+  mobile_scanner: ^5.2.3
   pedometer: ^4.2.0
   permission_handler: ^11.3.1
   record: ^6.0.0
   path_provider: ^2.1.4
+  image_picker: ^1.1.2
 
 dev_dependencies:
   flutter_test:

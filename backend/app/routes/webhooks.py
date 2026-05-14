@@ -115,15 +115,38 @@ async def receive_whatsapp_message(
             user_phone = message.get("from")
             message_type = message.get("type", "text")
 
-            if message_type != "text":
-                logger.info(f"📱 Mensagem do tipo {message_type!r} ignorada (apenas texto suportado)")
-                continue
+            logger.info("📱 Mensagem tipo=%r de %s", message_type, user_phone)
 
-            message_text = message.get("text", {}).get("body", "")
+            if message_type == "text":
+                text = message.get("text", {}).get("body", "")
+                await service.handle_message(
+                    phone=user_phone,
+                    text=text,
+                    message_type="text",
+                )
 
-            logger.info(f"📱 Mensagem recebida de {user_phone}: {message_text!r}")
+            elif message_type == "audio":
+                media_id = message.get("audio", {}).get("id")
+                mime_type = message.get("audio", {}).get("mime_type", "audio/ogg")
+                await service.handle_message(
+                    phone=user_phone,
+                    message_type="audio",
+                    media_id=media_id,
+                    mime_type=mime_type,
+                )
 
-            await service.handle_message(phone=user_phone, text=message_text)
+            elif message_type == "image":
+                media_id = message.get("image", {}).get("id")
+                mime_type = message.get("image", {}).get("mime_type", "image/jpeg")
+                await service.handle_message(
+                    phone=user_phone,
+                    message_type="image",
+                    media_id=media_id,
+                    mime_type=mime_type,
+                )
+
+            else:
+                logger.info("Tipo %r ignorado", message_type)
 
     except Exception as e:
         logger.error(f"❌ Erro ao processar webhook: {str(e)}")

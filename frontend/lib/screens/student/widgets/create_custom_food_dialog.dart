@@ -6,7 +6,9 @@ import '../../../models/diet_models.dart';
 import '../../../providers/nutrition_provider.dart';
 
 class CreateCustomFoodDialog extends StatefulWidget {
-  const CreateCustomFoodDialog({super.key});
+  final FoodCatalogItem? foodToEdit;
+
+  const CreateCustomFoodDialog({super.key, this.foodToEdit});
 
   @override
   State<CreateCustomFoodDialog> createState() => _CreateCustomFoodDialogState();
@@ -31,14 +33,28 @@ class _CreateCustomFoodDialogState extends State<CreateCustomFoodDialog> {
   double _fat = 0.0;
 
   // Standardized Day-To-Day colors for macronutrients
-  static const Color colorProtein = Color(0xFF3dba5e); // Green
-  static const Color colorCarbs = Color(0xFF4db8ff);   // Blue
-  static const Color colorFat = Color(0xFFffc84d);     // Yellow/Gold
-  static const Color colorFiber = Color(0xFF8c52ff);   // Purple/Teal
+  static const Color colorProtein = AppColors.macroProtein;
+  static const Color colorCarbs = AppColors.macroCarbs;
+  static const Color colorFat = AppColors.macroFat;
+  static const Color colorFiber = Color(0xFF8c52ff); // Purple/Teal
 
   @override
   void initState() {
     super.initState();
+    if (widget.foodToEdit != null) {
+      final food = widget.foodToEdit!;
+      _nameController.text = food.name;
+      _categoryController.text = food.category ?? '';
+      _proteinController.text = food.proteinG.toString();
+      _carbsController.text = food.carbohydrateG.toString();
+      _lipidController.text = food.lipidG.toString();
+      _fiberController.text = food.fiberG.toString();
+      _protein = food.proteinG;
+      _carbs = food.carbohydrateG;
+      _fat = food.lipidG;
+      _kcal = food.energyKcal;
+    }
+
     _proteinController.addListener(_updateLiveValues);
     _carbsController.addListener(_updateLiveValues);
     _lipidController.addListener(_updateLiveValues);
@@ -76,18 +92,32 @@ class _CreateCustomFoodDialogState extends State<CreateCustomFoodDialog> {
 
     try {
       final provider = context.read<NutritionProvider>();
-      final CustomFood newFood = await provider.createCustomFood(
-        name: _nameController.text.trim(),
-        category: _categoryController.text.trim().isEmpty ? 'Personalizado' : _categoryController.text.trim(),
-        energyKcal: _kcal,
-        proteinG: double.parse(_proteinController.text),
-        carbohydrateG: double.parse(_carbsController.text),
-        lipidG: double.parse(_lipidController.text),
-        fiberG: double.tryParse(_fiberController.text) ?? 0.0,
-      );
+      CustomFood savedFood;
+      if (widget.foodToEdit != null) {
+        savedFood = await provider.updateCustomFood(
+          customFoodId: widget.foodToEdit!.id,
+          name: _nameController.text.trim(),
+          category: _categoryController.text.trim().isEmpty ? 'Personalizado' : _categoryController.text.trim(),
+          energyKcal: _kcal,
+          proteinG: double.parse(_proteinController.text),
+          carbohydrateG: double.parse(_carbsController.text),
+          lipidG: double.parse(_lipidController.text),
+          fiberG: double.tryParse(_fiberController.text) ?? 0.0,
+        );
+      } else {
+        savedFood = await provider.createCustomFood(
+          name: _nameController.text.trim(),
+          category: _categoryController.text.trim().isEmpty ? 'Personalizado' : _categoryController.text.trim(),
+          energyKcal: _kcal,
+          proteinG: double.parse(_proteinController.text),
+          carbohydrateG: double.parse(_carbsController.text),
+          lipidG: double.parse(_lipidController.text),
+          fiberG: double.tryParse(_fiberController.text) ?? 0.0,
+        );
+      }
 
       if (mounted) {
-        Navigator.of(context).pop(newFood);
+        Navigator.of(context).pop(savedFood);
       }
     } catch (e) {
       setState(() {
@@ -122,7 +152,7 @@ class _CreateCustomFoodDialogState extends State<CreateCustomFoodDialog> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'Novo Alimento',
+                      widget.foodToEdit != null ? 'Editar Alimento' : 'Novo Alimento',
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
                             fontWeight: FontWeight.bold,
                             color: AppColors.primary,
@@ -138,7 +168,9 @@ class _CreateCustomFoodDialogState extends State<CreateCustomFoodDialog> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Cadastre alimentos fora da base Taco para usar no seu diário.',
+                  widget.foodToEdit != null
+                      ? 'Atualize os dados do seu alimento personalizado.'
+                      : 'Cadastre alimentos fora da base Taco para usar no seu diário.',
                   style: TextStyle(color: context.colors.textSecondary, fontSize: 13),
                 ),
                 const SizedBox(height: 20),
@@ -380,9 +412,9 @@ class _CreateCustomFoodDialogState extends State<CreateCustomFoodDialog> {
                                 color: Colors.white,
                               ),
                             )
-                          : const Text(
-                              'Cadastrar Alimento',
-                              style: TextStyle(fontWeight: FontWeight.bold),
+                          : Text(
+                              widget.foodToEdit != null ? 'Salvar Alterações' : 'Cadastrar Alimento',
+                              style: const TextStyle(fontWeight: FontWeight.bold),
                             ),
                     ),
                   ],

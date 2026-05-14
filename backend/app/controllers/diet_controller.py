@@ -54,6 +54,18 @@ class DietController:
         """Lista alimentos personalizados do usuário."""
         return await self.diet_service.list_custom_foods(user_id, search)
 
+    async def update_custom_food(
+        self, food_id: UUID, user_id: UUID, dto: CreateCustomFoodDTO
+    ) -> CustomFoodResponseDTO:
+        """Atualiza alimento personalizado."""
+        return await self.diet_service.update_custom_food(food_id, user_id, dto)
+
+    async def delete_custom_food(
+        self, food_id: UUID, user_id: UUID
+    ) -> None:
+        """Deleta alimento personalizado."""
+        return await self.diet_service.delete_custom_food(food_id, user_id)
+
     # ------------------------------------------------------------------
     # Dietas
     # ------------------------------------------------------------------

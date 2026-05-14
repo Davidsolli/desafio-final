@@ -17,6 +17,7 @@ from app.models.user import User
 from app.models.whatsapp_pre_registration import WhatsAppPreRegistration
 from app.dtos.invitation_dto import (
     ApproveWhatsAppDTO,
+    ConfirmPreRegPaymentDTO,
     GenerateInvitationDTO,
     ValidateInvitationDTO,
     InvitationResponseDTO,
@@ -180,10 +181,14 @@ async def list_whatsapp_pending(
             detail="Apenas admins podem ver pré-cadastros pendentes",
         )
 
+    from sqlalchemy import or_
     result = await session.execute(
         select(WhatsAppPreRegistration).where(
-            WhatsAppPreRegistration.state == "pending_approval"
-        )
+            or_(
+                WhatsAppPreRegistration.state == "pending_approval",
+                WhatsAppPreRegistration.state == "awaiting_payment",
+            )
+        ).order_by(WhatsAppPreRegistration.created_at.desc())
     )
     rows = result.scalars().all()
 
@@ -204,9 +209,11 @@ async def approve_whatsapp_registration(
 ) -> InvitationResponseDTO:
     """
     Aprova um pré-cadastro via WhatsApp:
-    1. Gera um código de convite
-    2. Vincula ao pré-cadastro
-    3. Envia o código ao usuário via WhatsApp
+    1. Valida que o personal trainer selecionado existe e está ativo
+    2. Valida que o pagamento foi confirmado (ou é pré-cadastro sem pagamento)
+    3. Invalida convite anterior se existir (evita múltiplos tokens válidos)
+    4. Gera novo código de convite vinculado ao personal trainer
+    5. Envia o código ao usuário via WhatsApp
     """
     if current_user.role != "admin":
         raise HTTPException(
@@ -214,13 +221,52 @@ async def approve_whatsapp_registration(
             detail="Apenas admins podem aprovar pré-cadastros",
         )
 
-    result = await session.execute(
+    # Resolver trainer_id: usar o fornecido ou auto-selecionar o único ativo
+    trainer_id = dto.trainer_id
+    if trainer_id is None:
+        from sqlalchemy import or_
+        trainers_result = await session.execute(
+            select(User).where(
+                User.role == "personal_trainer",
+                User.is_active == True,
+            )
+        )
+        trainers = trainers_result.scalars().all()
+        if len(trainers) == 1:
+            trainer_id = trainers[0].id
+        elif len(trainers) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Nenhum personal trainer ativo encontrado. Cadastre um trainer antes de aprovar.",
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    f"Há {len(trainers)} personal trainers ativos. "
+                    "Envie 'trainer_id' no corpo da requisição para especificar qual vincular."
+                ),
+            )
+
+    # Validar o trainer resolvido
+    trainer_result = await session.execute(
+        select(User).where(User.id == trainer_id)
+    )
+    trainer = trainer_result.scalar_one_or_none()
+    if not trainer or trainer.role != "personal_trainer" or not trainer.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Personal trainer inválido, inativo ou não encontrado",
+        )
+
+    # Buscar pré-cadastro pendente
+    pre_reg_result = await session.execute(
         select(WhatsAppPreRegistration).where(
             WhatsAppPreRegistration.phone == dto.phone,
             WhatsAppPreRegistration.state == "pending_approval",
         )
     )
-    pre_reg = result.scalar_one_or_none()
+    pre_reg = pre_reg_result.scalar_one_or_none()
 
     if not pre_reg:
         raise HTTPException(
@@ -228,10 +274,87 @@ async def approve_whatsapp_registration(
             detail="Pré-cadastro não encontrado ou já aprovado",
         )
 
+    # Gate de pagamento: bloquear aprovação se pagamento pendente
+    if pre_reg.payment_status == "pending":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Pagamento ainda não confirmado. Aguarde a confirmação para aprovar.",
+        )
+
+    # Invalidar convite anterior para evitar múltiplos tokens válidos
+    if pre_reg.invitation_code:
+        from app.repositories.invitation_repository import InvitationRepository
+        inv_repo = InvitationRepository(session)
+        old_invitation = await inv_repo.get_by_code(pre_reg.invitation_code)
+        if old_invitation and not old_invitation.used:
+            old_invitation.used = True
+            await session.flush()
+
     invitation_service = InvitationService(session)
-    invitation = await invitation_service.generate(current_user.id)
+    invitation = await invitation_service.generate(trainer_id)
 
     whatsapp_service = WhatsAppService(session)
     await whatsapp_service.send_approval_code(dto.phone, invitation.code)
 
     return invitation
+
+
+@router.post(
+    "/whatsapp-confirm-payment",
+    status_code=status.HTTP_200_OK,
+    summary="Confirmar pagamento de pré-cadastro manualmente (admin) — fallback de webhook",
+)
+async def confirm_prereg_payment(
+    dto: ConfirmPreRegPaymentDTO,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Fallback para quando o webhook da InfinitePay não chega.
+    Transiciona o pré-cadastro de 'awaiting_payment' para 'pending_approval'.
+    Envia mensagem WhatsApp confirmando o pagamento ao usuário.
+    """
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Apenas admins podem confirmar pagamentos",
+        )
+
+    result = await session.execute(
+        select(WhatsAppPreRegistration).where(
+            WhatsAppPreRegistration.id == dto.pre_reg_id,
+        )
+    )
+    pre_reg = result.scalar_one_or_none()
+
+    if not pre_reg:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Pré-cadastro não encontrado",
+        )
+
+    if pre_reg.state not in ("awaiting_payment", "pending_approval"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Pré-cadastro está em estado '{pre_reg.state}', não é possível confirmar pagamento",
+        )
+
+    if pre_reg.payment_status == "confirmed":
+        return {"status": "already_confirmed", "pre_reg_id": str(dto.pre_reg_id)}
+
+    pre_reg.payment_status = "confirmed"
+    pre_reg.state = "pending_approval"
+    await session.commit()
+
+    whatsapp_service = WhatsAppService(session)
+    from app.services.whatsapp_service import _MESSAGES
+    await whatsapp_service.send_message(
+        pre_reg.phone,
+        _MESSAGES["payment_confirmed_user"],
+    )
+
+    return {
+        "status": "confirmed",
+        "pre_reg_id": str(dto.pre_reg_id),
+        "message": "Pagamento confirmado — pré-cadastro disponível para aprovação",
+    }

@@ -94,6 +94,9 @@ class UserService:
             UserAlreadyExistsError: Se email já existe
             InvalidInvitationError: Se código de convite é inválido
         """
+        # Normalizar email para minúsculo antes de qualquer operação
+        dto.email = dto.email.lower()
+
         # Validar se email já existe
         existing_user = await self.repository.get_by_email_all_states(dto.email)
         if existing_user:
@@ -136,6 +139,12 @@ class UserService:
                 invitation_repo = InvitationRepository(self.session)
                 await invitation_repo.update(invitation)
 
+            # Auto-criar assinatura se pagamento foi confirmado no pré-cadastro
+            if invitation and dto.invitation_code:
+                await self._maybe_create_subscription_from_prereg(
+                    created_user, dto.invitation_code
+                )
+
             await self.repository.commit()
 
             return UserResponseDTO.model_validate(created_user)
@@ -143,6 +152,56 @@ class UserService:
             await self.repository.rollback()
             raise UserAlreadyExistsError(
                 f"Erro de integridade ao criar usuário: {str(e)}"
+            )
+
+    async def _maybe_create_subscription_from_prereg(
+        self, user: User, invitation_code: str
+    ) -> None:
+        """
+        Se o pré-cadastro WhatsApp tiver pagamento confirmado, cria a assinatura
+        automaticamente ao finalizar o cadastro no app.
+        """
+        from datetime import datetime, timedelta
+        from sqlalchemy import select
+        from app.models.whatsapp_pre_registration import WhatsAppPreRegistration
+        from app.models.payment import Plan, Subscription
+
+        try:
+            result = await self.session.execute(
+                select(WhatsAppPreRegistration).where(
+                    WhatsAppPreRegistration.invitation_code == invitation_code,
+                    WhatsAppPreRegistration.payment_status == "confirmed",
+                )
+            )
+            pre_reg = result.scalar_one_or_none()
+            if not pre_reg or not pre_reg.selected_plan_id:
+                return
+
+            plan_result = await self.session.execute(
+                select(Plan).where(Plan.id == pre_reg.selected_plan_id, Plan.is_active == True)
+            )
+            plan = plan_result.scalar_one_or_none()
+            if not plan:
+                return
+
+            now = datetime.utcnow()
+            subscription = Subscription(
+                student_id=user.id,
+                plan_id=plan.id,
+                admin_id=plan.admin_id,
+                status="active",
+                payment_method="whatsapp_prereg",
+                external_payment_id=pre_reg.pre_reg_payment_id,
+                started_at=now,
+                expires_at=now + timedelta(days=30 * plan.duration_months),
+            )
+            self.session.add(subscription)
+            await self.session.flush()
+
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                "Erro ao criar subscription automática para user=%s", user.id
             )
 
     async def get_by_id(self, user_id: UUID) -> UserResponseDTO:

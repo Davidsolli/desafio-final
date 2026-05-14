@@ -357,21 +357,65 @@ async def handle_infinitepay_webhook(
     """
     Webhook da InfinitePay — pagamento confirmado libera acesso do aluno.
 
-    Fluxo:
-    1. Receber evento com status 'paid'/'approved'
-    2. Extrair order_nsu (= subscription_id)
-    3. Ativar a subscription → status ACTIVE, started_at = now, expires_at += duration
-    4. Retornar 200 sempre (para a InfinitePay não reenviar)
+    Fluxo para pré-cadastro (order_nsu começa com "prereg_"):
+    1. Extrair pre_reg_id
+    2. Atualizar WhatsAppPreRegistration.payment_status = "confirmed"
+    3. Transitar para state = "pending_approval"
+    4. Notificar usuário via WhatsApp
+
+    Fluxo para assinatura normal:
+    1. Extrair subscription_id
+    2. Ativar subscription → status ACTIVE
     """
     if not payload.is_paid():
         return {"status": "ignored", "event_status": payload.status}
 
-    subscription_id_str = payload.get_subscription_id()
-    if not subscription_id_str:
+    order_nsu = payload.get_subscription_id()
+    if not order_nsu:
         return {"status": "error", "message": "order_nsu não fornecido"}
 
-    # Remover prefixo "infinitepay_" se presente
-    subscription_id_str = subscription_id_str.replace("infinitepay_", "")
+    # Pagamento de pré-cadastro WhatsApp
+    if order_nsu.startswith("prereg_"):
+        from sqlalchemy import select
+        from app.models.whatsapp_pre_registration import WhatsAppPreRegistration
+        from app.services.whatsapp_service import WhatsAppService
+
+        pre_reg_id_str = order_nsu.removeprefix("prereg_")
+        try:
+            pre_reg_id = UUID(pre_reg_id_str)
+        except ValueError:
+            return {"status": "error", "message": "pre_reg_id inválido no order_nsu"}
+
+        pre_reg_result = await session.execute(
+            select(WhatsAppPreRegistration).where(WhatsAppPreRegistration.id == pre_reg_id)
+        )
+        pre_reg = pre_reg_result.scalar_one_or_none()
+
+        if not pre_reg:
+            return {"status": "error", "message": "Pré-cadastro não encontrado"}
+
+        if pre_reg.payment_status == "confirmed":
+            return {"status": "already_processed", "pre_reg_id": str(pre_reg_id)}
+
+        pre_reg.payment_status = "confirmed"
+        pre_reg.state = "pending_approval"
+        await session.commit()
+
+        whatsapp_service = WhatsAppService(session)
+        from app.services.whatsapp_service import _MESSAGES
+        await whatsapp_service.send_message(
+            pre_reg.phone,
+            _MESSAGES["payment_confirmed_user"],
+        )
+
+        return {
+            "status": "success",
+            "pre_reg_id": str(pre_reg_id),
+            "message": "Pagamento do pré-cadastro confirmado",
+        }
+
+    # Pagamento de assinatura normal
+    subscription_id_str = order_nsu.replace("infinitepay_", "")
 
     try:
         subscription_id = UUID(subscription_id_str)

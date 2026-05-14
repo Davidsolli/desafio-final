@@ -8,6 +8,7 @@ import '../../../models/diet_models.dart';
 import '../../../services/nutrition_service.dart';
 import '../../../services/api_client.dart';
 import 'create_custom_food_dialog.dart';
+import '../barcode_scanner_screen.dart';
 
 class FoodSearchModal extends StatefulWidget {
   final void Function(FoodCatalogItem food, double quantity, String meal)? onFoodSelected;
@@ -252,6 +253,93 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
           source: 'custom',
         );
       });
+    }
+  }
+
+  Future<void> _editCustomFood(FoodCatalogItem item) async {
+    final updatedFood = await showDialog<CustomFood?>(
+      context: context,
+      builder: (context) => CreateCustomFoodDialog(foodToEdit: item),
+    );
+
+    if (updatedFood != null && mounted) {
+      _loadInitialFoods();
+      if (_searchController.text.isNotEmpty) {
+        _triggerSearch();
+      }
+      setState(() {
+        final updatedItem = FoodCatalogItem(
+          id: updatedFood.id,
+          name: updatedFood.name,
+          category: updatedFood.category,
+          energyKcal: updatedFood.energyKcal,
+          proteinG: updatedFood.proteinG,
+          carbohydrateG: updatedFood.carbohydrateG,
+          lipidG: updatedFood.lipidG,
+          fiberG: updatedFood.fiberG,
+          source: 'custom',
+        );
+
+        int idxRecent = _recentCustomFoods.indexWhere((x) => x.id == item.id);
+        if (idxRecent != -1) _recentCustomFoods[idxRecent] = updatedItem;
+
+        int idxAll = _allAvailableFoods.indexWhere((x) => x.id == item.id);
+        if (idxAll != -1) _allAvailableFoods[idxAll] = updatedItem;
+
+        int idxSearch = _searchResults.indexWhere((x) => x.id == item.id);
+        if (idxSearch != -1) _searchResults[idxSearch] = updatedItem;
+
+        if (_selectedFood?.id == item.id) {
+          _selectedFood = updatedItem;
+        }
+      });
+    }
+  }
+
+  Future<void> _confirmDeleteCustomFood(FoodCatalogItem item) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: context.colors.surface,
+        title: Text('Apagar Alimento', style: TextStyle(color: context.colors.textPrimary)),
+        content: Text('Tem certeza que deseja apagar "${item.name}"?', style: TextStyle(color: context.colors.textSecondary)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text('Cancelar', style: TextStyle(color: context.colors.textSecondary)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentError, foregroundColor: Colors.white),
+            child: const Text('Apagar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true && mounted) {
+      try {
+        final provider = context.read<NutritionProvider>();
+        await provider.deleteCustomFood(item.id);
+        _loadInitialFoods();
+        if (_searchController.text.isNotEmpty) {
+          _triggerSearch();
+        }
+        setState(() {
+          _recentCustomFoods.removeWhere((x) => x.id == item.id);
+          _allAvailableFoods.removeWhere((x) => x.id == item.id);
+          _searchResults.removeWhere((x) => x.id == item.id);
+          if (_selectedFood?.id == item.id) {
+            _selectedFood = null;
+          }
+        });
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Erro ao apagar alimento: $e')),
+          );
+        }
+      }
     }
   }
 
@@ -565,36 +653,61 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
         children: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: TextField(
-              controller: _searchController,
-              onChanged: _onSearchChanged,
-              autofocus: false,
-              decoration: InputDecoration(
-                hintText: 'Buscar alimento (ex: Frango)',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _searchController.text.isNotEmpty || _hasActiveFilters
-                    ? IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() {
-                            _selectedCategory = null;
-                            _selectedSource = null;
-                            _filterHighProtein = false;
-                            _filterLowCarb = false;
-                            _filterLowFat = false;
-                            _filterPrescribed = false;
-                          });
-                          _onSearchChanged('');
-                        },
-                      )
-                    : null,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _searchController,
+                    onChanged: _onSearchChanged,
+                    autofocus: false,
+                    decoration: InputDecoration(
+                      hintText: 'Buscar alimento (ex: Frango)',
+                      prefixIcon: const Icon(Icons.search),
+                      suffixIcon: _searchController.text.isNotEmpty || _hasActiveFilters
+                          ? IconButton(
+                              icon: const Icon(Icons.clear),
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() {
+                                  _selectedCategory = null;
+                                  _selectedSource = null;
+                                  _filterHighProtein = false;
+                                  _filterLowCarb = false;
+                                  _filterLowFat = false;
+                                  _filterPrescribed = false;
+                                });
+                                _onSearchChanged('');
+                              },
+                            )
+                          : null,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      filled: true,
+                      fillColor: context.colors.surface,
+                    ),
+                  ),
                 ),
-                filled: true,
-                fillColor: context.colors.surface,
-              ),
+                const SizedBox(width: 8),
+                InkWell(
+                  onTap: () async {
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const BarcodeScannerScreen(),
+                      ),
+                    );
+                  },
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.qr_code_scanner, color: Colors.white, size: 24),
+                  ),
+                ),
+              ],
             ),
           ),
           
@@ -711,9 +824,9 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
                                       const SizedBox(height: 2),
                                       Row(
                                         children: [
-                                          _macroMiniBadge('${item.energyKcal.toStringAsFixed(0)} kcal', AppColors.primary),
+                                          _macroMiniBadge('${item.energyKcal.toStringAsFixed(0)} kcal', Colors.deepOrange),
                                           const SizedBox(width: 4),
-                                          _macroMiniBadge('${item.proteinG.toStringAsFixed(1)}g P', Colors.orange),
+                                          _macroMiniBadge('${item.proteinG.toStringAsFixed(1)}g P', AppColors.macroProtein),
                                         ],
                                       ),
                                     ],
@@ -798,9 +911,9 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
                                       const SizedBox(height: 2),
                                       Row(
                                         children: [
-                                          _macroMiniBadge('${item.energyKcal.toStringAsFixed(0)} kcal', AppColors.primary),
+                                          _macroMiniBadge('${item.energyKcal.toStringAsFixed(0)} kcal', Colors.deepOrange),
                                           const SizedBox(width: 4),
-                                          _macroMiniBadge('${item.proteinG.toStringAsFixed(1)}g P', Colors.orange),
+                                          _macroMiniBadge('${item.proteinG.toStringAsFixed(1)}g P', AppColors.macroProtein),
                                         ],
                                       ),
                                     ],
@@ -853,10 +966,10 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
                                 const SizedBox(height: 4),
                                 Row(
                                   children: [
-                                    _macroInfoItem('Kcal', item.energyKcal, AppColors.primary),
-                                    _macroInfoItem('P', item.proteinG, Colors.orange),
-                                    _macroInfoItem('C', item.carbohydrateG, Colors.blue),
-                                    _macroInfoItem('G', item.lipidG, Colors.red),
+                                    _macroInfoItem('Kcal', item.energyKcal, Colors.deepOrange),
+                                    _macroInfoItem('P', item.proteinG, AppColors.macroProtein),
+                                    _macroInfoItem('C', item.carbohydrateG, AppColors.macroCarbs),
+                                    _macroInfoItem('G', item.lipidG, AppColors.macroFat),
                                   ],
                                 ),
                               ],
@@ -864,7 +977,23 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
                             trailing: _isFoodPrescribed(item)
                                 ? _prescribedBadge()
                                 : (item.source == 'custom' 
-                                    ? const Icon(Icons.person, size: 16, color: AppColors.primary)
+                                    ? Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          IconButton(
+                                            icon: const Icon(Icons.edit, size: 18, color: Colors.blue),
+                                            onPressed: () => _editCustomFood(item),
+                                            constraints: const BoxConstraints(),
+                                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                                          ),
+                                          IconButton(
+                                            icon: const Icon(Icons.delete, size: 18, color: AppColors.accentError),
+                                            onPressed: () => _confirmDeleteCustomFood(item),
+                                            constraints: const BoxConstraints(),
+                                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                                          ),
+                                        ],
+                                      )
                                     : null),
                             isThreeLine: true,
                             onTap: () {
@@ -911,10 +1040,10 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
                             const SizedBox(height: 4),
                             Row(
                               children: [
-                                _macroInfoItem('Kcal', item.energyKcal, AppColors.primary),
-                                _macroInfoItem('P', item.proteinG, Colors.orange),
-                                _macroInfoItem('C', item.carbohydrateG, Colors.blue),
-                                _macroInfoItem('G', item.lipidG, Colors.red),
+                                _macroInfoItem('Kcal', item.energyKcal, Colors.deepOrange),
+                                _macroInfoItem('P', item.proteinG, AppColors.macroProtein),
+                                _macroInfoItem('C', item.carbohydrateG, AppColors.macroCarbs),
+                                _macroInfoItem('G', item.lipidG, AppColors.macroFat),
                               ],
                             ),
                           ],
@@ -922,7 +1051,23 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
                         trailing: _isFoodPrescribed(item)
                             ? _prescribedBadge()
                             : (item.source == 'custom' 
-                                ? const Icon(Icons.person, size: 16, color: AppColors.primary)
+                                ? Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        icon: const Icon(Icons.edit, size: 18, color: Colors.blue),
+                                        onPressed: () => _editCustomFood(item),
+                                        constraints: const BoxConstraints(),
+                                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.delete, size: 18, color: AppColors.accentError),
+                                        onPressed: () => _confirmDeleteCustomFood(item),
+                                        constraints: const BoxConstraints(),
+                                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                                      ),
+                                    ],
+                                  )
                                 : null),
                         isThreeLine: true,
                         onTap: () {
@@ -1024,9 +1169,9 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
                       _calcMacroItem('Calorias', calcKcal, 'kcal', AppColors.primary),
-                      _calcMacroItem('Proteína', calcProt, 'g', Colors.orange),
-                      _calcMacroItem('Carbos', calcCarb, 'g', Colors.blue),
-                      _calcMacroItem('Gordura', calcFat, 'g', Colors.red),
+                      _calcMacroItem('Proteína', calcProt, 'g', AppColors.macroProtein),
+                      _calcMacroItem('Carbos', calcCarb, 'g', AppColors.macroCarbs),
+                      _calcMacroItem('Gordura', calcFat, 'g', AppColors.macroFat),
                     ],
                   ),
                 ],

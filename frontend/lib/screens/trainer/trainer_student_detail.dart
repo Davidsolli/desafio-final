@@ -526,7 +526,6 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
           ],
         ),
       ),
-      bottomNavigationBar: _buildBottomNav(),
     );
   }
 
@@ -964,20 +963,22 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                           title: 'Nenhum plano nutricional',
                           subtitle: 'Prescreva um plano para este aluno.',
                         ))
-                  : _buildNutritionAnalyticsView(),
+                  : _buildNutritionAnalyticsView(activeDiet),
         ),
       ],
     );
   }
 
-  Widget _buildNutritionAnalyticsView() {
+  Widget _buildNutritionAnalyticsView(Diet? activeDiet) {
     final nutritionService = context.read<NutritionService>();
     return TrainerNutritionAnalyticsTab(
       studentId: widget.studentId,
       nutritionService: nutritionService,
       studentWeightKg: _student?.weight,
+      activeDiet: activeDiet,
     );
   }
+
 
   Widget _buildDietPrescriptionView(Diet activeDiet) {
     final sortedMeals = List<DietMeal>.from(activeDiet.meals);
@@ -1124,12 +1125,40 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
     final currentCarbs = _studentLogbook?.totalCarbs ?? 0.0;
     final currentFats = _studentLogbook?.totalFats ?? 0.0;
 
-    // Agrupar entradas por refeição
-    final Map<String, List<DietLogbookEntry>> groupedEntries = {};
+    // Agrupar entradas por refeição ordenadas cronologicamente
+    final Map<String, List<DietLogbookEntry>> tempGroupedEntries = {};
     if (_studentLogbook != null) {
       for (final entry in _studentLogbook!.entries) {
-        groupedEntries.putIfAbsent(entry.mealName, () => []).add(entry);
+        tempGroupedEntries.putIfAbsent(entry.mealName, () => []).add(entry);
       }
+    }
+
+    const mealOrder = [
+      'Café da Manhã',
+      'Cafe da Manha',
+      'Lanche da Manhã',
+      'Almoço',
+      'Almoco',
+      'Lanche da Tarde',
+      'Lanche',
+      'Pré-Treino',
+      'Pós-Treino',
+      'Jantar',
+      'Ceia',
+    ];
+
+    final sortedMealKeys = tempGroupedEntries.keys.toList()..sort((a, b) {
+      int idxA = mealOrder.indexOf(a);
+      int idxB = mealOrder.indexOf(b);
+      if (idxA == -1) idxA = 999;
+      if (idxB == -1) idxB = 999;
+      if (idxA != idxB) return idxA.compareTo(idxB);
+      return a.compareTo(b);
+    });
+
+    final Map<String, List<DietLogbookEntry>> groupedEntries = {};
+    for (final key in sortedMealKeys) {
+      groupedEntries[key] = tempGroupedEntries[key]!;
     }
 
     return RefreshIndicator(
@@ -1239,6 +1268,8 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                 final entriesList = mealGroup.value;
                 final mealKcal = entriesList.fold<double>(0, (sum, item) => sum + item.kcal);
                 final mealProtein = entriesList.fold<double>(0, (sum, item) => sum + item.protein);
+                final mealCarbs = entriesList.fold<double>(0, (sum, item) => sum + item.carbs);
+                final mealFats = entriesList.fold<double>(0, (sum, item) => sum + item.fats);
 
                 return Container(
                   margin: const EdgeInsets.only(bottom: 12),
@@ -1261,12 +1292,21 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                                 ),
                           ),
                           Text(
-                            '${mealKcal.toStringAsFixed(0)} kcal • P: ${mealProtein.toStringAsFixed(1)}g',
-                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                  color: context.colors.textSecondary,
-                                  fontWeight: FontWeight.w600,
+                            '${mealKcal.toStringAsFixed(0)} kcal',
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                  color: AppColors.primary,
+                                  fontWeight: FontWeight.bold,
                                 ),
                           ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('P: ${mealProtein.toStringAsFixed(1)}g', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.colors.textSecondary)),
+                          Text('C: ${mealCarbs.toStringAsFixed(1)}g', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.colors.textSecondary)),
+                          Text('G: ${mealFats.toStringAsFixed(1)}g', style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.colors.textSecondary)),
                         ],
                       ),
                       const Divider(height: 16),
@@ -1478,7 +1518,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
             current: currentProtein,
             target: targetProtein,
             percent: proteinPercent,
-            color: const Color(0xFF4CAF50),
+            color: AppColors.macroProtein,
             unit: 'g',
           ),
           const SizedBox(height: 12),
@@ -1489,7 +1529,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
             current: currentCarbs,
             target: targetCarbs,
             percent: carbsPercent,
-            color: const Color(0xFFFFC107),
+            color: AppColors.macroCarbs,
             unit: 'g',
           ),
           const SizedBox(height: 12),
@@ -1500,7 +1540,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
             current: currentFats,
             target: targetFats,
             percent: fatsPercent,
-            color: const Color(0xFFE91E63),
+            color: AppColors.macroFat,
             unit: 'g',
           ),
         ],
@@ -2846,41 +2886,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
     }
   }
 
-  Widget _buildBottomNav() {
-    final trainerNavItems = [
-      {'icon': Icons.people_outlined, 'label': 'Alunos'},
-      {'icon': Icons.fitness_center_outlined, 'label': 'Fichas'},
-      {'icon': Icons.person_outline, 'label': 'Perfil'},
-    ];
 
-    return Container(
-      decoration: BoxDecoration(
-        color: context.colors.surface,
-        border: Border(top: BorderSide(color: context.colors.border, width: 1)),
-      ),
-      child: BottomNavigationBar(
-        currentIndex: 0,
-        onTap: (index) {
-          final routes = [
-            '/trainer/students',
-            '/trainer/sheets',
-            '/trainer/profile',
-          ];
-          context.go(routes[index]);
-        },
-        backgroundColor: context.colors.surface,
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: AppColors.primary,
-        unselectedItemColor: context.colors.textMuted,
-        items: trainerNavItems
-            .map((item) => BottomNavigationBarItem(
-                  icon: Icon(item['icon'] as IconData, size: 24),
-                  label: item['label'] as String,
-                ))
-            .toList(),
-      ),
-    );
-  }
 
   // ----- Aba de Passos -----
 

@@ -97,6 +97,39 @@ class DietService:
         foods = await self.repository.list_custom_foods(user_id, search)
         return [CustomFoodResponseDTO.model_validate(f) for f in foods]
 
+    async def update_custom_food(
+        self, food_id: UUID, user_id: UUID, dto: CreateCustomFoodDTO
+    ) -> CustomFoodResponseDTO:
+        """Atualiza um alimento personalizado do usuário."""
+        food = await self.repository.get_custom_food_by_id(food_id)
+        if not food:
+            raise DietNotFoundError("Alimento personalizado não encontrado.")
+        if food.user_id != user_id:
+            raise DietForbiddenError("Você só pode editar seus próprios alimentos personalizados.")
+
+        food.name = dto.name
+        food.category = dto.category
+        food.energy_kcal = dto.energy_kcal
+        food.protein_g = dto.protein_g
+        food.carbohydrate_g = dto.carbohydrate_g
+        food.lipid_g = dto.lipid_g
+        food.fiber_g = dto.fiber_g
+
+        updated = await self.repository.update_custom_food(food)
+        await self.repository.commit()
+        return CustomFoodResponseDTO.model_validate(updated)
+
+    async def delete_custom_food(self, food_id: UUID, user_id: UUID) -> None:
+        """Deleta um alimento personalizado do usuário."""
+        food = await self.repository.get_custom_food_by_id(food_id)
+        if not food:
+            raise DietNotFoundError("Alimento personalizado não encontrado.")
+        if food.user_id != user_id:
+            raise DietForbiddenError("Você só pode deletar seus próprios alimentos personalizados.")
+
+        await self.repository.delete_custom_food(food_id)
+        await self.repository.commit()
+
     # ------------------------------------------------------------------
     # Criar Dieta
     # ------------------------------------------------------------------

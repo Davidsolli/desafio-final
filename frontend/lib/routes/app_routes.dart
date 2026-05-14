@@ -192,13 +192,13 @@ class AppRoutes {
             path: '/trainer/profile',
             builder: (context, state) => const TrainerProfile(),
           ),
+          GoRoute(
+            path: '/trainer/student/:studentId',
+            builder: (context, state) => TrainerStudentDetail(
+              studentId: state.pathParameters['studentId'] ?? 's1',
+            ),
+          ),
         ],
-      ),
-      GoRoute(
-        path: '/trainer/student/:studentId',
-        builder: (context, state) => TrainerStudentDetail(
-          studentId: state.pathParameters['studentId'] ?? 's1',
-        ),
       ),
       ShellRoute(
         builder: (context, state, child) => AdminShell(child: child),

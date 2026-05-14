@@ -15,9 +15,13 @@ import '../../../services/nutrition_service.dart';
 import '../../../theme/app_colors.dart';
 import '../../../theme/theme_colors.dart';
 
+import 'package:flutter/gestures.dart';
+import '../../student/widgets/nutrition_dashboard_widgets.dart';
+
 // ---------------------------------------------------------------------------
 // WeightCalorieCorrelationChart — Correlação Peso vs. Calorias
 // ---------------------------------------------------------------------------
+
 
 /// Gráfico interativo que sobrepõe:
 ///   - Linha contínua: peso do aluno ao longo do tempo (referência estática)
@@ -592,18 +596,20 @@ class MealDistributionGauge extends StatelessWidget {
 // TrainerNutritionAnalyticsTab — Aba Completa de Estatísticas (Personal)
 // ---------------------------------------------------------------------------
 
-/// Widget de alto nível que agrega os dois gráficos analíticos em uma aba
+/// Widget de alto nível que agrega os gráficos analíticos em uma aba
 /// scrollável dentro do painel do Personal Trainer.
 class TrainerNutritionAnalyticsTab extends StatefulWidget {
   final String studentId;
   final NutritionService nutritionService;
   final double? studentWeightKg;
+  final Diet? activeDiet;
 
   const TrainerNutritionAnalyticsTab({
     super.key,
     required this.studentId,
     required this.nutritionService,
     this.studentWeightKg,
+    this.activeDiet,
   });
 
   @override
@@ -613,43 +619,143 @@ class TrainerNutritionAnalyticsTab extends StatefulWidget {
 
 class _TrainerNutritionAnalyticsTabState
     extends State<TrainerNutritionAnalyticsTab> {
-  NutritionAnalyticsSummary? _todayAnalytics;
-  bool _loadingToday = false;
+  NutritionAnalyticsSummary? _analytics;
+  bool _loading = false;
+  final PageController _chartPageController = PageController();
+  int _currentChartPage = 0;
 
   @override
   void initState() {
     super.initState();
-    _loadTodayMealDistribution();
+    _loadAnalytics();
   }
 
-  Future<void> _loadTodayMealDistribution() async {
-    setState(() => _loadingToday = true);
+  @override
+  void dispose() {
+    _chartPageController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadAnalytics() async {
+    setState(() => _loading = true);
     try {
       final today = DateTime.now();
+      final start = today.subtract(const Duration(days: 27));
       final data = await widget.nutritionService.getAnalyticsSummary(
-        startDate: today,
+        startDate: start,
         endDate: today,
         studentId: widget.studentId,
       );
       if (mounted) {
         setState(() {
-          _todayAnalytics = data;
-          _loadingToday = false;
+          _analytics = data;
+          _loading = false;
         });
       }
     } catch (_) {
-      if (mounted) setState(() => _loadingToday = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final todayDay = _todayAnalytics?.days.isNotEmpty == true
-        ? _todayAnalytics!.days.first
-        : null;
+    final targets = {
+      'calories': widget.activeDiet?.totalKcal ?? 2000.0,
+      'protein': widget.activeDiet?.totalProtein ?? 120.0,
+      'carbs': widget.activeDiet?.totalCarbs ?? 250.0,
+      'fat': widget.activeDiet?.totalFats ?? 55.0,
+    };
+
+    final now = DateTime.now();
+    NutritionAnalyticsDay? todayDay;
+    if (_analytics != null && _analytics!.days.isNotEmpty) {
+      try {
+        todayDay = _analytics!.days.firstWhere(
+          (d) => d.date.year == now.year && d.date.month == now.month && d.date.day == now.day,
+        );
+      } catch (_) {
+        todayDay = _analytics!.days.first;
+      }
+    }
+
+    final consumedKcal = todayDay?.totalKcal ?? 0.0;
+    final consumedProtein = todayDay?.totalProtein ?? 0.0;
+    final consumedCarbs = todayDay?.totalCarbs ?? 0.0;
+    final consumedFat = todayDay?.totalFats ?? 0.0;
+
+    // Constrói as listas para aderência semanal (últimos 7 dias)
+    final last7DaysCalories = List.filled(7, 0.0);
+    final last7DaysLogged = List.filled(7, false);
+
+    if (_analytics != null && _analytics!.days.isNotEmpty) {
+      for (int i = 0; i < 7; i++) {
+        final d = now.subtract(Duration(days: 6 - i));
+        try {
+          final dayData = _analytics!.days.firstWhere(
+            (x) => x.date.year == d.year && x.date.month == d.month && x.date.day == d.day,
+          );
+          last7DaysCalories[i] = dayData.totalKcal;
+          last7DaysLogged[i] = dayData.isFullyLogged;
+        } catch (_) {}
+      }
+    }
+
+    // Constrói as listas para heatmap (últimos 28 dias)
+    final last28DaysCalories = List.filled(28, 0.0);
+    final last28DaysLogged = List.filled(28, false);
+
+    if (_analytics != null && _analytics!.days.isNotEmpty) {
+      for (int i = 0; i < 28; i++) {
+        final d = now.subtract(Duration(days: 27 - i));
+        try {
+          final dayData = _analytics!.days.firstWhere(
+            (x) => x.date.year == d.year && x.date.month == d.month && x.date.day == d.day,
+          );
+          last28DaysCalories[i] = dayData.totalKcal;
+          last28DaysLogged[i] = dayData.isFullyLogged;
+        } catch (_) {}
+      }
+    }
+
+    final charts = <Widget>[
+      // Página 1: Roda de Macronutrientes
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        child: MacroNutrientWheel(
+          consumedKcal: consumedKcal,
+          targetKcal: targets['calories']!,
+          consumedProtein: consumedProtein,
+          targetProtein: targets['protein']!,
+          consumedCarbs: consumedCarbs,
+          targetCarbs: targets['carbs']!,
+          consumedFat: consumedFat,
+          targetFat: targets['fat']!,
+        ),
+      ),
+      // Página 2: Gráfico de Aderência Semanal
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        child: WeeklyAdherenceChart(
+          last7DaysCalories: last7DaysCalories,
+          last7DaysLogged: last7DaysLogged,
+          targetKcal: targets['calories']!,
+          referenceDate: now,
+        ),
+      ),
+      // Página 3: Heatmap de Consistência (28 dias)
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        child: NutritionStreakHeatmap(
+          last28DaysCalories: last28DaysCalories,
+          last28DaysLogged: last28DaysLogged,
+          targetKcal: targets['calories']!,
+          referenceDate: now,
+        ),
+      ),
+    ];
 
     return RefreshIndicator(
-      onRefresh: _loadTodayMealDistribution,
+      onRefresh: _loadAnalytics,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
@@ -691,16 +797,69 @@ class _TrainerNutritionAnalyticsTabState
             ),
             const SizedBox(height: 20),
 
-            // 1. Correlação Peso × Calorias
-            WeightCalorieCorrelationChart(
-              studentId: widget.studentId,
-              nutritionService: widget.nutritionService,
-              weightKg: widget.studentWeightKg,
-            ),
-            const SizedBox(height: 16),
+            // Carrossel Premium de Gráficos
+            if (_loading)
+              Container(
+                height: 260,
+                decoration: BoxDecoration(
+                  color: context.colors.surface,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: context.colors.border),
+                ),
+                child: const Center(child: CircularProgressIndicator()),
+              )
+            else
+              Column(
+                children: [
+                  SizedBox(
+                    height: 260,
+                    child: PageView(
+                      controller: _chartPageController,
+                      scrollBehavior: ScrollConfiguration.of(context).copyWith(
+                        dragDevices: {
+                          PointerDeviceKind.touch,
+                          PointerDeviceKind.mouse,
+                          PointerDeviceKind.trackpad,
+                        },
+                      ),
+                      onPageChanged: (page) => setState(() => _currentChartPage = page),
+                      children: charts,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  // Indicadores de página (dots)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(charts.length, (idx) {
+                      return GestureDetector(
+                        onTap: () {
+                          _chartPageController.animateToPage(
+                            idx,
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeInOut,
+                          );
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          margin: const EdgeInsets.symmetric(horizontal: 3),
+                          width: _currentChartPage == idx ? 16 : 6,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            color: _currentChartPage == idx
+                                ? AppColors.primary
+                                : context.colors.border,
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                ],
+              ),
+            const SizedBox(height: 24),
 
-            // 2. Distribuição por refeição (dados de hoje)
-            if (_loadingToday)
+            // Distribuição por refeição (dados de hoje)
+            if (_loading)
               Container(
                 height: 120,
                 decoration: BoxDecoration(

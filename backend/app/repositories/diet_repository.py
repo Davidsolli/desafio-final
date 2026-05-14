@@ -53,6 +53,23 @@ class DietRepository:
         result = await self.session.execute(stmt)
         return result.scalars().first()
 
+    async def update_custom_food(self, food: CustomFood) -> CustomFood:
+        """Atualiza os dados de um alimento personalizado."""
+        await self.session.flush()
+        await self.session.refresh(food)
+        return food
+
+    async def delete_custom_food(self, food_id: UUID) -> bool:
+        """Deleta um alimento personalizado pelo ID."""
+        stmt = select(CustomFood).where(CustomFood.id == food_id)
+        result = await self.session.execute(stmt)
+        food = result.scalars().first()
+        if not food:
+            return False
+        await self.session.delete(food)
+        await self.session.flush()
+        return True
+
     # ------------------------------------------------------------------
     # Catálogo TACO
     # ------------------------------------------------------------------
