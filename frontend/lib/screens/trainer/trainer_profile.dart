@@ -8,6 +8,7 @@ import '../../routes/app_routes.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/user_provider.dart';
 import '../../shared/widgets/change_password_dialog.dart';
+import '../../widgets/profile_photo_avatar.dart';
 
 class TrainerProfile extends StatefulWidget {
   const TrainerProfile({super.key});
@@ -182,26 +183,27 @@ class _TrainerProfileState extends State<TrainerProfile> {
     final initial = (user?.name.isNotEmpty == true) ? user!.name[0].toUpperCase() : '?';
     final name = user?.name ?? '';
     final email = user?.email ?? '';
+    final userId = user?.id ?? '';
 
     return Container(
-      color: context.colors.surface,
       padding: const EdgeInsets.symmetric(vertical: 20),
       child: Column(
         children: [
-          Container(
-            width: 70,
-            height: 70,
-            decoration: BoxDecoration(
+          ProfilePhotoAvatar(
+            userId: userId,
+            initial: initial,
+            size: 70,
+            isCircle: false,
+            borderRadius: 16,
+            badgeSize: 24,
+            badgeIconSize: 12,
+            emptyDecoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [AppColors.primary, AppColors.primaryLight],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
               borderRadius: BorderRadius.circular(16),
-            ),
-            child: Center(
-              child: Text(initial,
-                  style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white)),
             ),
           ),
           const SizedBox(height: 12),

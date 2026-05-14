@@ -4,6 +4,12 @@
 	<dict>
 		<key>CADisableMinimumFrameDurationOnPhone</key>
 		<true/>
+		<key>NSCameraUsageDescription</key>
+		<string>Precisamos da câmera para tirar sua foto de perfil.</string>
+		<key>NSPhotoLibraryUsageDescription</key>
+		<string>Precisamos acessar sua galeria para escolher uma foto de perfil.</string>
+		<key>NSPhotoLibraryAddUsageDescription</key>
+		<string>Precisamos salvar sua foto de perfil na galeria.</string>
 		<key>NSMicrophoneUsageDescription</key>
 		<string>Precisamos do microfone para registrar suas refeições por voz.</string>
 		<key>NSMotionUsageDescription</key>

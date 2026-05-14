@@ -92,6 +92,13 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
               child: Column(
                 children: [
                   Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 28),
+                    child: Image.asset(
+                      'assets/images/logo-2.png',
+                      height: 80,
+                    ),
+                  ),
+                  Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -205,7 +212,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 32),
                 ],
               ),
             );
