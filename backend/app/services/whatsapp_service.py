@@ -806,20 +806,7 @@ class WhatsAppService:
             return
 
         if pre_reg.state == "approved":
-            # Verificar se o código de convite ainda é válido
-            if pre_reg.invitation_code:
-                from app.services.invitation_service import InvitationService
-                inv_service = InvitationService(self.session)
-                is_valid = await inv_service.validate(pre_reg.invitation_code)
-                if not is_valid:
-                    # Código expirado — resetar para admin aprovar novamente
-                    pre_reg.state = "pending_approval"
-                    pre_reg.invitation_code = None
-                    await self.session.commit()
-                    await self.send_message(phone, _MESSAGES["invitation_expired"])
-                    return
-
-            # Código válido — verificar se usuário já se cadastrou
+            # 1. Verificar primeiro se o usuário já se cadastrou
             user = await self._find_user_by_phone(phone)
 
             if user is None and pre_reg.email:
@@ -839,11 +826,26 @@ class WhatsAppService:
                     )
 
             if user and user.is_active:
+                # Usuário já registrado — mostrar menu normalmente
                 await self.send_message(
                     phone, _MENU_REGISTERED.format(name=_first_name(user.name))
                 )
                 return
 
+            # 2. Usuário ainda não se cadastrou — verificar se o código ainda é válido
+            if pre_reg.invitation_code:
+                from app.services.invitation_service import InvitationService
+                inv_service = InvitationService(self.session)
+                is_valid = await inv_service.validate(pre_reg.invitation_code)
+                if not is_valid:
+                    # Código expirado — resetar para admin aprovar novamente
+                    pre_reg.state = "pending_approval"
+                    pre_reg.invitation_code = None
+                    await self.session.commit()
+                    await self.send_message(phone, _MESSAGES["invitation_expired"])
+                    return
+
+            # Código ainda válido — lembrar o usuário
             await self.send_message(
                 phone,
                 _MESSAGES["already_approved"].format(code=pre_reg.invitation_code),
