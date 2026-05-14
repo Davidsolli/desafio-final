@@ -48,7 +48,21 @@ class NutritionProvider extends ChangeNotifier {
   bool get analyticsLoading => _analyticsLoading;
   String? get analyticsError => _analyticsError;
 
-  /// Retorna as entradas agrupadas por meal_name para facilitar a listagem
+  static const _mealOrder = [
+    'Café da Manhã',
+    'Cafe da Manha',
+    'Lanche da Manhã',
+    'Almoço',
+    'Almoco',
+    'Lanche da Tarde',
+    'Lanche',
+    'Pré-Treino',
+    'Pós-Treino',
+    'Jantar',
+    'Ceia',
+  ];
+
+  /// Retorna as entradas agrupadas por meal_name ordenadas cronologicamente
   Map<String, List<DietLogbookEntry>> get entriesByMeal {
     final map = <String, List<DietLogbookEntry>>{};
     if (_currentLogbook == null) return map;
@@ -59,7 +73,21 @@ class NutritionProvider extends ChangeNotifier {
       }
       map[entry.mealName]!.add(entry);
     }
-    return map;
+
+    final sortedKeys = map.keys.toList()..sort((a, b) {
+      int idxA = _mealOrder.indexOf(a);
+      int idxB = _mealOrder.indexOf(b);
+      if (idxA == -1) idxA = 999;
+      if (idxB == -1) idxB = 999;
+      if (idxA != idxB) return idxA.compareTo(idxB);
+      return a.compareTo(b);
+    });
+
+    final sortedMap = <String, List<DietLogbookEntry>>{};
+    for (var key in sortedKeys) {
+      sortedMap[key] = map[key]!;
+    }
+    return sortedMap;
   }
 
   /// Calcula a meta calórica e macros com base na dieta ativa.
@@ -224,6 +252,72 @@ class NutritionProvider extends ChangeNotifier {
       rethrow;
     } catch (e) {
       _error = 'Erro ao criar alimento: ${e.toString()}';
+      notifyListeners();
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  /// Atualiza um alimento personalizado no servidor
+  Future<CustomFood> updateCustomFood({
+    required String customFoodId,
+    required String name,
+    String? category,
+    required double energyKcal,
+    required double proteinG,
+    required double carbohydrateG,
+    required double lipidG,
+    double fiberG = 0.0,
+  }) async {
+    try {
+      _setLoading(true);
+      _error = null;
+      final food = await _nutritionService.updateCustomFood(
+        customFoodId: customFoodId,
+        name: name,
+        category: category,
+        energyKcal: energyKcal,
+        proteinG: proteinG,
+        carbohydrateG: carbohydrateG,
+        lipidG: lipidG,
+        fiberG: fiberG,
+      );
+      return food;
+    } on NetworkException catch (e) {
+      _error = 'Erro de conexão: ${e.message}';
+      notifyListeners();
+      rethrow;
+    } on ApiException catch (e) {
+      _error = e.message;
+      notifyListeners();
+      rethrow;
+    } catch (e) {
+      _error = 'Erro ao atualizar alimento: ${e.toString()}';
+      notifyListeners();
+      rethrow;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  /// Deleta um alimento personalizado no servidor
+  Future<void> deleteCustomFood(String customFoodId) async {
+    try {
+      _setLoading(true);
+      _error = null;
+      await _nutritionService.deleteCustomFood(customFoodId);
+      notifyListeners();
+    } on NetworkException catch (e) {
+      _error = 'Erro de conexão: ${e.message}';
+      notifyListeners();
+      rethrow;
+    } on ApiException catch (e) {
+      _error = e.message;
+      notifyListeners();
+      rethrow;
+    } catch (e) {
+      _error = 'Erro ao deletar alimento: ${e.toString()}';
       notifyListeners();
       rethrow;
     } finally {
