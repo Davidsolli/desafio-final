@@ -8,6 +8,7 @@ import '../../../models/diet_models.dart';
 import '../../../services/nutrition_service.dart';
 import '../../../services/api_client.dart';
 import 'create_custom_food_dialog.dart';
+import '../barcode_scanner_screen.dart';
 
 class FoodSearchModal extends StatefulWidget {
   final void Function(FoodCatalogItem food, double quantity, String meal)? onFoodSelected;
@@ -565,36 +566,61 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
         children: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: TextField(
-              controller: _searchController,
-              onChanged: _onSearchChanged,
-              autofocus: false,
-              decoration: InputDecoration(
-                hintText: 'Buscar alimento (ex: Frango)',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _searchController.text.isNotEmpty || _hasActiveFilters
-                    ? IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() {
-                            _selectedCategory = null;
-                            _selectedSource = null;
-                            _filterHighProtein = false;
-                            _filterLowCarb = false;
-                            _filterLowFat = false;
-                            _filterPrescribed = false;
-                          });
-                          _onSearchChanged('');
-                        },
-                      )
-                    : null,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _searchController,
+                    onChanged: _onSearchChanged,
+                    autofocus: false,
+                    decoration: InputDecoration(
+                      hintText: 'Buscar alimento (ex: Frango)',
+                      prefixIcon: const Icon(Icons.search),
+                      suffixIcon: _searchController.text.isNotEmpty || _hasActiveFilters
+                          ? IconButton(
+                              icon: const Icon(Icons.clear),
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() {
+                                  _selectedCategory = null;
+                                  _selectedSource = null;
+                                  _filterHighProtein = false;
+                                  _filterLowCarb = false;
+                                  _filterLowFat = false;
+                                  _filterPrescribed = false;
+                                });
+                                _onSearchChanged('');
+                              },
+                            )
+                          : null,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      filled: true,
+                      fillColor: context.colors.surface,
+                    ),
+                  ),
                 ),
-                filled: true,
-                fillColor: context.colors.surface,
-              ),
+                const SizedBox(width: 8),
+                InkWell(
+                  onTap: () async {
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const BarcodeScannerScreen(),
+                      ),
+                    );
+                  },
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.qr_code_scanner, color: Colors.white, size: 24),
+                  ),
+                ),
+              ],
             ),
           ),
           

@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
@@ -92,6 +93,10 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _isSendingAudio = false;
   Timer? _recordingTimer;
   int _recordingSeconds = 0;
+
+  // ── Foto ───────────────────────────────────────────────────────────────────
+  final ImagePicker _imagePicker = ImagePicker();
+  bool _isSendingPhoto = false;
 
   @override
   void initState() {
@@ -490,6 +495,139 @@ class _ChatScreenState extends State<ChatScreen> {
     _scrollToBottom();
   }
 
+  // ── Foto ───────────────────────────────────────────────────────────────────
+
+  Future<void> _sendPhoto() async {
+    // Captura antes de qualquer await para evitar uso de context após gap async
+    final chatService = context.read<ChatService>();
+
+    // Abre câmera ou galeria via bottom sheet (usa context antes de qualquer await)
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt),
+              title: const Text('Tirar foto'),
+              onTap: () => Navigator.pop(ctx, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text('Escolher da galeria'),
+              onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (source == null || !mounted) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    final token = prefs.getString('jwt_token');
+    if (token == null) return;
+
+    XFile? picked;
+    try {
+      picked = await _imagePicker.pickImage(
+        source: source,
+        imageQuality: 80,
+        maxWidth: 1280,
+      );
+    } catch (e) {
+      debugPrint('[chat] Erro ao abrir câmera/galeria: $e');
+      return;
+    }
+
+    if (picked == null) return;
+
+    final imageBytes = await picked.readAsBytes();
+    final filename = picked.name.isNotEmpty ? picked.name : 'foto.jpg';
+
+    setState(() {
+      _isSendingPhoto = true;
+      _isTyping = true;
+      _typingStatus = 'Analisando foto...';
+      _messages.add(_ChatMsg.text(
+        role: 'user',
+        text: '📸 Analisando foto...',
+        time: _formatTime(),
+      ));
+    });
+    _scrollToBottom();
+
+    try {
+      final response = await chatService.sendPhoto(
+        imageBytes: imageBytes,
+        filename: filename,
+        token: token,
+        conversationId: _conversationId,
+      );
+
+      if (response.conversationId.isNotEmpty) {
+        _conversationId = response.conversationId;
+        await _persistConversationId(response.conversationId);
+      }
+
+      // Atualiza balão do usuário com a descrição
+      setState(() {
+        final idx = _messages.lastIndexWhere((m) => m.role == 'user');
+        if (idx >= 0) {
+          _messages[idx] = _ChatMsg.text(
+            role: 'user',
+            text: '📸 ${response.description}',
+            time: _messages[idx].time,
+          );
+        }
+      });
+
+      setState(() {
+        _isTyping = false;
+        _isSendingPhoto = false;
+        if (response.foodsLogged.isNotEmpty) {
+          for (final food in response.foodsLogged) {
+            _messages.add(_ChatMsg.food(
+              food: food,
+              transcription: response.description,
+              time: _formatTime(),
+            ));
+          }
+        } else {
+          _messages.add(_ChatMsg.text(
+            role: 'assistant',
+            text: response.content,
+            time: _formatTime(),
+          ));
+        }
+      });
+    } on ApiException catch (e) {
+      setState(() {
+        _isTyping = false;
+        _isSendingPhoto = false;
+        _messages.add(_ChatMsg.text(
+          role: 'assistant',
+          text: '❌ ${e.message}',
+          time: _formatTime(),
+        ));
+      });
+    } catch (e) {
+      setState(() {
+        _isTyping = false;
+        _isSendingPhoto = false;
+        _messages.add(_ChatMsg.text(
+          role: 'assistant',
+          text: '❌ Falha ao processar a foto. Tente novamente.',
+          time: _formatTime(),
+        ));
+      });
+    }
+
+    _scrollToBottom();
+  }
+
   // ── Utilitários ────────────────────────────────────────────────────────────
 
   String _formatTime() => _formatTimeFrom(DateTime.now());
@@ -675,10 +813,39 @@ class _ChatScreenState extends State<ChatScreen> {
                   // Botão microfone
                   _MicButton(
                     isRecording: _isRecording,
-                    isBusy: _isTyping || _isSendingAudio,
+                    isBusy: _isTyping || _isSendingAudio || _isSendingPhoto,
                     onTapDown: _startRecording,
                     onTapUp: _stopAndSendRecording,
                     onTapCancel: _cancelRecording,
+                  ),
+
+                  const SizedBox(width: 6),
+
+                  // Botão câmera
+                  GestureDetector(
+                    onTap: (!_isTyping && !_isRecording && !_isSendingAudio && !_isSendingPhoto)
+                        ? _sendPhoto
+                        : null,
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: (!_isTyping && !_isRecording && !_isSendingAudio && !_isSendingPhoto)
+                            ? AppColors.primary
+                            : Colors.grey.shade400,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: _isSendingPhoto
+                          ? const Padding(
+                              padding: EdgeInsets.all(12),
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Icon(Icons.camera_alt,
+                              color: Colors.white, size: 20),
+                    ),
                   ),
 
                   const SizedBox(width: 8),
@@ -687,7 +854,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   Expanded(
                     child: TextField(
                       controller: _messageController,
-                      enabled: _isConnected && !_isTyping && !_isRecording && !_isSendingAudio,
+                      enabled: _isConnected && !_isTyping && !_isRecording && !_isSendingAudio && !_isSendingPhoto,
                       decoration: InputDecoration(
                         hintText: _isRecording
                             ? 'Gravando...'
@@ -721,7 +888,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   // Botão enviar
                   Container(
                     decoration: BoxDecoration(
-                      color: (_isConnected && !_isTyping && !_isRecording && !_isSendingAudio)
+                      color: (_isConnected && !_isTyping && !_isRecording && !_isSendingAudio && !_isSendingPhoto)
                           ? AppColors.primary
                           : Colors.grey,
                       borderRadius: BorderRadius.circular(10),
@@ -730,7 +897,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       icon: const Icon(Icons.send,
                           color: Colors.white, size: 20),
                       onPressed:
-                          (_isConnected && !_isTyping && !_isRecording && !_isSendingAudio)
+                          (_isConnected && !_isTyping && !_isRecording && !_isSendingAudio && !_isSendingPhoto)
                               ? _sendMessage
                               : null,
                     ),

@@ -79,119 +79,55 @@ async def init_db() -> None:
     logger = logging.getLogger(__name__)
 
     engine = _get_engine()
+
+    async def run_sql(sql: str) -> None:
+        async with engine.begin() as conn:
+            await conn.execute(text(sql))
+
+    # 1. Criar extensão pgvector
+    try:
+        await run_sql("CREATE EXTENSION IF NOT EXISTS vector;")
+        logger.info("✓ Extensão pgvector habilitada com sucesso")
+    except Exception as exc:
+        logger.warning("Erro ao habilitar pgvector: %s", exc)
+
+    # 2. Criar todas as tabelas
     async with engine.begin() as conn:
-        # 1. Criar extensão pgvector antes de criar as tabelas
-        try:
-            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
-            logger.info("✓ Extensão pgvector habilitada com sucesso")
-        except Exception as exc:
-            logger.warning("Erro ao habilitar pgvector (pode já estar ativo): %s", exc)
-
-        # 2. Criar todas as tabelas PRIMEIRO
         await conn.run_sync(Base.metadata.create_all)
-        logger.info("✓ Todas as tabelas criadas/verificadas com sucesso")
+    logger.info("✓ Todas as tabelas criadas/verificadas com sucesso")
 
-        # 3. Migração manual: Adicionar colunas de dados corporais e FCM à tabela users
-        alters = [
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS weight DOUBLE PRECISION",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS height DOUBLE PRECISION",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS age INTEGER",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS gender VARCHAR(10)",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_whatsapp VARCHAR(20)",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS goal_type VARCHAR(50)",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS theme_preference VARCHAR(20) DEFAULT NULL",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS fcm_token VARCHAR(500)",
-        ]
-        for alter in alters:
-            try:
-                await conn.execute(text(alter))
-            except Exception as exc:
-                logger.warning("Erro ao executar ALTER TABLE users: %s", exc)
-        logger.info("✓ Colunas de dados corporais e FCM verificadas/adicionadas em users")
-
-        # 4. Migração: Adaptar WorkoutSheets para usar WorkoutProgram
-        alters_workout = [
-            "ALTER TABLE workout_sheets ADD COLUMN IF NOT EXISTS workout_program_id UUID",
-            "ALTER TABLE workout_sheets ADD COLUMN IF NOT EXISTS \"order\" INTEGER DEFAULT 1",
-            "ALTER TABLE workout_sheets ALTER COLUMN day_of_week DROP NOT NULL",
-            "ALTER TABLE workout_sheets ALTER COLUMN user_id DROP NOT NULL",
-            "ALTER TABLE workout_sheets ALTER COLUMN personal_trainer_id DROP NOT NULL",
-        ]
-        for alter in alters_workout:
-            try:
-                await conn.execute(text(alter))
-            except Exception as exc:
-                logger.warning("Erro ao executar ALTER TABLE workout_sheets: %s", exc)
-        logger.info("✓ Colunas atualizadas em workout_sheets para suportar WorkoutProgram")
-
-        # 5. Migração: Adicionar water_target_ml ao diets se não existir
-        alters_diets = [
-            "ALTER TABLE diets ADD COLUMN IF NOT EXISTS water_target_ml INTEGER DEFAULT NULL",
-        ]
-        for alter in alters_diets:
-            try:
-                await conn.execute(text(alter))
-            except Exception as exc:
-                logger.warning("Erro ao executar ALTER TABLE diets: %s", exc)
-        logger.info("✓ Colunas updated em diets para suportar water_target_ml")
-
-        # 6. Migração: converter colunas de password_reset_tokens para TIMESTAMPTZ
-        token_col_alters = [
-            "ALTER TABLE password_reset_tokens ALTER COLUMN expires_at TYPE TIMESTAMPTZ USING expires_at AT TIME ZONE 'UTC'",
-            "ALTER TABLE password_reset_tokens ALTER COLUMN used_at TYPE TIMESTAMPTZ USING used_at AT TIME ZONE 'UTC'",
-            "ALTER TABLE password_reset_tokens ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at AT TIME ZONE 'UTC'",
-        ]
-        for alter in token_col_alters:
-            try:
-                await conn.execute(text(alter))
-            except Exception:
-                pass  # tabela ainda não existe ou coluna já é TIMESTAMPTZ
-
-        # Migração: contexto da escalação na conversa de chat (chatbot Etapa 3)
+    # 3. Migrações — cada ALTER em transação própria para não abortar as demais
+    migrations = [
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS weight DOUBLE PRECISION",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS height DOUBLE PRECISION",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS age INTEGER",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS gender VARCHAR(10)",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_whatsapp VARCHAR(20)",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS goal_type VARCHAR(50)",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS theme_preference VARCHAR(20) DEFAULT NULL",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS fcm_token VARCHAR(500)",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS daily_step_goal INTEGER NOT NULL DEFAULT 1000",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS timezone VARCHAR(50) DEFAULT NULL",
+        "ALTER TABLE workout_sheets ADD COLUMN IF NOT EXISTS workout_program_id UUID",
+        "ALTER TABLE workout_sheets ADD COLUMN IF NOT EXISTS \"order\" INTEGER DEFAULT 1",
+        "ALTER TABLE workout_sheets ALTER COLUMN day_of_week DROP NOT NULL",
+        "ALTER TABLE workout_sheets ALTER COLUMN user_id DROP NOT NULL",
+        "ALTER TABLE workout_sheets ALTER COLUMN personal_trainer_id DROP NOT NULL",
+        "ALTER TABLE diets ADD COLUMN IF NOT EXISTS water_target_ml INTEGER DEFAULT NULL",
+        "ALTER TABLE password_reset_tokens ALTER COLUMN expires_at TYPE TIMESTAMPTZ USING expires_at AT TIME ZONE 'UTC'",
+        "ALTER TABLE password_reset_tokens ALTER COLUMN used_at TYPE TIMESTAMPTZ USING used_at AT TIME ZONE 'UTC'",
+        "ALTER TABLE password_reset_tokens ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at AT TIME ZONE 'UTC'",
+        "ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS escalation_data JSON",
+        "ALTER TABLE step_logs ADD COLUMN IF NOT EXISTS handicap_level INTEGER DEFAULT NULL",
+        "ALTER TABLE notification_preferences ADD COLUMN IF NOT EXISTS student_inactivity_enabled BOOLEAN NOT NULL DEFAULT TRUE",
+    ]
+    for sql in migrations:
         try:
-            await conn.execute(
-                text(
-                    "ALTER TABLE chat_conversations "
-                    "ADD COLUMN IF NOT EXISTS escalation_data JSON"
-                )
-            )
-            logger.info("✓ Coluna escalation_data verificada/adicionada em chat_conversations")
+            await run_sql(sql)
         except Exception as exc:
-            logger.warning(
-                "Erro ao adicionar escalation_data em chat_conversations: %s", exc
-            )
-
-        # Migração: meta diária de passos no usuário e nível de proteção da sequência no step_log
-        alters_steps = [
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS daily_step_goal INTEGER NOT NULL DEFAULT 1000",
-            "ALTER TABLE step_logs ADD COLUMN IF NOT EXISTS handicap_level INTEGER DEFAULT NULL",
-        ]
-        for alter in alters_steps:
-            try:
-                await conn.execute(text(alter))
-            except Exception as exc:
-                logger.warning("Erro ao executar migração de passos: %s", exc)
-        logger.info("✓ Colunas de passos (daily_step_goal, handicap_level) verificadas/adicionadas")
-
-        # Migração: fuso horário do usuário
-        try:
-            await conn.execute(text(
-                "ALTER TABLE users ADD COLUMN IF NOT EXISTS timezone VARCHAR(50) DEFAULT NULL"
-            ))
-            logger.info("✓ Coluna timezone verificada/adicionada em users")
-        except Exception as exc:
-            logger.warning("Erro ao adicionar timezone em users: %s", exc)
-
-        # Migração: notificação de inatividade de alunos em notification_preferences
-        try:
-            await conn.execute(text(
-                "ALTER TABLE notification_preferences "
-                "ADD COLUMN IF NOT EXISTS student_inactivity_enabled BOOLEAN NOT NULL DEFAULT TRUE"
-            ))
-            logger.info("✓ Coluna student_inactivity_enabled verificada/adicionada em notification_preferences")
-        except Exception as exc:
-            logger.warning("Erro ao adicionar student_inactivity_enabled em notification_preferences: %s", exc)
+            logger.warning("Migração ignorada (%s): %s", sql[:60], exc)
+    logger.info("✓ Migrações aplicadas")
 
     # Popular Banco de Dados Inicial (Seed)
     import sys
