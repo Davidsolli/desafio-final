@@ -121,6 +121,13 @@ async def init_db() -> None:
         "ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS escalation_data JSON",
         "ALTER TABLE step_logs ADD COLUMN IF NOT EXISTS handicap_level INTEGER DEFAULT NULL",
         "ALTER TABLE notification_preferences ADD COLUMN IF NOT EXISTS student_inactivity_enabled BOOLEAN NOT NULL DEFAULT TRUE",
+        # Migration 005: invitation TTL + campos de pagamento no pré-cadastro WhatsApp
+        "ALTER TABLE invitations ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP",
+        "UPDATE invitations SET expires_at = created_at + INTERVAL '72 hours' WHERE expires_at IS NULL",
+        "ALTER TABLE whatsapp_pre_registrations ADD COLUMN IF NOT EXISTS selected_plan_id UUID",
+        "ALTER TABLE whatsapp_pre_registrations ADD COLUMN IF NOT EXISTS payment_status VARCHAR(30) NOT NULL DEFAULT 'not_required'",
+        "ALTER TABLE whatsapp_pre_registrations ADD COLUMN IF NOT EXISTS pre_reg_payment_id VARCHAR(100)",
+        "ALTER TABLE whatsapp_pre_registrations ADD COLUMN IF NOT EXISTS checkout_url TEXT",
     ]
     for sql in migrations:
         try:
