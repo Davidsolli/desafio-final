@@ -750,13 +750,33 @@ class WhatsAppService:
             return
 
         if pre_reg.state == "approved":
-            # Usuário pode já ter completado o cadastro no app — verifica
+            # 1. Tenta achar pelo telefone (com normalização)
             user = await self._find_user_by_phone(phone)
+
+            # 2. Fallback: busca pelo email do pré-cadastro
+            if user is None and pre_reg.email:
+                result = await self.session.execute(
+                    select(User).where(
+                        User.email == pre_reg.email,
+                        User.is_active == True,
+                    ).limit(1)
+                )
+                user = result.scalar_one_or_none()
+                if user:
+                    # Salva o número para futuras buscas (auto-link)
+                    user.phone_whatsapp = phone
+                    await self.session.commit()
+                    logger.info(
+                        "phone_whatsapp atualizado via pre_reg email: user=%s phone=%s",
+                        user.id, phone,
+                    )
+
             if user and user.is_active:
                 await self.send_message(
                     phone, _MENU_REGISTERED.format(name=_first_name(user.name))
                 )
                 return
+
             await self.send_message(
                 phone,
                 _MESSAGES["already_approved"].format(code=pre_reg.invitation_code),
@@ -790,17 +810,20 @@ class WhatsAppService:
         if not normalized:
             return None
 
-        # Tenta múltiplos formatos pois o app pode salvar com ou sem DDI 55
+        # Variantes: com e sem DDI 55
         variants: list[str] = [normalized]
         if normalized.startswith("55") and len(normalized) >= 12:
-            variants.append(normalized[2:])   # sem DDI: 11999999999
+            variants.append(normalized[2:])
         elif len(normalized) in (10, 11):
-            variants.append(f"55{normalized}")  # com DDI: 5511999999999
+            variants.append(f"55{normalized}")
 
-        from sqlalchemy import or_
+        # regexp_replace remove tudo que não é dígito do valor armazenado
+        # para comparar corretamente com +55 11 9xxxx-xxxx, (11)9xxxx-xxxx, etc.
+        from sqlalchemy import func, or_
+        stripped = func.regexp_replace(User.phone_whatsapp, "[^0-9]", "", "g")
         result = await self.session.execute(
             select(User).where(
-                or_(*[User.phone_whatsapp == v for v in variants])
+                or_(*[stripped == v for v in variants])
             ).limit(1)
         )
         return result.scalar_one_or_none()
