@@ -17,6 +17,7 @@ from app.models.user import User
 from app.models.whatsapp_pre_registration import WhatsAppPreRegistration
 from app.dtos.invitation_dto import (
     ApproveWhatsAppDTO,
+    ConfirmPreRegPaymentDTO,
     GenerateInvitationDTO,
     ValidateInvitationDTO,
     InvitationResponseDTO,
@@ -180,10 +181,14 @@ async def list_whatsapp_pending(
             detail="Apenas admins podem ver pré-cadastros pendentes",
         )
 
+    from sqlalchemy import or_
     result = await session.execute(
         select(WhatsAppPreRegistration).where(
-            WhatsAppPreRegistration.state == "pending_approval"
-        )
+            or_(
+                WhatsAppPreRegistration.state == "pending_approval",
+                WhatsAppPreRegistration.state == "awaiting_payment",
+            )
+        ).order_by(WhatsAppPreRegistration.created_at.desc())
     )
     rows = result.scalars().all()
 
@@ -265,3 +270,64 @@ async def approve_whatsapp_registration(
     await whatsapp_service.send_approval_code(dto.phone, invitation.code)
 
     return invitation
+
+
+@router.post(
+    "/whatsapp-confirm-payment",
+    status_code=status.HTTP_200_OK,
+    summary="Confirmar pagamento de pré-cadastro manualmente (admin) — fallback de webhook",
+)
+async def confirm_prereg_payment(
+    dto: ConfirmPreRegPaymentDTO,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Fallback para quando o webhook da InfinitePay não chega.
+    Transiciona o pré-cadastro de 'awaiting_payment' para 'pending_approval'.
+    Envia mensagem WhatsApp confirmando o pagamento ao usuário.
+    """
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Apenas admins podem confirmar pagamentos",
+        )
+
+    result = await session.execute(
+        select(WhatsAppPreRegistration).where(
+            WhatsAppPreRegistration.id == dto.pre_reg_id,
+        )
+    )
+    pre_reg = result.scalar_one_or_none()
+
+    if not pre_reg:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Pré-cadastro não encontrado",
+        )
+
+    if pre_reg.state not in ("awaiting_payment", "pending_approval"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Pré-cadastro está em estado '{pre_reg.state}', não é possível confirmar pagamento",
+        )
+
+    if pre_reg.payment_status == "confirmed":
+        return {"status": "already_confirmed", "pre_reg_id": str(dto.pre_reg_id)}
+
+    pre_reg.payment_status = "confirmed"
+    pre_reg.state = "pending_approval"
+    await session.commit()
+
+    whatsapp_service = WhatsAppService(session)
+    from app.services.whatsapp_service import _MESSAGES
+    await whatsapp_service.send_message(
+        pre_reg.phone,
+        _MESSAGES["payment_confirmed_user"],
+    )
+
+    return {
+        "status": "confirmed",
+        "pre_reg_id": str(dto.pre_reg_id),
+        "message": "Pagamento confirmado — pré-cadastro disponível para aprovação",
+    }

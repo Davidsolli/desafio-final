@@ -104,13 +104,22 @@ class ApproveWhatsAppDTO(BaseModel):
 class WhatsAppPendingItemDTO(BaseModel):
     """Item de pré-cadastro WhatsApp pendente de aprovação."""
 
+    id: UUID
     phone: str
     name: Optional[str]
     email: Optional[str]
+    state: str
     created_at: datetime
     payment_status: Optional[str] = None
+    checkout_url: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ConfirmPreRegPaymentDTO(BaseModel):
+    """DTO para confirmar manualmente o pagamento de um pré-cadastro (fallback de webhook)."""
+
+    pre_reg_id: UUID = Field(description="ID do WhatsAppPreRegistration")
 
 
 class WhatsAppPendingListDTO(BaseModel):
