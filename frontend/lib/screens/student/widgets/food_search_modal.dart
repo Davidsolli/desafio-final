@@ -1230,7 +1230,7 @@ class _FoodSearchModalState extends State<FoodSearchModal> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
                 onPressed: _saveEntry,
-                child: const Text('Adicionar ao Diário', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                child: Text(widget.isTrainer ? 'Adicionar à Dieta' : 'Adicionar ao Diário', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               ),
             ),
           ],

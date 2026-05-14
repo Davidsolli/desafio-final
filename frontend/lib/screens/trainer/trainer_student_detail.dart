@@ -2566,250 +2566,87 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
     }
   }
 
-  Future<void> _showAddMealDialog(Diet activeDiet) async {
-    final nutritionService = context.read<NutritionService>();
-    final mealNameController = TextEditingController();
-    final mealDescController = TextEditingController();
-    final mealTimeController = TextEditingController();
-    final editableItems = <_EditableDietItem>[];
-
-    final shouldSave = await showDialog<bool>(
+  void _showAddMealDialog(Diet activeDiet) {
+    showModalBottomSheet(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setModalState) => AlertDialog(
-          backgroundColor: context.colors.surface,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Text('Adicionar Nova Refeição', style: TextStyle(fontWeight: FontWeight.bold)),
-          content: SizedBox(
-            width: 520,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  TextField(
-                    controller: mealNameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Nome da refeição',
-                      hintText: 'Ex: Café da Tarde, Lanche pré-treino...',
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: mealDescController,
-                    decoration: const InputDecoration(
-                      labelText: 'Descrição / Observações da refeição (Opcional)',
-                      hintText: 'Ex: Comer devagar, mastigar bem...',
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: mealTimeController,
-                    decoration: const InputDecoration(
-                      labelText: 'Horário (HH:MM)',
-                      hintText: 'Ex: 16:30',
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      showModalBottomSheet(
-                        context: context,
-                        isScrollControlled: true,
-                        backgroundColor: Colors.transparent,
-                        builder: (_) => FractionallySizedBox(
-                          heightFactor: 0.9,
-                          child: FoodSearchModal(
-                            isTrainer: true,
-                            activeDiet: activeDiet,
-                            onFoodSelected: (food, quantity, meal) {
-                              setModalState(() {
-                                editableItems.add(
-                                  _EditableDietItem(
-                                    foodId: food.source == 'taco' ? int.tryParse(food.id) : null,
-                                    customFoodId: food.source == 'custom' ? food.id : null,
-                                    foodName: food.name,
-                                    quantityG: quantity,
-                                  ),
-                                );
-                              });
-                            },
-                          ),
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.search_rounded),
-                    label: const Text('Buscar no Catálogo Completo'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  const Divider(),
-                  const SizedBox(height: 8),
-                  if (editableItems.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 20),
-                      child: Center(
-                        child: Text(
-                          'Nenhum alimento adicionado ainda.',
-                          style: TextStyle(color: context.colors.textMuted, fontSize: 13),
-                        ),
-                      ),
-                    )
-                  else
-                    ...editableItems.asMap().entries.map(
-                      (entry) {
-                        final index = entry.key;
-                        final item = entry.value;
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 6),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      item.foodName,
-                                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  SizedBox(
-                                    width: 90,
-                                    child: TextFormField(
-                                      initialValue: item.quantityG.toStringAsFixed(0),
-                                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                      decoration: const InputDecoration(
-                                        suffixText: 'g',
-                                        contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                        isDense: true,
-                                      ),
-                                      onChanged: (v) => item.quantityG = double.tryParse(v) ?? item.quantityG,
-                                    ),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.delete_outline, color: AppColors.accentError),
-                                    onPressed: () => setModalState(() => editableItems.removeAt(index)),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              TextFormField(
-                                initialValue: item.observations ?? '',
-                                decoration: const InputDecoration(
-                                  hintText: 'Descrição/Obs do alimento (ex: grelhado, picado)',
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                  isDense: true,
-                                ),
-                                style: const TextStyle(fontSize: 12),
-                                onChanged: (v) => item.observations = v.trim().isEmpty ? null : v.trim(),
-                              ),
-                              const SizedBox(height: 4),
-                              const Divider(height: 1),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: Text('Cancelar', style: TextStyle(color: context.colors.textMuted)),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                if (mealNameController.text.trim().isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Por favor, informe o nome da refeição.')),
-                  );
-                  return;
-                }
-                Navigator.of(ctx).pop(true);
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              child: const Text('Adicionar'),
-            ),
-          ],
-        ),
-      ),
-    );
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => FoodSearchModal(
+        isTrainer: true,
+        activeDiet: activeDiet,
+        onFoodSelected: (food, quantity, meal) async {
+          try {
+            final nutritionService = context.read<NutritionService>();
+            
+            final existingMealIdx = activeDiet.meals.indexWhere((m) {
+              final nameOnly = m.name.split(' || ').first.trim();
+              return nameOnly.toLowerCase() == meal.toLowerCase();
+            });
 
-    if (shouldSave != true) return;
-
-    try {
-      final finalMealName = mealDescController.text.trim().isEmpty
-          ? mealNameController.text.trim()
-          : '${mealNameController.text.trim()} || ${mealDescController.text.trim()}';
-
-      final updatedMeals = activeDiet.meals.map((meal) {
-        return {
-          'name': meal.name,
-          'time': meal.time,
-          'order': meal.order,
-          'items': meal.items
-              .map((i) => {
-                    if (i.foodId != null) 'food_id': i.foodId,
-                    if (i.customFoodId != null) 'custom_food_id': i.customFoodId,
-                    'quantity_g': i.quantityG,
-                    if (i.observations != null) 'observations': i.observations,
-                  })
-              .toList(),
-        };
-      }).toList();
-
-      updatedMeals.add({
-        'name': finalMealName,
-        'time': mealTimeController.text.trim().isEmpty ? null : mealTimeController.text.trim(),
-        'order': activeDiet.meals.length + 1,
-        'items': editableItems
-            .map((i) => {
+            final updatedMeals = activeDiet.meals.map((m) {
+              return {
+                'name': m.name,
+                'time': m.time,
+                'order': m.order,
+                'items': m.items.map((i) => {
                   if (i.foodId != null) 'food_id': i.foodId,
                   if (i.customFoodId != null) 'custom_food_id': i.customFoodId,
                   'quantity_g': i.quantityG,
                   if (i.observations != null) 'observations': i.observations,
-                })
-            .toList(),
-      });
+                }).toList(),
+              };
+            }).toList();
 
-      await nutritionService.updateDiet(
-        dietId: activeDiet.id,
-        name: activeDiet.name,
-        goal: activeDiet.goal,
-        meals: updatedMeals,
-      );
-      await _loadStudentNutrition();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Refeição adicionada ao plano com sucesso!'),
-            backgroundColor: AppColors.accentSuccess,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Erro ao adicionar refeição: ${e.toString()}'),
-            backgroundColor: AppColors.accentError,
-          ),
-        );
-      }
-    }
+            if (existingMealIdx != -1) {
+              final itemsList = updatedMeals[existingMealIdx]['items'] as List<dynamic>;
+              itemsList.add({
+                if (food.source == 'taco') 'food_id': int.tryParse(food.id),
+                if (food.source == 'custom') 'custom_food_id': food.id,
+                'quantity_g': quantity,
+              });
+            } else {
+              updatedMeals.add({
+                'name': meal,
+                'time': null,
+                'order': activeDiet.meals.length + 1,
+                'items': [
+                  {
+                    if (food.source == 'taco') 'food_id': int.tryParse(food.id),
+                    if (food.source == 'custom') 'custom_food_id': food.id,
+                    'quantity_g': quantity,
+                  }
+                ],
+              });
+            }
+
+            await nutritionService.updateDiet(
+              dietId: activeDiet.id,
+              name: activeDiet.name,
+              goal: activeDiet.goal,
+              meals: updatedMeals,
+            );
+            await _loadStudentNutrition();
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Alimento adicionado à dieta com sucesso!'),
+                  backgroundColor: AppColors.accentSuccess,
+                ),
+              );
+            }
+          } catch (e) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Erro ao atualizar dieta: $e'),
+                  backgroundColor: AppColors.accentError,
+                ),
+              );
+            }
+          }
+        },
+      ),
+    );
   }
 
   Future<void> _deleteMeal(Diet activeDiet, DietMeal mealToDelete) async {
