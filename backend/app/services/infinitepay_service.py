@@ -27,13 +27,17 @@ async def create_payment_link(
     student_name: str,
     student_email: str,
     student_phone: Optional[str] = None,
+    order_nsu_override: Optional[str] = None,
 ) -> Optional[InfinitePayCheckoutResult]:
     """
     Cria um link de pagamento na InfinitePay.
     Retorna a URL de checkout ou None em caso de falha.
     price_brl em reais (ex: 150.00) — convertido para centavos internamente.
+
+    order_nsu_override: se fornecido, substitui o str(subscription_id) como identificador
+        do pedido (útil para pré-cadastros: "prereg_{pre_reg_id}").
     """
-    order_nsu = str(subscription_id)
+    order_nsu = order_nsu_override if order_nsu_override else str(subscription_id)
     price_cents = int(round(price_brl * 100))
 
     webhook_url = (

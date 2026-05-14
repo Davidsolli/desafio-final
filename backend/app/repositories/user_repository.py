@@ -66,8 +66,9 @@ class UserRepository:
         Returns:
             User ou None se não encontrado
         """
+        from sqlalchemy import func
         query = select(User).where(
-            User.email == email,
+            func.lower(User.email) == email.lower(),
             User.is_active == True,
         )
         result = await self.session.execute(query)
@@ -101,7 +102,8 @@ class UserRepository:
         Returns:
             User ou None se não encontrado
         """
-        query = select(User).where(User.email == email)
+        from sqlalchemy import func
+        query = select(User).where(func.lower(User.email) == email.lower())
         result = await self.session.execute(query)
         return result.scalars().first()
 

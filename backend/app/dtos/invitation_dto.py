@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 
 class GenerateInvitationDTO(BaseModel):
@@ -40,6 +40,7 @@ class InvitationResponseDTO(BaseModel):
     used_by_id: Optional[UUID] = None
     created_at: datetime
     used_at: Optional[datetime] = None
+    expires_at: Optional[datetime] = None
 
     model_config = ConfigDict(
         from_attributes=True,
@@ -95,17 +96,35 @@ class ApproveWhatsAppDTO(BaseModel):
     phone: str = Field(
         description="Número do WhatsApp do usuário a aprovar (ex: 5511999999999)",
     )
+    trainer_id: Optional[UUID] = Field(
+        default=None,
+        description=(
+            "UUID do personal trainer a vincular. "
+            "Se omitido, o único trainer ativo é selecionado automaticamente. "
+            "Obrigatório quando há mais de um trainer cadastrado."
+        ),
+    )
 
 
 class WhatsAppPendingItemDTO(BaseModel):
     """Item de pré-cadastro WhatsApp pendente de aprovação."""
 
+    id: UUID
     phone: str
     name: Optional[str]
     email: Optional[str]
+    state: str
     created_at: datetime
+    payment_status: Optional[str] = None
+    checkout_url: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ConfirmPreRegPaymentDTO(BaseModel):
+    """DTO para confirmar manualmente o pagamento de um pré-cadastro (fallback de webhook)."""
+
+    pre_reg_id: UUID = Field(description="ID do WhatsAppPreRegistration")
 
 
 class WhatsAppPendingListDTO(BaseModel):

@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/theme_colors.dart';
 import '../../providers/invitation_provider.dart';
+import '../../providers/admin_provider.dart';
+import '../../services/invitation_service.dart';
 import '../../shared/widgets/index.dart';
 
 class AdminWhatsAppScreen extends StatefulWidget {
@@ -18,6 +20,7 @@ class _AdminWhatsAppScreenState extends State<AdminWhatsAppScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<InvitationProvider>().loadWhatsAppPending();
+      context.read<AdminProvider>().loadTrainers();
     });
   }
 
@@ -93,8 +96,10 @@ class _AdminWhatsAppScreenState extends State<AdminWhatsAppScreen> {
           ),
           IconButton(
             icon: Icon(Icons.refresh, color: context.colors.textSecondary),
-            onPressed: () =>
-                context.read<InvitationProvider>().loadWhatsAppPending(),
+            onPressed: () {
+              context.read<InvitationProvider>().loadWhatsAppPending();
+              context.read<AdminProvider>().loadTrainers();
+            },
           ),
         ],
       ),
@@ -129,9 +134,7 @@ class _AdminWhatsAppScreenState extends State<AdminWhatsAppScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 16),
         itemCount: items.length,
         itemBuilder: (context, index) {
-          final item = items[index];
-          return _buildCard(context, provider, item.phone, item.name,
-              item.email, item.createdAt);
+          return _buildCard(context, provider, items[index]);
         },
       ),
     );
@@ -140,12 +143,10 @@ class _AdminWhatsAppScreenState extends State<AdminWhatsAppScreen> {
   Widget _buildCard(
     BuildContext context,
     InvitationProvider provider,
-    String phone,
-    String? name,
-    String? email,
-    DateTime createdAt,
+    WhatsAppPendingItem item,
   ) {
-    final timeAgo = _formatTimeAgo(createdAt);
+    final timeAgo = _formatTimeAgo(item.createdAt);
+    final isAwaitingPayment = item.awaitingPayment;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -158,6 +159,7 @@ class _AdminWhatsAppScreenState extends State<AdminWhatsAppScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Linha de avatar + nome + badge de estado
           Row(
             children: [
               Container(
@@ -167,7 +169,8 @@ class _AdminWhatsAppScreenState extends State<AdminWhatsAppScreen> {
                   color: Colors.green.withValues(alpha: 0.15),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.mark_chat_unread_outlined, color: Colors.green, size: 20),
+                child: const Icon(Icons.mark_chat_unread_outlined,
+                    color: Colors.green, size: 20),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -175,13 +178,13 @@ class _AdminWhatsAppScreenState extends State<AdminWhatsAppScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      name ?? 'Sem nome',
+                      item.name ?? 'Sem nome',
                       style: Theme.of(context).textTheme.titleSmall?.copyWith(
                             fontWeight: FontWeight.bold,
                           ),
                     ),
                     Text(
-                      email ?? 'Sem email',
+                      item.email ?? 'Sem email',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: context.colors.textSecondary,
                           ),
@@ -189,23 +192,26 @@ class _AdminWhatsAppScreenState extends State<AdminWhatsAppScreen> {
                   ],
                 ),
               ),
-              OmniStatusBadge(label: 'Pendente', color: Colors.orange),
+              _buildStateBadge(item),
             ],
           ),
+
+          // Linha de telefone + tempo
           const SizedBox(height: 10),
           Row(
             children: [
               Icon(Icons.phone, size: 14, color: context.colors.textMuted),
               const SizedBox(width: 4),
               Text(
-                phone,
+                item.phone,
                 style: Theme.of(context)
                     .textTheme
                     .bodySmall
                     ?.copyWith(color: context.colors.textMuted),
               ),
               const Spacer(),
-              Icon(Icons.access_time, size: 14, color: context.colors.textMuted),
+              Icon(Icons.access_time,
+                  size: 14, color: context.colors.textMuted),
               const SizedBox(width: 4),
               Text(
                 timeAgo,
@@ -216,13 +222,55 @@ class _AdminWhatsAppScreenState extends State<AdminWhatsAppScreen> {
               ),
             ],
           ),
+
+          // Botão de ação
           const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
-            child: OmniButton(
-              text: 'Aprovar e enviar código',
-              onPressed: () => _confirmApprove(context, provider, phone, name),
-              height: 40,
+            child: isAwaitingPayment
+                ? _buildAwaitingPaymentButton(context)
+                : OmniButton(
+                    text: 'Aprovar e enviar código',
+                    onPressed: () =>
+                        _confirmApprove(context, provider, item),
+                    height: 40,
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStateBadge(WhatsAppPendingItem item) {
+    if (item.awaitingPayment) {
+      return OmniStatusBadge(label: 'Aguard. pagamento', color: Colors.blue);
+    }
+    if (item.paymentStatus == 'confirmed') {
+      return OmniStatusBadge(label: 'Pago ✓', color: Colors.green);
+    }
+    return OmniStatusBadge(label: 'Pendente', color: Colors.orange);
+  }
+
+  Widget _buildAwaitingPaymentButton(BuildContext context) {
+    return Container(
+      height: 40,
+      decoration: BoxDecoration(
+        color: Colors.blue.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.hourglass_top_rounded,
+              size: 16, color: Colors.blue.shade600),
+          const SizedBox(width: 6),
+          Text(
+            'Aguardando confirmação do pagamento',
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.blue.shade700,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ],
@@ -233,41 +281,118 @@ class _AdminWhatsAppScreenState extends State<AdminWhatsAppScreen> {
   void _confirmApprove(
     BuildContext context,
     InvitationProvider provider,
-    String phone,
-    String? name,
+    WhatsAppPendingItem item,
   ) {
+    // Garante que a lista de trainers está carregada antes de abrir o dialog
+    context.read<AdminProvider>().loadTrainers();
+
+    String? selectedTrainerId;
+
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Aprovar cadastro'),
-        content: Text(
-          'Aprovar o cadastro de ${name ?? phone}?\n\nUm código de acesso será enviado automaticamente via WhatsApp.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancelar'),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              final ok = await provider.approveWhatsApp(phone);
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(ok
-                      ? '✅ Código enviado para ${name ?? phone}!'
-                      : '❌ Erro ao aprovar. Tente novamente.'),
-                  backgroundColor: ok ? Colors.green : Colors.red,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          return Consumer<AdminProvider>(
+            builder: (ctx, adminProvider, _) {
+              final trainers = adminProvider.trainers
+                  .where((t) => t.isActive)
+                  .toList();
+
+              return AlertDialog(
+                title: const Text('Aprovar cadastro'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Aprovar o cadastro de ${item.name ?? item.phone}?\n\n'
+                      'Um código de acesso será enviado automaticamente via WhatsApp.',
+                    ),
+                    const SizedBox(height: 20),
+                    // Dropdown de personal trainer
+                    adminProvider.isLoading && trainers.isEmpty
+                        ? const Center(
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(vertical: 8),
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          )
+                        : DropdownButtonFormField<String>(
+                            value: selectedTrainerId,
+                            hint: const Text('Selecionar personal trainer'),
+                            isExpanded: true,
+                            decoration: const InputDecoration(
+                              labelText: 'Personal Trainer *',
+                              border: OutlineInputBorder(),
+                              contentPadding: EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 10),
+                            ),
+                            items: trainers
+                                .map(
+                                  (t) => DropdownMenuItem<String>(
+                                    value: t.id,
+                                    child: Text(
+                                      t.name,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (val) =>
+                                setDialogState(() => selectedTrainerId = val),
+                          ),
+                    if (trainers.isEmpty && !adminProvider.isLoading)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          'Nenhum personal trainer ativo encontrado.',
+                          style: TextStyle(
+                              color: Colors.red.shade400, fontSize: 12),
+                        ),
+                      ),
+                  ],
                 ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Cancelar'),
+                  ),
+                  TextButton(
+                    onPressed: selectedTrainerId == null
+                        ? null
+                        : () async {
+                            final trainerId = selectedTrainerId!;
+                            Navigator.pop(ctx);
+                            final ok = await provider.approveWhatsApp(
+                              item.phone,
+                              trainerId: trainerId,
+                            );
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(ok
+                                    ? '✅ Código enviado para ${item.name ?? item.phone}!'
+                                    : '❌ Erro ao aprovar. Tente novamente.'),
+                                backgroundColor:
+                                    ok ? Colors.green : Colors.red,
+                              ),
+                            );
+                          },
+                    child: Text(
+                      'Aprovar',
+                      style: TextStyle(
+                        color: selectedTrainerId == null
+                            ? Colors.grey
+                            : Colors.green,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
               );
             },
-            child: const Text(
-              'Aprovar',
-              style: TextStyle(color: Colors.green),
-            ),
-          ),
-        ],
+          );
+        },
       ),
     );
   }
