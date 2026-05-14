@@ -12,6 +12,7 @@ import '../../providers/logbook_provider.dart';
 import '../../shared/widgets/index.dart';
 import '../../widgets/progress_widgets.dart';
 import 'widgets/step_summary_card.dart';
+import 'widgets/heart_rate_summary_card.dart';
 
 // HomeScreen creates and injects HomeProvider locally so main.dart stays
 // untouched. The provider is scoped to this route and disposed with it.
@@ -107,6 +108,11 @@ class _HomeBodyState extends State<_HomeBody> {
                   const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 16),
                     child: StepSummaryCard(),
+                  ),
+                  const SizedBox(height: 12),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16),
+                    child: HeartRateSummaryCard(),
                   ),
                   const SizedBox(height: 12),
                   Padding(

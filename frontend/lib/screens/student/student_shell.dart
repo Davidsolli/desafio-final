@@ -7,6 +7,7 @@ import '../../theme/theme_colors.dart';
 import '../../routes/app_routes.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/step_provider.dart';
+import '../../providers/health_provider.dart';
 import '../../services/user_service.dart';
 
 class StudentShell extends StatefulWidget {
@@ -24,12 +25,16 @@ class StudentShell extends StatefulWidget {
 class _StudentShellState extends State<StudentShell>
     with WidgetsBindingObserver {
   bool _stepsInitialized = false;
+  bool _healthInitialized = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _initStepProvider());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initStepProvider();
+      _initHealthProvider();
+    });
   }
 
   @override
@@ -42,8 +47,8 @@ class _StudentShellState extends State<StudentShell>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive) {
-      // Sync ao mandar app pra background
       context.read<StepProvider>().onAppPaused();
+      context.read<HealthProvider>().syncToBackend();
     }
   }
 
@@ -73,6 +78,13 @@ class _StudentShellState extends State<StudentShell>
           heightCm: heightCm,
           gender: gender,
         );
+  }
+
+  Future<void> _initHealthProvider() async {
+    if (_healthInitialized || kIsWeb) return;
+    _healthInitialized = true;
+    if (!mounted) return;
+    await context.read<HealthProvider>().initialize();
   }
 
   int _getSelectedNavIndex(String currentPath) {

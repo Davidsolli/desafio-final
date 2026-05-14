@@ -63,15 +63,33 @@ class StepSummaryCard extends StatelessWidget {
                                 ),
                           ),
                           const SizedBox(height: 2),
-                          Text(
-                            _formatNumber(steps),
-                            style: Theme.of(context)
-                                .textTheme
-                                .headlineSmall
-                                ?.copyWith(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.bold,
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Text(
+                                _formatNumber(steps),
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .headlineSmall
+                                    ?.copyWith(
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                              ),
+                              if (provider.isStepsFromSmartwatch) ...[
+                                const SizedBox(width: 6),
+                                Tooltip(
+                                  message: provider.stepsSourceName.isNotEmpty
+                                      ? provider.stepsSourceName
+                                      : 'Smartwatch',
+                                  child: Icon(
+                                    Icons.watch,
+                                    size: 16,
+                                    color: AppColors.primary,
+                                  ),
                                 ),
+                              ],
+                            ],
                           ),
                         ],
                       ),

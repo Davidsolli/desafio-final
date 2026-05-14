@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omniconnect_fitness/models/step_models.dart';
 import 'package:omniconnect_fitness/services/step_service.dart';
+import 'package:omniconnect_fitness/services/health_connect_service.dart';
 
 enum StepProviderState {
   idle,
@@ -17,12 +18,19 @@ enum StepProviderState {
   sensorUnavailable,
 }
 
-/// Provider que conecta o sensor nativo de passos do dispositivo,
-/// mantém o total do dia em memória e sincroniza com o backend.
+/// Provider de contagem de passos.
+///
+/// Fonte primária: Health Connect (Android API 28+) / HealthKit (iOS).
+/// Fallback: pedômetro via sensor físico (pedometer package).
 class StepProvider extends ChangeNotifier {
   final StepService _stepService;
+  final HealthConnectService _hcService;
 
-  StepProvider({required StepService stepService}) : _stepService = stepService;
+  StepProvider({
+    required StepService stepService,
+    HealthConnectService? healthConnectService,
+  })  : _stepService = stepService,
+        _hcService = healthConnectService ?? HealthConnectService();
 
   // Estado público
   StepProviderState _state = StepProviderState.idle;
@@ -44,9 +52,20 @@ class StepProvider extends ChangeNotifier {
   bool _isSyncing = false;
   bool get isSyncing => _isSyncing;
 
-  // Handicap: nível de proteção de sequência selecionado para hoje
   int? _selectedHandicapLevel;
   int? get selectedHandicapLevel => _selectedHandicapLevel;
+
+  bool _usingHealthConnect = false;
+  /// Indica se a contagem está vindo do Health Connect (true) ou pedômetro (false).
+  bool get usingHealthConnect => _usingHealthConnect;
+
+  bool _isStepsFromSmartwatch = false;
+  /// True quando os passos foram contados por um smartwatch/fitness tracker.
+  bool get isStepsFromSmartwatch => _isStepsFromSmartwatch;
+
+  String _stepsSourceName = '';
+  /// Nome legível da fonte dos passos (ex: "Garmin Connect", "Samsung Health").
+  String get stepsSourceName => _stepsSourceName;
 
   // Getters derivados do histórico
   int get dailyGoal => _history.dailyGoal;
@@ -55,7 +74,6 @@ class StepProvider extends ChangeNotifier {
 
   double get caloriesToday {
     if (_history.totalCaloriesToday > 0) return _history.totalCaloriesToday;
-    // Estimativa local antes de sincronizar (fallback sem peso → 70 kg)
     return double.parse((_stepsToday * 0.04).toStringAsFixed(1));
   }
 
@@ -64,6 +82,7 @@ class StepProvider extends ChangeNotifier {
   double _strideMeters = 0.75;
   StreamSubscription<StepCount>? _stepSub;
   Timer? _syncTimer;
+  Timer? _hcPollTimer;
   DateTime _currentDay = _today();
 
   static const String _baselineKeyPrefix = 'steps_baseline_';
@@ -83,24 +102,74 @@ class StepProvider extends ChangeNotifier {
     _state = StepProviderState.loading;
     notifyListeners();
 
-    final granted = await _ensurePermission();
+    await _loadCachedHandicap();
+    await _loadCachedTodaySteps();
+    await refreshHistory();
+
+    final hcAvailable = await _hcService.isAvailable();
+    if (hcAvailable) {
+      final granted = await _hcService.requestPermissions();
+      // requestAuthorization pode retornar false em relançamentos mesmo com
+      // permissões já concedidas — verificar hasPermissions() como fallback.
+      final hasPerms = granted || await _hcService.hasPermissions();
+      if (hasPerms) {
+        _usingHealthConnect = true;
+        await _readFromHealthConnect();
+        _startHealthConnectPolling();
+      } else {
+        await _startPedometer();
+      }
+    } else {
+      await _startPedometer();
+    }
+
+    _syncTimer?.cancel();
+    _syncTimer = Timer.periodic(_syncInterval, (_) => syncToBackend());
+
+    _state = StepProviderState.ready;
+    notifyListeners();
+  }
+
+  /// Lê passos do Health Connect para o dia atual, incluindo fonte.
+  Future<void> _readFromHealthConnect() async {
+    final start = DateTime(_currentDay.year, _currentDay.month, _currentDay.day);
+    final end = DateTime.now();
+    final result = await _hcService.readStepsWithSource(start, end);
+    if (result.steps > _stepsToday) {
+      _stepsToday = result.steps;
+      _distanceTodayMeters = result.steps * _strideMeters;
+      await _persistTodaySteps();
+    }
+    _isStepsFromSmartwatch = result.isFromSmartwatch;
+    _stepsSourceName = result.sourceName;
+    notifyListeners();
+  }
+
+  void _startHealthConnectPolling() {
+    _hcPollTimer?.cancel();
+    // Polling a cada 5 minutos para atualizar passos do Health Connect
+    _hcPollTimer = Timer.periodic(const Duration(minutes: 5), (_) async {
+      final today = _today();
+      if (!_isSameDay(today, _currentDay)) {
+        await syncToBackend();
+        _currentDay = today;
+        _stepsToday = 0;
+        _distanceTodayMeters = 0;
+        _selectedHandicapLevel = null;
+      }
+      await _readFromHealthConnect();
+    });
+  }
+
+  Future<void> _startPedometer() async {
+    final granted = await _ensurePedometerPermission();
     if (!granted) {
       _state = StepProviderState.permissionDenied;
       _error = 'Permissão para acessar o sensor de passos foi negada.';
       notifyListeners();
       return;
     }
-
-    await _loadCachedHandicap();
-    await _loadCachedTodaySteps();
-    await refreshHistory();
-
     _subscribeToSensor();
-    _syncTimer?.cancel();
-    _syncTimer = Timer.periodic(_syncInterval, (_) => syncToBackend());
-
-    _state = StepProviderState.ready;
-    notifyListeners();
   }
 
   /// Atualiza o histórico (puxa do backend).
@@ -161,7 +230,6 @@ class StepProvider extends ChangeNotifier {
         distanceMeters: _distanceTodayMeters,
         handicapLevel: _selectedHandicapLevel,
       );
-      // Atualiza o log do dia no histórico em memória
       final logs = List<StepLog>.from(_history.logs);
       final idx = logs.indexWhere((l) => _isSameDay(l.date, _currentDay));
       if (idx >= 0) {
@@ -178,7 +246,6 @@ class StepProvider extends ChangeNotifier {
         dailyGoal: _history.dailyGoal,
         totalCaloriesToday: updated.caloriesBurned,
       );
-      // Buscar estatísticas completas em segundo plano
       unawaited(refreshHistory());
     } catch (e) {
       _error = 'Erro ao sincronizar passos: $e';
@@ -200,7 +267,7 @@ class StepProvider extends ChangeNotifier {
     return (heightCm / 100.0) * factor;
   }
 
-  Future<bool> _ensurePermission() async {
+  Future<bool> _ensurePedometerPermission() async {
     if (kIsWeb) return false;
     try {
       if (Platform.isAndroid) {
@@ -333,6 +400,7 @@ class StepProvider extends ChangeNotifier {
   void dispose() {
     _stepSub?.cancel();
     _syncTimer?.cancel();
+    _hcPollTimer?.cancel();
     super.dispose();
   }
 }

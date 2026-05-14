@@ -19,7 +19,9 @@ import 'services/chat_service.dart';
 import 'services/payment_service.dart';
 import 'providers/payment_provider.dart';
 import 'services/step_service.dart';
+import 'services/health_service.dart';
 import 'providers/auth_provider.dart';
+import 'providers/health_provider.dart';
 import 'providers/user_provider.dart';
 import 'providers/goal_provider.dart';
 import 'providers/logbook_provider.dart';
@@ -136,6 +138,11 @@ class OmniConnectApp extends StatelessWidget {
           update: (_, apiClient, _) => StepService(apiClient: apiClient),
         ),
 
+        // Health Service (depende de ApiClient)
+        ProxyProvider<ApiClient, HealthService>(
+          update: (_, apiClient, __) => HealthService(apiClient: apiClient),
+        ),
+
         // Admin Metrics Service (depende de ApiClient)
         ProxyProvider<ApiClient, AdminMetricsService>(
           update: (_, apiClient, _) => AdminMetricsService(apiClient: apiClient),
@@ -233,6 +240,16 @@ class OmniConnectApp extends StatelessWidget {
           ),
           update: (_, stepService, previous) {
             return previous ?? StepProvider(stepService: stepService);
+          },
+        ),
+
+        // Health Provider (depende de HealthService) — FC e calorias via Health Connect
+        ChangeNotifierProxyProvider<HealthService, HealthProvider>(
+          create: (context) => HealthProvider(
+            healthService: context.read<HealthService>(),
+          ),
+          update: (_, healthService, previous) {
+            return previous ?? HealthProvider(healthService: healthService);
           },
         ),
 

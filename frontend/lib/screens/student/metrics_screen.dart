@@ -1,3 +1,5 @@
+import 'dart:math' show min, max;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:animate_do/animate_do.dart';
@@ -5,6 +7,7 @@ import '../../theme/app_colors.dart';
 import '../../theme/theme_colors.dart';
 import '../../providers/user_provider.dart';
 import '../../providers/goal_provider.dart';
+import '../../providers/health_provider.dart';
 import '../../providers/logbook_provider.dart';
 import '../../services/dashboard_service.dart';
 import '../../widgets/frequency_bar_chart.dart';
@@ -56,6 +59,7 @@ class _MetricsScreenState extends State<MetricsScreen> {
             );
           }
         });
+        context.read<HealthProvider>().initialize().catchError((_) {});
         _loadFrequencyData();
       }
     });
@@ -126,6 +130,8 @@ class _MetricsScreenState extends State<MetricsScreen> {
                     return Column(
                       children: [
                         _buildBodyMetrics(user),
+                        const SizedBox(height: 16),
+                        _buildHealthMetrics(),
                         const SizedBox(height: 16),
                         _buildWorkoutMetrics(),
                         const SizedBox(height: 16),
@@ -409,6 +415,107 @@ class _MetricsScreenState extends State<MetricsScreen> {
     return 'Leve';
   }
 
+  Widget _buildHealthMetrics() {
+    return Consumer<HealthProvider>(
+      builder: (context, health, _) {
+        if (health.state == HealthProviderState.unavailable) {
+          return const SizedBox.shrink();
+        }
+        return FadeInUp(
+          duration: const Duration(milliseconds: 300),
+          delay: const Duration(milliseconds: 150),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              OmniSectionHeader(title: '❤️ Frequência Cardíaca'),
+              const SizedBox(height: 12),
+              Stack(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: context.colors.surface,
+                      border: Border.all(color: context.colors.border, width: 1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: health.state == HealthProviderState.loading
+                        ? const SizedBox(height: 80, child: OmniLoader())
+                        : health.heartRateSamples.isEmpty
+                            ? _buildNoHeartRateData()
+                            : _buildHeartRateStats(health),
+                  ),
+                  if (health.isFromSmartwatch)
+                    Positioned(
+                      top: 10,
+                      right: 10,
+                      child: _SmartWatchBadge(
+                        sourceName: health.smartwatchSourceName,
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildHeartRateStats(HealthProvider health) {
+    final samples = health.heartRateSamples;
+    final minBpm = samples.map((s) => s.bpm).reduce(min);
+    final maxBpm = samples.map((s) => s.bpm).reduce(max);
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            _buildMetricCard(
+              'Média',
+              health.averageHeartRateBpm.toStringAsFixed(0),
+              'bpm',
+              Icons.favorite,
+            ),
+            _buildMetricCard(
+              'Amostras',
+              samples.length.toString(),
+              'hoje',
+              Icons.show_chart,
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            _buildMetricCard('Mínimo', minBpm.toString(), 'bpm', Icons.arrow_downward),
+            _buildMetricCard('Máximo', maxBpm.toString(), 'bpm', Icons.arrow_upward),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildNoHeartRateData() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Center(
+        child: Column(
+          children: [
+            Icon(Icons.favorite_border, size: 36, color: context.colors.textMuted),
+            const SizedBox(height: 8),
+            Text(
+              'Sem dados de frequência cardíaca hoje',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: context.colors.textSecondary,
+                  ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildFrequencyChart() {
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
@@ -430,6 +537,28 @@ class _MetricsScreenState extends State<MetricsScreen> {
           isLoading: _frequencyLoading,
           hasError: _frequencyError,
         ),
+      ),
+    );
+  }
+}
+
+/// Badge semitransparente exibido quando os dados vêm de um smartwatch.
+class _SmartWatchBadge extends StatelessWidget {
+  final String sourceName;
+  const _SmartWatchBadge({required this.sourceName});
+
+  @override
+  Widget build(BuildContext context) {
+    final label = sourceName.isNotEmpty ? sourceName : 'Smartwatch';
+    return Tooltip(
+      message: 'Dados sincronizados via $label',
+      child: Container(
+        padding: const EdgeInsets.all(6),
+        decoration: const BoxDecoration(
+          color: Colors.black38,
+          shape: BoxShape.circle,
+        ),
+        child: const Icon(Icons.watch, color: Colors.white, size: 14),
       ),
     );
   }

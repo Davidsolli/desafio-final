@@ -45,10 +45,6 @@ class _StepsScreenState extends State<StepsScreen> {
           if (provider.state == StepProviderState.permissionDenied) {
             return _buildPermissionDenied();
           }
-          if (provider.state == StepProviderState.sensorUnavailable) {
-            return _buildSensorUnavailable();
-          }
-
           final filteredLogs = _applyFilter(provider);
 
           return RefreshIndicator(
@@ -59,6 +55,8 @@ class _StepsScreenState extends State<StepsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (provider.state == StepProviderState.sensorUnavailable)
+                    _buildSensorUnavailableBanner(),
                   _buildTodayCard(provider),
                   const SizedBox(height: 12),
                   _buildHandicapSelector(provider),
@@ -493,6 +491,10 @@ class _StepsScreenState extends State<StepsScreen> {
                   ),
                 ),
               ),
+              if (provider.isStepsFromSmartwatch) ...[
+                const SizedBox(width: 8),
+                _SmartWatchBadge(sourceName: provider.stepsSourceName),
+              ],
             ],
           ),
           const SizedBox(height: 12),
@@ -1079,29 +1081,28 @@ class _StepsScreenState extends State<StepsScreen> {
     );
   }
 
-  Widget _buildSensorUnavailable() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.sensors_off,
-                size: 64, color: context.colors.textMuted),
-            const SizedBox(height: 16),
-            Text('Sensor indisponível',
-                style: Theme.of(context).textTheme.titleLarge,
-                textAlign: TextAlign.center),
-            const SizedBox(height: 8),
-            Text(
-              'Seu dispositivo não possui sensor de passos compatível.',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+  Widget _buildSensorUnavailableBanner() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: context.colors.textMuted.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: context.colors.textMuted.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.sensors_off, size: 20, color: context.colors.textMuted),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Sensor indisponível — contagem em tempo real desabilitada. O histórico abaixo continua acessível.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: context.colors.textSecondary,
                   ),
-              textAlign: TextAlign.center,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -1236,5 +1237,27 @@ class _StepsScreenState extends State<StepsScreen> {
       'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez',
     ];
     return '${d.day.toString().padLeft(2, '0')} ${months[d.month - 1]} ${d.year}';
+  }
+}
+
+/// Badge semitransparente exibido quando os dados vêm de um smartwatch.
+class _SmartWatchBadge extends StatelessWidget {
+  final String sourceName;
+  const _SmartWatchBadge({required this.sourceName});
+
+  @override
+  Widget build(BuildContext context) {
+    final label = sourceName.isNotEmpty ? sourceName : 'Smartwatch';
+    return Tooltip(
+      message: 'Dados sincronizados via $label',
+      child: Container(
+        padding: const EdgeInsets.all(6),
+        decoration: const BoxDecoration(
+          color: Colors.black38,
+          shape: BoxShape.circle,
+        ),
+        child: const Icon(Icons.watch, color: Colors.white, size: 14),
+      ),
+    );
   }
 }
