@@ -239,8 +239,8 @@ class SubscriptionService:
         session: AsyncSession,
         student_id: UUID
     ) -> Optional[SubscriptionDetailDTO]:
-        """Buscar assinatura ativa do aluno"""
-        subscription = await SubscriptionRepository.find_student_active(session, student_id)
+        """Buscar assinatura mais recente do aluno (ativa, expirada ou cancelada)"""
+        subscription = await SubscriptionRepository.find_student_latest(session, student_id)
         if not subscription:
             return None
 

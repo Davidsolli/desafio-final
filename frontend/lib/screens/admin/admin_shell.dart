@@ -18,10 +18,10 @@ class AdminShell extends StatefulWidget {
 class _AdminShellState extends State<AdminShell> {
   int _getSelectedNavIndex(String currentPath) {
     if (currentPath.contains('/admin/trainers')) return 0;
-    if (currentPath.contains('/admin/plans')) return 1;
-    if (currentPath.contains('/admin/payments')) return 2;
-    if (currentPath.contains('/admin/whatsapp')) return 3;
-    if (currentPath.contains('/admin/metrics')) return 4;
+    if (currentPath.contains('/admin/metrics')) return 1;
+    if (currentPath.contains('/admin/whatsapp')) return 2;
+    if (currentPath.contains('/admin/plans')) return 3;
+    if (currentPath.contains('/admin/payments')) return 4;
     if (currentPath.contains('/admin/settings')) return 5;
     return 0;
   }
@@ -49,10 +49,10 @@ class _AdminShellState extends State<AdminShell> {
         onTap: (index) {
           final routes = [
             '/admin/trainers',
+            '/admin/metrics',
+            '/admin/whatsapp',
             '/admin/plans',
             '/admin/payments',
-            '/admin/whatsapp',
-            '/admin/metrics',
             '/admin/settings',
           ];
           context.go(routes[index]);
@@ -61,13 +61,15 @@ class _AdminShellState extends State<AdminShell> {
         type: BottomNavigationBarType.fixed,
         selectedItemColor: AppColors.primary,
         unselectedItemColor: context.colors.textMuted,
+        selectedLabelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+        unselectedLabelStyle: const TextStyle(fontSize: 12),
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.people_outlined), label: 'Trainers'),
-          BottomNavigationBarItem(icon: Icon(Icons.card_membership_outlined), label: 'Planos'),
-          BottomNavigationBarItem(icon: Icon(Icons.attach_money), label: 'Pagamentos'),
-          BottomNavigationBarItem(icon: Icon(Icons.mark_chat_unread_outlined), label: 'WhatsApp'),
           BottomNavigationBarItem(icon: Icon(Icons.analytics_outlined), label: 'Métricas'),
-          BottomNavigationBarItem(icon: Icon(Icons.settings_outlined), label: 'Configurações'),
+          BottomNavigationBarItem(icon: Icon(Icons.mark_chat_unread_outlined), label: 'WhatsApp'),
+          BottomNavigationBarItem(icon: Icon(Icons.card_membership_outlined), label: 'Planos'),
+          BottomNavigationBarItem(icon: Icon(Icons.attach_money), label: 'Pgto'),
+          BottomNavigationBarItem(icon: Icon(Icons.settings_outlined), label: 'Config'),
         ],
       ),
     );

@@ -198,18 +198,6 @@ class _PlansScreenState extends State<PlansScreen> {
                     ),
                   ],
                 ),
-                if (plan.modality != null) ...[
-                  const SizedBox(height: 8),
-                  _buildFeatureRow(context, Icons.location_on_outlined, plan.modality!),
-                ],
-                if (plan.evaluationsIncluded > 0) ...[
-                  const SizedBox(height: 4),
-                  _buildFeatureRow(
-                    context,
-                    Icons.assignment_outlined,
-                    '${plan.evaluationsIncluded} avaliação(ões) incluída(s)',
-                  ),
-                ],
                 _buildFeatureRow(context, Icons.fitness_center, 'Acesso completo: Treinos, Dieta e IA'),
                 const SizedBox(height: 16),
                 SizedBox(

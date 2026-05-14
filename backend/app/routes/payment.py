@@ -180,6 +180,26 @@ async def get_current_subscription(
     return subscription
 
 
+@router.post("/subscriptions/cancel", status_code=status.HTTP_200_OK)
+async def cancel_my_subscription(
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db)
+):
+    """Aluno cancela sua própria assinatura ativa"""
+    if current_user.role not in ("student", "client"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Apenas alunos podem cancelar suas assinaturas")
+
+    subscription = await SubscriptionService.get_student_active_subscription(session, current_user.id)
+    if not subscription:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assinatura ativa não encontrada")
+
+    success = await SubscriptionService.manual_cancel(session, subscription.id)
+    if not success:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Não foi possível cancelar a assinatura")
+
+    return {"status": "canceled"}
+
+
 @router.get("/subscriptions/{subscription_id}", response_model=SubscriptionDetailDTO)
 async def get_subscription(
     subscription_id: UUID,

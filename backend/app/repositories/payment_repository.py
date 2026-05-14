@@ -136,6 +136,16 @@ class SubscriptionRepository:
         return result.scalars().first()
 
     @staticmethod
+    async def find_student_latest(session: AsyncSession, student_id: UUID) -> Optional[Subscription]:
+        """Buscar assinatura mais recente do aluno (qualquer status)"""
+        result = await session.execute(
+            select(Subscription)
+            .where(Subscription.student_id == student_id)
+            .order_by(Subscription.created_at.desc())
+        )
+        return result.scalars().first()
+
+    @staticmethod
     async def find_by_admin(
         session: AsyncSession,
         admin_id: UUID,

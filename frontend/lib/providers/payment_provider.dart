@@ -187,6 +187,12 @@ class PaymentProvider extends ChangeNotifier {
     return success;
   }
 
+  Future<bool> cancelMySubscription() async {
+    final success = await _service.cancelMySubscription();
+    if (success) await loadCurrentSubscription();
+    return success;
+  }
+
   Future<bool> changePlan(String subscriptionId, String newPlanId) async {
     final success = await _service.changePlan(subscriptionId, newPlanId);
     if (success) await loadDashboard();
