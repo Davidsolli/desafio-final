@@ -1508,7 +1508,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
             current: currentKcal,
             target: targetKcal,
             percent: kcalPercent,
-            color: AppColors.primary,
+            color: Colors.deepOrange,
             unit: 'kcal',
           ),
           const SizedBox(height: 12),
