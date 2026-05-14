@@ -7,7 +7,7 @@ Inclui: geração de códigos, validação, e rastreamento de uso.
 
 import secrets
 import string
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -64,7 +64,7 @@ class InvitationService:
             Exception: Se houver erro ao salvar no banco
         """
         code = self._generate_code()
-        expires_at = datetime.now(timezone.utc) + timedelta(hours=self._TTL_HOURS)
+        expires_at = datetime.utcnow() + timedelta(hours=self._TTL_HOURS)
 
         invitation = Invitation(
             code=code,
@@ -102,11 +102,7 @@ class InvitationService:
             return False
 
         if invitation.expires_at:
-            now = datetime.now(timezone.utc)
-            expires = invitation.expires_at
-            if expires.tzinfo is None:
-                expires = expires.replace(tzinfo=timezone.utc)
-            if expires < now:
+            if invitation.expires_at < datetime.utcnow():
                 return False
 
         return True
