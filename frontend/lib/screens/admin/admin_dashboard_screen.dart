@@ -8,7 +8,7 @@ import '../../providers/admin_provider.dart';
 import '../../shared/widgets/index.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
-  const AdminDashboardScreen({Key? key}) : super(key: key);
+  const AdminDashboardScreen({super.key});
 
   @override
   State<AdminDashboardScreen> createState() => _AdminDashboardScreenState();
@@ -91,10 +91,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       ),
                       const SizedBox(width: 8),
                       OmniButton(
-                        text: '➕',
+                        icon: Icons.add,
                         onPressed: () => context.push('/admin/add-trainer'),
                         width: 56,
                         height: 56,
+                        padding: EdgeInsets.zero,
                       ),
                     ],
                   ),
