@@ -74,6 +74,7 @@ async def init_db() -> None:
     from app.models.whatsapp_pre_registration import WhatsAppPreRegistration  # noqa: F401
     import app.models.notification  # noqa: F401 — registra NotificationPreference, NotificationLog, WorkoutReminderSchedule
     import app.models.step_log  # noqa: F401 — registra StepLog
+    import app.models.health_log  # noqa: F401 — registra HeartRateLog, CalorieLog
     import app.models.payment  # noqa: F401 — registra Plan, Subscription
 
     logger = logging.getLogger(__name__)

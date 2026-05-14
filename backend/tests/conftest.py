@@ -27,6 +27,7 @@ from app.models import exercise_catalog  # noqa: F401 — registra exercise_cata
 from app.models import diet  # noqa: F401 — registra diet/diet_meals/diet_items/custom_foods
 from app.models import diet_logbook  # noqa: F401 — registra diet_logbooks/diet_logbook_entries
 import app.models.step_log  # noqa: F401 — registra step_logs no Base.metadata
+import app.models.health_log  # noqa: F401 — registra heart_rate_logs/calorie_logs no Base.metadata
 import app.models.chatbot  # noqa: F401 — registra chat_conversations/messages/feedback
 from app.models import food_catalog  # noqa: F401 — registra food_catalog
 from app.services.user_service import UserService

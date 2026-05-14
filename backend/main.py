@@ -22,6 +22,7 @@ from app.routes.payment import router as payment_router
 from app.routes.password import router as password_router
 from app.routes.notification import router as notification_router
 from app.routes.steps import router as steps_router
+from app.routes.health import router as health_router
 
 from app.tasks.notification_scheduler import NotificationScheduler
 
@@ -102,4 +103,5 @@ app.include_router(pages_router)
 app.include_router(password_router)
 app.include_router(notification_router)
 app.include_router(steps_router)
+app.include_router(health_router)
 app.include_router(admin_metrics_router)
