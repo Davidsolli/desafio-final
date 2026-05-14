@@ -202,3 +202,15 @@ class AudioFoodResponseDTO(BaseModel):
     food_logged: FoodLoggedDTO | None = None   # None se o parse falhou
     parse_confidence: str           # "high" | "low" | "failed"
     created_at: str
+
+
+class PhotoFoodResponseDTO(BaseModel):
+    """Resposta do endpoint de photo food logging."""
+
+    message_id: str
+    conversation_id: str
+    description: str                        # Descrição do prato pela IA
+    content: str                            # Mensagem de confirmação do Vitali
+    foods_logged: list[FoodLoggedDTO] = []  # Alimentos registrados
+    parse_confidence: str                   # "high" | "medium" | "low" | "failed"
+    created_at: str

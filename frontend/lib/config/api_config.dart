@@ -37,6 +37,7 @@ class ApiConfig {
   // Chat endpoints
   static const String chatSendMessage = '$apiV1/chat/send-message';
   static const String chatSendAudio = '$apiV1/chat/send-audio';
+  static const String chatSendPhoto = '$apiV1/chat/send-photo';
   static const String chatConversations = '$apiV1/chat/conversations';
   static const String chatWebSocket = '$apiV1/chat/ws';
 
