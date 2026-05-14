@@ -96,8 +96,13 @@ class ApproveWhatsAppDTO(BaseModel):
     phone: str = Field(
         description="Número do WhatsApp do usuário a aprovar (ex: 5511999999999)",
     )
-    trainer_id: UUID = Field(
-        description="UUID do personal trainer a vincular ao usuário aprovado",
+    trainer_id: Optional[UUID] = Field(
+        default=None,
+        description=(
+            "UUID do personal trainer a vincular. "
+            "Se omitido, o único trainer ativo é selecionado automaticamente. "
+            "Obrigatório quando há mais de um trainer cadastrado."
+        ),
     )
 
 

@@ -221,9 +221,36 @@ async def approve_whatsapp_registration(
             detail="Apenas admins podem aprovar pré-cadastros",
         )
 
-    # Validar personal trainer
+    # Resolver trainer_id: usar o fornecido ou auto-selecionar o único ativo
+    trainer_id = dto.trainer_id
+    if trainer_id is None:
+        from sqlalchemy import or_
+        trainers_result = await session.execute(
+            select(User).where(
+                User.role == "personal_trainer",
+                User.is_active == True,
+            )
+        )
+        trainers = trainers_result.scalars().all()
+        if len(trainers) == 1:
+            trainer_id = trainers[0].id
+        elif len(trainers) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Nenhum personal trainer ativo encontrado. Cadastre um trainer antes de aprovar.",
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    f"Há {len(trainers)} personal trainers ativos. "
+                    "Envie 'trainer_id' no corpo da requisição para especificar qual vincular."
+                ),
+            )
+
+    # Validar o trainer resolvido
     trainer_result = await session.execute(
-        select(User).where(User.id == dto.trainer_id)
+        select(User).where(User.id == trainer_id)
     )
     trainer = trainer_result.scalar_one_or_none()
     if not trainer or trainer.role != "personal_trainer" or not trainer.is_active:
@@ -264,7 +291,7 @@ async def approve_whatsapp_registration(
             await session.flush()
 
     invitation_service = InvitationService(session)
-    invitation = await invitation_service.generate(dto.trainer_id)
+    invitation = await invitation_service.generate(trainer_id)
 
     whatsapp_service = WhatsAppService(session)
     await whatsapp_service.send_approval_code(dto.phone, invitation.code)
