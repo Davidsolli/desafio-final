@@ -204,9 +204,11 @@ async def approve_whatsapp_registration(
 ) -> InvitationResponseDTO:
     """
     Aprova um pré-cadastro via WhatsApp:
-    1. Gera um código de convite
-    2. Vincula ao pré-cadastro
-    3. Envia o código ao usuário via WhatsApp
+    1. Valida que o personal trainer selecionado existe e está ativo
+    2. Valida que o pagamento foi confirmado (ou é pré-cadastro sem pagamento)
+    3. Invalida convite anterior se existir (evita múltiplos tokens válidos)
+    4. Gera novo código de convite vinculado ao personal trainer
+    5. Envia o código ao usuário via WhatsApp
     """
     if current_user.role != "admin":
         raise HTTPException(
@@ -214,13 +216,25 @@ async def approve_whatsapp_registration(
             detail="Apenas admins podem aprovar pré-cadastros",
         )
 
-    result = await session.execute(
+    # Validar personal trainer
+    trainer_result = await session.execute(
+        select(User).where(User.id == dto.trainer_id)
+    )
+    trainer = trainer_result.scalar_one_or_none()
+    if not trainer or trainer.role != "personal_trainer" or not trainer.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Personal trainer inválido, inativo ou não encontrado",
+        )
+
+    # Buscar pré-cadastro pendente
+    pre_reg_result = await session.execute(
         select(WhatsAppPreRegistration).where(
             WhatsAppPreRegistration.phone == dto.phone,
             WhatsAppPreRegistration.state == "pending_approval",
         )
     )
-    pre_reg = result.scalar_one_or_none()
+    pre_reg = pre_reg_result.scalar_one_or_none()
 
     if not pre_reg:
         raise HTTPException(
@@ -228,8 +242,24 @@ async def approve_whatsapp_registration(
             detail="Pré-cadastro não encontrado ou já aprovado",
         )
 
+    # Gate de pagamento: bloquear aprovação se pagamento pendente
+    if pre_reg.payment_status == "pending":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Pagamento ainda não confirmado. Aguarde a confirmação para aprovar.",
+        )
+
+    # Invalidar convite anterior para evitar múltiplos tokens válidos
+    if pre_reg.invitation_code:
+        from app.repositories.invitation_repository import InvitationRepository
+        inv_repo = InvitationRepository(session)
+        old_invitation = await inv_repo.get_by_code(pre_reg.invitation_code)
+        if old_invitation and not old_invitation.used:
+            old_invitation.used = True
+            await session.flush()
+
     invitation_service = InvitationService(session)
-    invitation = await invitation_service.generate(current_user.id)
+    invitation = await invitation_service.generate(dto.trainer_id)
 
     whatsapp_service = WhatsAppService(session)
     await whatsapp_service.send_approval_code(dto.phone, invitation.code)

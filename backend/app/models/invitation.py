@@ -66,5 +66,7 @@ class Invitation(Base):
 
     used_at = Column(DateTime, nullable=True)
 
+    expires_at = Column(DateTime, nullable=True)
+
     def __repr__(self) -> str:
         return f"<Invitation(code={self.code}, trainer_id={self.trainer_id}, used={self.used})>"

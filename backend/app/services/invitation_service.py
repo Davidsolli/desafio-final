@@ -7,7 +7,7 @@ Inclui: geração de códigos, validação, e rastreamento de uso.
 
 import secrets
 import string
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -48,12 +48,14 @@ class InvitationService:
         chars = string.ascii_uppercase + string.digits
         return "".join(secrets.choice(chars) for _ in range(10))
 
+    _TTL_HOURS = 72
+
     async def generate(self, trainer_id: UUID) -> InvitationResponseDTO:
         """
-        Gerar novo código de convite.
+        Gerar novo código de convite com TTL de 72h.
 
         Args:
-            trainer_id: UUID do personal trainer que está gerando
+            trainer_id: UUID do personal trainer / admin que está gerando
 
         Returns:
             InvitationResponseDTO: Convite criado com código gerado
@@ -62,11 +64,13 @@ class InvitationService:
             Exception: Se houver erro ao salvar no banco
         """
         code = self._generate_code()
+        expires_at = datetime.now(timezone.utc) + timedelta(hours=self._TTL_HOURS)
 
         invitation = Invitation(
             code=code,
             trainer_id=trainer_id,
             used=False,
+            expires_at=expires_at,
         )
 
         created = await self.repository.create(invitation)
@@ -81,6 +85,7 @@ class InvitationService:
         Um código é válido se:
         - Existe no banco
         - Ainda não foi utilizado (used=False)
+        - Não expirou (expires_at > now)
 
         Args:
             code: Código a validar
@@ -95,6 +100,14 @@ class InvitationService:
 
         if invitation.used:
             return False
+
+        if invitation.expires_at:
+            now = datetime.now(timezone.utc)
+            expires = invitation.expires_at
+            if expires.tzinfo is None:
+                expires = expires.replace(tzinfo=timezone.utc)
+            if expires < now:
+                return False
 
         return True
 

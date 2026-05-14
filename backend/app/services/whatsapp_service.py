@@ -93,6 +93,33 @@ _MESSAGES = {
     ),
     "ask_email": "Perfeito, *{name}*!\n\nAgora me passa o seu *email*:",
     "invalid_email": "Hmm, esse email não parece válido. Tenta de novo:",
+    "plan_list_header": (
+        "💳 *Escolha o seu plano:*\n\n"
+        "{plans}\n\n"
+        "_Digite o número da opção desejada._"
+    ),
+    "invalid_plan": "Opção inválida. Por favor, escolha um número da lista:",
+    "no_plans_available": (
+        "⚠️ Não há planos disponíveis no momento.\n"
+        "Entre em contato com a equipe FitLoop."
+    ),
+    "payment_link_sent": (
+        "✅ *Plano selecionado: {plan_name}*\n\n"
+        "Clique no link abaixo para realizar o pagamento:\n"
+        "{checkout_url}\n\n"
+        "_Após a confirmação do pagamento, seu cadastro será enviado para análise._"
+    ),
+    "awaiting_payment": (
+        "⏳ *Aguardando confirmação do pagamento.*\n\n"
+        "Clique no link para pagar:\n"
+        "{checkout_url}\n\n"
+        "_Assim que o pagamento for confirmado, seu cadastro será analisado._"
+    ),
+    "payment_confirmed_user": (
+        "✅ *Pagamento confirmado!*\n\n"
+        "Seu cadastro foi enviado para análise. "
+        "Em breve você receberá o código de acesso aqui mesmo."
+    ),
     "pending_approval": (
         "*Pré-cadastro recebido!* ✅\n\n"
         "Seus dados foram enviados para análise. "
@@ -101,6 +128,11 @@ _MESSAGES = {
     "already_pending": (
         "Seu pré-cadastro já está em análise! ⏳\n\n"
         "Assim que aprovado, você receberá o código de acesso aqui mesmo."
+    ),
+    "invitation_expired": (
+        "⚠️ *Seu código de acesso expirou.*\n\n"
+        "Não se preocupe! Seu pré-cadastro foi reenviado para análise. "
+        "Em breve você receberá um novo código."
     ),
     "approval_code": (
         "*Seu cadastro foi aprovado!* 🎉\n\n"
@@ -760,15 +792,36 @@ class WhatsAppService:
     async def _continue_pre_registration(
         self, phone: str, text: str, pre_reg: WhatsAppPreRegistration
     ) -> None:
+        if pre_reg.state == "awaiting_payment":
+            await self.send_message(
+                phone,
+                _MESSAGES["awaiting_payment"].format(
+                    checkout_url=pre_reg.checkout_url or "—"
+                ),
+            )
+            return
+
         if pre_reg.state == "pending_approval":
             await self.send_message(phone, _MESSAGES["already_pending"])
             return
 
         if pre_reg.state == "approved":
-            # 1. Tenta achar pelo telefone (com normalização)
+            # Verificar se o código de convite ainda é válido
+            if pre_reg.invitation_code:
+                from app.services.invitation_service import InvitationService
+                inv_service = InvitationService(self.session)
+                is_valid = await inv_service.validate(pre_reg.invitation_code)
+                if not is_valid:
+                    # Código expirado — resetar para admin aprovar novamente
+                    pre_reg.state = "pending_approval"
+                    pre_reg.invitation_code = None
+                    await self.session.commit()
+                    await self.send_message(phone, _MESSAGES["invitation_expired"])
+                    return
+
+            # Código válido — verificar se usuário já se cadastrou
             user = await self._find_user_by_phone(phone)
 
-            # 2. Fallback: busca pelo email do pré-cadastro
             if user is None and pre_reg.email:
                 result = await self.session.execute(
                     select(User).where(
@@ -778,7 +831,6 @@ class WhatsAppService:
                 )
                 user = result.scalar_one_or_none()
                 if user:
-                    # Salva o número para futuras buscas (auto-link)
                     user.phone_whatsapp = phone
                     await self.session.commit()
                     logger.info(
@@ -810,9 +862,96 @@ class WhatsAppService:
                 await self.send_message(phone, _MESSAGES["invalid_email"])
                 return
             pre_reg.email = text
-            pre_reg.state = "pending_approval"
+            pre_reg.state = "awaiting_plan"
             await self.session.commit()
-            await self.send_message(phone, _MESSAGES["pending_approval"])
+            await self._send_plan_list(phone)
+            return
+
+        if pre_reg.state == "awaiting_plan":
+            await self._handle_plan_selection(phone, text, pre_reg)
+
+    # ── Seleção de plano no pré-cadastro ──────────────────────────────────────
+
+    async def _send_plan_list(self, phone: str) -> None:
+        """Busca planos ativos e envia lista numerada ao usuário."""
+        from app.repositories.payment_repository import PlanRepository
+
+        plans = await PlanRepository.find_all_active(self.session)
+        if not plans:
+            await self.send_message(phone, _MESSAGES["no_plans_available"])
+            return
+
+        lines = []
+        emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣"]
+        for i, plan in enumerate(plans):
+            emoji = emojis[i] if i < len(emojis) else f"{i + 1}."
+            price = f"R$ {float(plan.price):.2f}".replace(".", ",")
+            duration = (
+                f"{plan.duration_months} mês"
+                if plan.duration_months == 1
+                else f"{plan.duration_months} meses"
+            )
+            lines.append(f"{emoji} *{plan.name}* — {price}/{duration}")
+
+        plan_text = "\n".join(lines)
+        await self.send_message(
+            phone, _MESSAGES["plan_list_header"].format(plans=plan_text)
+        )
+
+    async def _handle_plan_selection(
+        self, phone: str, text: str, pre_reg: WhatsAppPreRegistration
+    ) -> None:
+        """Processa a escolha do plano, cria checkout e transita para awaiting_payment."""
+        from app.repositories.payment_repository import PlanRepository
+        from app.services.infinitepay_service import create_payment_link
+
+        plans = await PlanRepository.find_all_active(self.session)
+        if not plans:
+            await self.send_message(phone, _MESSAGES["no_plans_available"])
+            return
+
+        try:
+            choice = int(text.strip())
+        except ValueError:
+            await self.send_message(phone, _MESSAGES["invalid_plan"])
+            return
+
+        if choice < 1 or choice > len(plans):
+            await self.send_message(phone, _MESSAGES["invalid_plan"])
+            return
+
+        plan = plans[choice - 1]
+        order_nsu = f"prereg_{pre_reg.id}"
+
+        result = await create_payment_link(
+            subscription_id=pre_reg.id,
+            plan_name=plan.name,
+            price_brl=float(plan.price),
+            student_name=pre_reg.name or "Usuário",
+            student_email=pre_reg.email or "",
+            student_phone=pre_reg.phone,
+            order_nsu_override=order_nsu,
+        )
+
+        checkout_url = result.url if result else None
+        if not checkout_url:
+            # Fallback: URL padrão da InfinitePay se integração falhar
+            checkout_url = "https://checkout.infinitepay.io/fitloop"
+
+        pre_reg.selected_plan_id = plan.id
+        pre_reg.payment_status = "pending"
+        pre_reg.pre_reg_payment_id = order_nsu
+        pre_reg.checkout_url = checkout_url
+        pre_reg.state = "awaiting_payment"
+        await self.session.commit()
+
+        await self.send_message(
+            phone,
+            _MESSAGES["payment_link_sent"].format(
+                plan_name=plan.name,
+                checkout_url=checkout_url,
+            ),
+        )
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
