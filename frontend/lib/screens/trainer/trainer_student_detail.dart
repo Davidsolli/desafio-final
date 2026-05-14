@@ -498,12 +498,13 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
               color: context.colors.surface,
               child: TabBar(
                 controller: _tabController,
-                isScrollable: true,
-                tabAlignment: TabAlignment.start,
+                isScrollable: false,
+                tabAlignment: TabAlignment.fill,
                 tabs: const [
                   Tab(icon: Icon(Icons.info_outline), text: 'Info'),
-                  Tab(icon: Icon(Icons.fitness_center), text: 'Treinos'),
+                  Tab(icon: Icon(Icons.fitness_center), text: 'Fichas'),
                   Tab(icon: Icon(Icons.restaurant_outlined), text: 'Nutrição'),
+                  Tab(icon: Icon(Icons.trending_up), text: 'Evolução'),
                   Tab(icon: Icon(Icons.directions_walk), text: 'Passos'),
                 ],
                 labelColor: AppColors.primary,
@@ -2229,18 +2230,18 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
   String _mapGoalTypeToPt(String? goalType) {
     switch (goalType) {
       case 'gain_mass':
-        return 'ganho de massa';
+        return 'Ganho de Massa';
       case 'lose_weight':
-        return 'perda de peso';
+        return 'Perda de Peso';
       case 'maintain':
       case 'maintenance':
-        return 'manutenção';
+        return 'Manutenção';
       case 'endurance':
-        return 'resistência';
+        return 'Resistência';
       case 'bulking':
-        return 'bulking';
+        return 'Bulking';
       case 'cutting':
-        return 'cutting';
+        return 'Cutting';
       default:
         return goalType == null || goalType.isEmpty ? 'Não informado' : goalType;
     }
@@ -2249,9 +2250,9 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
   String _mapGenderToPt(String? gender) {
     switch (gender) {
       case 'male':
-        return 'masculino';
+        return 'Masculino';
       case 'female':
-        return 'feminino';
+        return 'Feminino';
       default:
         return gender == null || gender.isEmpty ? 'Não informado' : gender;
     }
