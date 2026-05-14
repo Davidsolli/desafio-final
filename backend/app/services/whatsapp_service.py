@@ -750,6 +750,13 @@ class WhatsAppService:
             return
 
         if pre_reg.state == "approved":
+            # Usuário pode já ter completado o cadastro no app — verifica
+            user = await self._find_user_by_phone(phone)
+            if user and user.is_active:
+                await self.send_message(
+                    phone, _MENU_REGISTERED.format(name=_first_name(user.name))
+                )
+                return
             await self.send_message(
                 phone,
                 _MESSAGES["already_approved"].format(code=pre_reg.invitation_code),
@@ -782,7 +789,18 @@ class WhatsAppService:
         normalized = self._normalize_phone(phone)
         if not normalized:
             return None
+
+        # Tenta múltiplos formatos pois o app pode salvar com ou sem DDI 55
+        variants: list[str] = [normalized]
+        if normalized.startswith("55") and len(normalized) >= 12:
+            variants.append(normalized[2:])   # sem DDI: 11999999999
+        elif len(normalized) in (10, 11):
+            variants.append(f"55{normalized}")  # com DDI: 5511999999999
+
+        from sqlalchemy import or_
         result = await self.session.execute(
-            select(User).where(User.phone_whatsapp == normalized)
+            select(User).where(
+                or_(*[User.phone_whatsapp == v for v in variants])
+            ).limit(1)
         )
         return result.scalar_one_or_none()
