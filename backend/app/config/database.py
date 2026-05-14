@@ -121,6 +121,8 @@ async def init_db() -> None:
         "ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS escalation_data JSON",
         "ALTER TABLE step_logs ADD COLUMN IF NOT EXISTS handicap_level INTEGER DEFAULT NULL",
         "ALTER TABLE notification_preferences ADD COLUMN IF NOT EXISTS student_inactivity_enabled BOOLEAN NOT NULL DEFAULT TRUE",
+        # Normalizar emails existentes para minúsculo
+        "UPDATE users SET email = LOWER(email) WHERE email != LOWER(email)",
         # Migration 005: invitation TTL + campos de pagamento no pré-cadastro WhatsApp
         "ALTER TABLE invitations ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP",
         "UPDATE invitations SET expires_at = created_at + INTERVAL '72 hours' WHERE expires_at IS NULL",

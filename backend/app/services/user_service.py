@@ -94,6 +94,9 @@ class UserService:
             UserAlreadyExistsError: Se email já existe
             InvalidInvitationError: Se código de convite é inválido
         """
+        # Normalizar email para minúsculo antes de qualquer operação
+        dto.email = dto.email.lower()
+
         # Validar se email já existe
         existing_user = await self.repository.get_by_email_all_states(dto.email)
         if existing_user:
