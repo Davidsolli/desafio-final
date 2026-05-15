@@ -2,10 +2,13 @@
 Routes para Pagamentos e Assinaturas (MVP V1)
 Endpoints: CRUD de Planos, Checkout, Webhooks
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+import logging
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List
 from uuid import UUID
+
+logger = logging.getLogger(__name__)
 
 from app.config.database import get_db
 from app.dependencies.auth import get_current_user
@@ -372,6 +375,7 @@ async def handle_asaas_webhook(
 
 @router.post("/webhooks/infinitepay")
 async def handle_infinitepay_webhook(
+    request: Request,
     payload: InfinitePayWebhookDTO,
     session: AsyncSession = Depends(get_db)
 ):
@@ -388,11 +392,21 @@ async def handle_infinitepay_webhook(
     1. Extrair subscription_id
     2. Ativar subscription → status ACTIVE
     """
+    raw_body = (await request.body()).decode("utf-8", errors="replace")
+    logger.info(
+        "InfinitePay webhook RAW=%s | parsed=%s | extras=%s",
+        raw_body,
+        payload.model_dump(),
+        getattr(payload, "model_extra", None),
+    )
+
     if not payload.is_paid():
+        logger.info("InfinitePay webhook IGNORED (status=%r não é pago)", payload.status)
         return {"status": "ignored", "event_status": payload.status}
 
     order_nsu = payload.get_subscription_id()
     if not order_nsu:
+        logger.warning("InfinitePay webhook sem order_nsu")
         return {"status": "error", "message": "order_nsu não fornecido"}
 
     # Pagamento de pré-cadastro WhatsApp
