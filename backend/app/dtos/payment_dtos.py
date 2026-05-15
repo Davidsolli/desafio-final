@@ -172,24 +172,35 @@ class AsaasWebhookDTO(BaseModel):
 class InfinitePayWebhookDTO(BaseModel):
     """
     Payload do webhook da InfinitePay.
-    Enviado quando o pagamento é confirmado.
-    order_nsu: subscription_id enviado no momento do checkout
-    status: 'paid' = pago, 'failed' = falhou, 'expired' = expirado
+    order_nsu: subscription_id (ou prereg_<id>) enviado no momento do checkout.
+
+    A InfinitePay não envia `status`; sinaliza pagamento via `paid_amount == amount`
+    + presença de `receipt_url`/`transaction_nsu`.
     """
     order_nsu: Optional[str] = None
     status: Optional[str] = None
     transaction_id: Optional[str] = None
-    amount: Optional[int] = None          # valor em centavos
-    payment_method: Optional[str] = None  # pix, credit
+    transaction_nsu: Optional[str] = None
+    amount: Optional[int] = None
+    paid_amount: Optional[int] = None
+    receipt_url: Optional[str] = None
+    payment_method: Optional[str] = None
+    capture_method: Optional[str] = None
 
     def is_paid(self) -> bool:
-        return self.status in ("paid", "approved", "confirmed", "complete", "completed")
+        if self.status in ("paid", "approved", "confirmed", "complete", "completed"):
+            return True
+        if self.paid_amount and self.amount and self.paid_amount >= self.amount:
+            return True
+        if self.paid_amount and self.paid_amount > 0 and self.receipt_url:
+            return True
+        return False
 
     def get_subscription_id(self) -> Optional[str]:
         return self.order_nsu
 
     def get_payment_id(self) -> Optional[str]:
-        return self.transaction_id or self.order_nsu
+        return self.transaction_id or self.transaction_nsu or self.order_nsu
 
     model_config = {"extra": "allow"}
 
