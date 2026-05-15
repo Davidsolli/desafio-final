@@ -62,7 +62,7 @@ class _AdminShellState extends State<AdminShell> {
         selectedItemColor: AppColors.primary,
         unselectedItemColor: context.colors.textMuted,
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.people_outlined), label: 'Trainers'),
+          BottomNavigationBarItem(icon: Icon(Icons.manage_accounts_outlined), label: 'Usuários'),
           BottomNavigationBarItem(icon: Icon(Icons.card_membership_outlined), label: 'Planos'),
           BottomNavigationBarItem(icon: Icon(Icons.attach_money), label: 'Pagamentos'),
           BottomNavigationBarItem(icon: Icon(Icons.mark_chat_unread_outlined), label: 'WhatsApp'),

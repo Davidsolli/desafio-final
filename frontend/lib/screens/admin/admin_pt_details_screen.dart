@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/theme_colors.dart';
 import '../../providers/admin_provider.dart';
+import '../../shared/widgets/index.dart';
 
 class AdminPTDetailsScreen extends StatefulWidget {
   final String trainerId;
@@ -27,9 +28,7 @@ class _AdminPTDetailsScreenState extends State<AdminPTDetailsScreen> {
   @override
   void initState() {
     super.initState();
-    _searchController.addListener(() {
-      setState(() {});
-    });
+    _searchController.addListener(() => setState(() {}));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<AdminProvider>().loadStudentsOfTrainer(widget.trainerId);
     });
@@ -48,32 +47,24 @@ class _AdminPTDetailsScreenState extends State<AdminPTDetailsScreen> {
       body: SafeArea(
         child: Consumer<AdminProvider>(
           builder: (context, provider, _) {
-            final filteredStudents = _getFilteredStudents(provider.studentsOfTrainer);
+            final filtered = _getFiltered(provider.studentsOfTrainer);
             final activeCount = provider.studentsOfTrainer.where((s) => s.isActive).length;
             final inactiveCount = provider.studentsOfTrainer.where((s) => !s.isActive).length;
 
             if (provider.isLoading) {
-              return const Center(child: CircularProgressIndicator());
+              return const Center(child: OmniLoader());
             }
 
             if (provider.error != null) {
-              return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text('Erro: ${provider.error}'),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: () => provider.loadStudentsOfTrainer(widget.trainerId),
-                      child: const Text('Tentar novamente'),
-                    ),
-                  ],
-                ),
+              return OmniErrorState(
+                message: 'Erro: ${provider.error}',
+                onRetry: () => provider.loadStudentsOfTrainer(widget.trainerId),
               );
             }
 
             return Column(
               children: [
+                // ── Header ──────────────────────────────────────────
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   child: Row(
@@ -96,61 +87,58 @@ class _AdminPTDetailsScreenState extends State<AdminPTDetailsScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text('Alunos de',
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.textSecondary)),
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(color: context.colors.textSecondary)),
                             Text(widget.trainerName,
-                                style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .headlineSmall
+                                    ?.copyWith(fontWeight: FontWeight.bold),
+                                overflow: TextOverflow.ellipsis),
                           ],
                         ),
                       ),
                     ],
                   ),
                 ),
+
+                // ── Stats ────────────────────────────────────────────
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: _buildStatsRow(context, provider.studentsOfTrainer.length, activeCount, inactiveCount),
+                  child: _buildStatsRow(
+                      context, provider.studentsOfTrainer.length, activeCount, inactiveCount),
                 ),
-                const SizedBox(height: 16),
+
+                // ── Busca ────────────────────────────────────────────
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: TextField(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: OmniTextField(
                     controller: _searchController,
-                    decoration: InputDecoration(
-                      hintText: 'Buscar aluno...',
-                      hintStyle: TextStyle(color: context.colors.textMuted),
-                      prefixIcon: Icon(Icons.search, color: context.colors.textMuted),
-                      filled: true,
-                      fillColor: context.colors.surface,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: context.colors.border),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                    ),
+                    labelText: 'Buscar aluno...',
+                    hintText: 'Nome ou email',
+                    prefixIcon: Icons.search,
                   ),
                 ),
-                const SizedBox(height: 16),
+
+                const SizedBox(height: 12),
+
+                // ── Lista ────────────────────────────────────────────
                 Expanded(
-                  child: filteredStudents.isEmpty
-                      ? Center(
-                          child: Text('Nenhum aluno encontrado',
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.textMuted)),
+                  child: filtered.isEmpty
+                      ? const OmniEmptyState(
+                          icon: Icons.person_search,
+                          title: 'Nenhum aluno encontrado',
                         )
                       : ListView.builder(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
-                          itemCount: filteredStudents.length,
+                          itemCount: filtered.length,
                           itemBuilder: (context, index) {
-                            final student = filteredStudents[index];
+                            final student = filtered[index];
                             return FadeInUp(
-                              delay: Duration(milliseconds: index * 100),
-                              child: _buildStudentCard(
-                                context,
-                                studentId: student.id,
-                                name: student.name,
-                                email: student.email,
-                                phone: student.phoneWhatsapp ?? '',
-                                isActive: student.isActive,
-                                provider: provider,
-                              ),
+                              delay: Duration(milliseconds: index * 80),
+                              child: _buildStudentCard(context, student, provider),
                             );
                           },
                         ),
@@ -163,128 +151,77 @@ class _AdminPTDetailsScreenState extends State<AdminPTDetailsScreen> {
     );
   }
 
-  List<dynamic> _getFilteredStudents(List<dynamic> students) {
-    var filtered = students;
-
-    // Filtrar por status
-    if (_filterStatus == 'active') {
-      filtered = filtered.where((s) => s.isActive).toList();
-    } else if (_filterStatus == 'inactive') {
-      filtered = filtered.where((s) => !s.isActive).toList();
-    }
-
-    // Filtrar por busca
-    final searchTerm = _searchController.text.toLowerCase();
-    if (searchTerm.isNotEmpty) {
-      filtered = filtered
-          .where((s) => s.name.toLowerCase().contains(searchTerm) || s.email.toLowerCase().contains(searchTerm))
+  List<dynamic> _getFiltered(List<dynamic> students) {
+    var list = students;
+    if (_filterStatus == 'active') list = list.where((s) => s.isActive).toList();
+    if (_filterStatus == 'inactive') list = list.where((s) => !s.isActive).toList();
+    final q = _searchController.text.toLowerCase();
+    if (q.isNotEmpty) {
+      list = list
+          .where((s) => s.name.toLowerCase().contains(q) || s.email.toLowerCase().contains(q))
           .toList();
     }
-
-    return filtered;
+    return list;
   }
 
   Widget _buildStatsRow(BuildContext context, int total, int active, int inactive) {
     return Row(
       children: [
         Expanded(
-          child: GestureDetector(
+          child: OmniStatCard(
+            value: '$total',
+            label: 'Total',
             onTap: () => setState(() => _filterStatus = 'all'),
-            child: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: _filterStatus == 'all' ? AppColors.primary.withAlpha(20) : context.colors.surface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: context.colors.border),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Total',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.textSecondary)),
-                  const SizedBox(height: 4),
-                  Text('$total',
-                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
-                ],
-              ),
-            ),
+            isSelected: _filterStatus == 'all',
           ),
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: GestureDetector(
+          child: OmniStatCard(
+            value: '$active',
+            label: 'Ativos',
+            valueColor: Colors.green,
             onTap: () => setState(() => _filterStatus = 'active'),
-            child: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: _filterStatus == 'active' ? Colors.green.withAlpha(20) : context.colors.surface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: context.colors.border),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Ativos',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.green)),
-                  const SizedBox(height: 4),
-                  Text('$active',
-                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold, color: Colors.green)),
-                ],
-              ),
-            ),
+            isSelected: _filterStatus == 'active',
           ),
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: GestureDetector(
+          child: OmniStatCard(
+            value: '$inactive',
+            label: 'Inativos',
+            valueColor: Colors.red,
             onTap: () => setState(() => _filterStatus = 'inactive'),
-            child: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: _filterStatus == 'inactive' ? Colors.red.withAlpha(20) : context.colors.surface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: context.colors.border),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Inativos',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.red)),
-                  const SizedBox(height: 4),
-                  Text('$inactive',
-                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold, color: Colors.red)),
-                ],
-              ),
-            ),
+            isSelected: _filterStatus == 'inactive',
           ),
         ),
       ],
     );
   }
 
-  Widget _buildStudentCard(
-    BuildContext context, {
-    required String studentId,
-    required String name,
-    required String email,
-    required String phone,
-    required bool isActive,
-    required AdminProvider provider,
-  }) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
+  Widget _buildStudentCard(BuildContext context, dynamic student, AdminProvider provider) {
+    return GestureDetector(
+      onTap: () => context.push('/admin/edit-student', extra: {
+        'studentId': student.id,
+        'studentName': student.name,
+        'studentEmail': student.email,
+        'studentPhone': student.phoneWhatsapp,
+      }),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: context.colors.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: context.colors.border),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withAlpha(5), blurRadius: 8, offset: const Offset(0, 2)),
+          ],
+        ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            CircleAvatar(
-              backgroundColor: AppColors.primary,
-              child: Text(
-                name[0],
-                style: const TextStyle(color: Colors.white),
-              ),
-            ),
+            OmniAvatar(name: student.name),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -292,65 +229,69 @@ class _AdminPTDetailsScreenState extends State<AdminPTDetailsScreen> {
                 children: [
                   Row(
                     children: [
-                      Text(
-                        name,
-                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      Expanded(
+                        child: Text(student.name,
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleSmall
+                                ?.copyWith(fontWeight: FontWeight.bold)),
                       ),
-                      const SizedBox(width: 8),
-                      Chip(
-                        label: Text(isActive ? 'Ativo' : 'Inativo'),
-                        backgroundColor: isActive ? Colors.green.withAlpha(30) : Colors.red.withAlpha(30),
-                        labelStyle: TextStyle(
-                          fontSize: 12,
-                          color: isActive ? Colors.green : Colors.red,
-                        ),
+                      OmniStatusBadge(
+                        label: student.isActive ? 'Ativo' : 'Inativo',
+                        color: student.isActive ? Colors.green : Colors.red,
                       ),
                     ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    email,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: context.colors.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    phone,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: context.colors.textSecondary,
-                    ),
-                  ),
+                  const SizedBox(height: 3),
+                  Text(student.email,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: context.colors.textSecondary)),
+                  if (student.phoneWhatsapp != null && student.phoneWhatsapp!.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(student.phoneWhatsapp!,
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(color: context.colors.textMuted)),
+                  ],
                 ],
               ),
             ),
-            PopupMenuButton(
-              itemBuilder: (context) => [
+            PopupMenuButton<String>(
+              onSelected: (value) {
+                if (value == 'edit') {
+                  context.push('/admin/edit-student', extra: {
+                    'studentId': student.id,
+                    'studentName': student.name,
+                    'studentEmail': student.email,
+                    'studentPhone': student.phoneWhatsapp,
+                  });
+                } else if (value == 'toggle') {
+                  _showStatusDialog(context, student.id, student.name, student.isActive, provider);
+                }
+              },
+              itemBuilder: (_) => [
                 PopupMenuItem(
-                  child: Row(
-                    children: [
-                      Icon(Icons.edit, size: 18, color: AppColors.primary),
-                      const SizedBox(width: 8),
-                      const Text('Editar'),
-                    ],
-                  ),
-                  onTap: () => context.push('/admin/edit-student', extra: {'studentId': studentId, 'studentName': name, 'studentEmail': email, 'studentPhone': phone}),
+                  value: 'edit',
+                  child: Row(children: [
+                    Icon(Icons.edit, size: 18, color: AppColors.primary),
+                    const SizedBox(width: 8),
+                    const Text('Editar'),
+                  ]),
                 ),
                 PopupMenuItem(
-                  child: Row(
-                    children: [
-                      Icon(
-                        isActive ? Icons.block : Icons.check_circle,
-                        size: 18,
-                        color: isActive ? Colors.orange : Colors.green,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(isActive ? 'Desativar' : 'Ativar'),
-                    ],
-                  ),
-                  onTap: () => _showStatusDialog(context, studentId, name, isActive, provider),
+                  value: 'toggle',
+                  child: Row(children: [
+                    Icon(
+                      student.isActive ? Icons.block : Icons.check_circle,
+                      size: 18,
+                      color: student.isActive ? Colors.orange : Colors.green,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(student.isActive ? 'Desativar' : 'Ativar'),
+                  ]),
                 ),
               ],
             ),
@@ -369,34 +310,31 @@ class _AdminPTDetailsScreenState extends State<AdminPTDetailsScreen> {
   ) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         title: Text(isActive ? 'Desativar Aluno' : 'Ativar Aluno'),
-        content: Text(
-          isActive
-              ? 'Tem certeza que deseja desativar $name?'
-              : 'Tem certeza que deseja ativar $name?',
-        ),
+        content: Text(isActive
+            ? 'Tem certeza que deseja desativar $name?'
+            : 'Tem certeza que deseja ativar $name?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(ctx),
             child: const Text('Cancelar'),
           ),
           TextButton(
             onPressed: () async {
-              Navigator.pop(context);
+              Navigator.pop(ctx);
               try {
                 await provider.toggleUserStatus(studentId, isActive);
+                await provider.loadStudentsOfTrainer(widget.trainerId);
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        isActive ? '$name desativado com sucesso!' : '$name ativado com sucesso!',
-                      ),
-                      backgroundColor: isActive ? Colors.orange : Colors.green,
-                    ),
-                  );
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text(isActive
+                        ? '$name desativado com sucesso!'
+                        : '$name ativado com sucesso!'),
+                    backgroundColor: isActive ? Colors.orange : Colors.green,
+                  ));
                 }
-              } catch (e) {
+              } catch (_) {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Erro ao atualizar status')),
@@ -404,12 +342,8 @@ class _AdminPTDetailsScreenState extends State<AdminPTDetailsScreen> {
                 }
               }
             },
-            child: Text(
-              isActive ? 'Desativar' : 'Ativar',
-              style: TextStyle(
-                color: isActive ? Colors.orange : Colors.green,
-              ),
-            ),
+            child: Text(isActive ? 'Desativar' : 'Ativar',
+                style: TextStyle(color: isActive ? Colors.orange : Colors.green)),
           ),
         ],
       ),
