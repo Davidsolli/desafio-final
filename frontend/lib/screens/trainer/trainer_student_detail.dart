@@ -1222,11 +1222,7 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
               : _nutritionSubTabIndex == 1
                   ? (activeDiet != null
                       ? _buildDietPrescriptionView(activeDiet)
-                      : const OmniEmptyState(
-                          icon: Icons.restaurant_outlined,
-                          title: 'Nenhum plano nutricional',
-                          subtitle: 'Prescreva um plano para este aluno.',
-                        ))
+                      : _buildEmptyDietView())
                   : _buildNutritionAnalyticsView(activeDiet),
         ),
       ],
@@ -2303,6 +2299,86 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
         ],
       ),
     );
+  }
+
+  Widget _buildEmptyDietView() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const OmniEmptyState(
+              icon: Icons.restaurant_outlined,
+              title: 'Nenhum plano nutricional',
+              subtitle: 'Este aluno ainda não possui uma dieta prescrita.',
+            ),
+            const SizedBox(height: 24),
+            Builder(builder: (context) {
+              final role = context.read<AuthProvider>().user?.role ?? 'personal_trainer';
+              final canCreate = hasRole(role, 'nutritionist') || role == 'admin';
+              if (!canCreate) return const SizedBox.shrink();
+              return SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _createInitialDiet,
+                  icon: const Icon(Icons.add, color: Colors.white),
+                  label: const Text('Criar Plano Nutricional'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _createInitialDiet() async {
+    setState(() => _nutritionLoading = true);
+    try {
+      final apiClient = context.read<ApiClient>();
+      final response = await apiClient.post<Map<String, dynamic>>(
+        '/diets',
+        body: {
+          'user_id': widget.studentId,
+          'name': 'Plano Nutricional Inicial',
+          'goal': 'maintenance',
+          'meals': [
+            {
+              'name': 'Café da Manhã',
+              'time': '08:00',
+              'order': 1,
+              'items': [],
+            }
+          ],
+          'water_target_ml': 2500,
+        },
+        fromJson: (data) => data as Map<String, dynamic>,
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Plano nutricional criado! Agora você pode adicionar as refeições.'),
+            backgroundColor: AppColors.accentSuccess,
+          ),
+        );
+        _loadStudentNutrition();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _nutritionError = 'Erro ao criar plano: ${e.toString()}';
+          _nutritionLoading = false;
+        });
+      }
+    }
   }
 
   Future<void> _showEditWaterTargetDialog(Diet activeDiet) async {
