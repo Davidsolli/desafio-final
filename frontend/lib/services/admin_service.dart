@@ -6,13 +6,55 @@ class AdminService {
 
   AdminService({required ApiClient apiClient}) : _apiClient = apiClient;
 
-  Future<List<AdminUserDTO>> listTrainers({int page = 1, int limit = 100}) async {
+  Future<List<AdminUserDTO>> listTrainers() async {
+    const limit = 100;
     try {
-      final response = await _apiClient.get<PaginatedAdminUsersDTO>(
-        '/users?role=personal_trainer&page=$page&limit=$limit&include_inactive=true',
-        fromJson: (json) => PaginatedAdminUsersDTO.fromJson(json as Map<String, dynamic>),
-      );
-      return response.data;
+      Future<List<AdminUserDTO>> fetchAll(String role) async {
+        final all = <AdminUserDTO>[];
+        int p = 1;
+        while (true) {
+          final response = await _apiClient.get<PaginatedAdminUsersDTO>(
+            '/users?role=$role&page=$p&limit=$limit&include_inactive=true',
+            fromJson: (json) => PaginatedAdminUsersDTO.fromJson(json as Map<String, dynamic>),
+          );
+          all.addAll(response.data);
+          if (all.length >= response.total || response.data.isEmpty) break;
+          p++;
+        }
+        return all;
+      }
+
+      final results = await Future.wait([fetchAll('personal_trainer'), fetchAll('nutritionist')]);
+      // Remove duplicatas (profissionais duais aparecem nas duas listas)
+      final combined = <String, AdminUserDTO>{};
+      for (final list in results) {
+        for (final user in list) {
+          combined[user.id] = user;
+        }
+      }
+      final result = combined.values.toList();
+      result.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return result;
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  Future<List<AdminUserDTO>> listAllStudents() async {
+    const limit = 100;
+    final all = <AdminUserDTO>[];
+    int page = 1;
+    try {
+      while (true) {
+        final response = await _apiClient.get<PaginatedAdminUsersDTO>(
+          '/users?role=client&page=$page&limit=$limit&include_inactive=true',
+          fromJson: (json) => PaginatedAdminUsersDTO.fromJson(json as Map<String, dynamic>),
+        );
+        all.addAll(response.data);
+        if (all.length >= response.total || response.data.isEmpty) break;
+        page++;
+      }
+      return all;
     } catch (e) {
       rethrow;
     }

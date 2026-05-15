@@ -251,6 +251,7 @@ class AppRoutes {
             trainerName: extra?['trainerName'] as String?,
             trainerEmail: extra?['trainerEmail'] as String?,
             trainerPhone: extra?['trainerPhone'] as String?,
+            trainerRole: extra?['trainerRole'] as String?,
           );
         },
       ),
