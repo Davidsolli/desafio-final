@@ -308,14 +308,14 @@ class _TrainerStudentsScreenState extends State<TrainerStudentsScreen> {
   String _mapGoalTypeToPt(String? goalType) {
     switch (goalType) {
       case 'gain_mass':
-        return 'ganho de massa';
+        return 'Ganho de Massa';
       case 'lose_weight':
-        return 'perda de peso';
+        return 'Perda de Peso';
       case 'maintain':
       case 'maintenance':
-        return 'manutenção';
+        return 'Manutenção';
       case 'endurance':
-        return 'resistência';
+        return 'Resistência';
       default:
         return goalType == null || goalType.isEmpty
             ? 'Sem objetivo'
