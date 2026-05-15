@@ -259,10 +259,11 @@ async def seed(force: bool = False) -> None:
             email=admin_bootstrap["ADMIN_EMAIL"],
             password=admin_bootstrap["ADMIN_PASSWORD"],
             role="admin",
-            phone_whatsapp="11900000000",
+            phone_whatsapp="5511900000000",
         )
 
         # ── Profissionais ──────────────────────────────────────────────────
+        # Agora todos os profissionais têm a função dual: nutricionista e personal trainer
         professionals: Dict[str, User] = {}
 
         professionals["camila"] = await get_or_create_user(
@@ -270,59 +271,33 @@ async def seed(force: bool = False) -> None:
             name="Camila Rocha",
             email="camila.personal@omniconnect.fit",
             password="TreinoForte123!",
-            role="personal_trainer",
+            role="nutritionist,personal_trainer",
             age=31,
             gender="female",
-            phone_whatsapp="11988881010",
+            phone_whatsapp="5511988881010",
         )
         professionals["rafael"] = await get_or_create_user(
             session,
             name="Rafael Lima",
             email="rafael.personal@omniconnect.fit",
             password="TreinoForte123!",
-            role="personal_trainer",
+            role="nutritionist,personal_trainer",
             age=34,
             gender="male",
-            phone_whatsapp="21977772020",
-        )
-        professionals["ana"] = await get_or_create_user(
-            session,
-            name="Ana Beatriz Fonseca",
-            email="ana.nutri@omniconnect.fit",
-            password="NutriForte123!",
-            role="nutritionist",
-            age=29,
-            gender="female",
-            phone_whatsapp="31966663030",
-        )
-        professionals["pedro"] = await get_or_create_user(
-            session,
-            name="Pedro Alves",
-            email="pedro.dual@omniconnect.fit",
-            password="DualForte123!",
-            role="nutritionist,personal_trainer",
-            age=37,
-            gender="male",
-            phone_whatsapp="41955554040",
+            phone_whatsapp="5521977772020",
         )
 
-        # ── Alunos — 2 por profissional ────────────────────────────────────
+        # ── Alunos — 2 por profissional (Total 4) ──────────────────────────
         #
         # Estrutura: (nome, email, prof_key, peso, altura, idade, genero, fone, objetivo, carga_base)
         #
         student_specs = [
-            # Camila Rocha — foco em emagrecimento e hipertrofia feminina
-            ("Bruno Martins",   "bruno.aluno@omniconnect.fit",    "camila", 92.0, 180.0, 29, "male",   "11966661111", "lose_weight",  32.0),
-            ("Juliana Costa",   "juliana.aluna@omniconnect.fit",  "camila", 61.0, 165.0, 26, "female", "11966662222", "gain_mass",    18.0),
-            # Rafael Lima — atletas e manutenção
-            ("Leonardo Souza",  "leonardo.aluno@omniconnect.fit", "rafael", 79.0, 173.0, 35, "male",   "21955553333", "maintenance",  28.0),
-            ("Patricia Nunes",  "patricia.aluna@omniconnect.fit", "rafael", 70.0, 169.0, 32, "female", "21955554444", "endurance",    20.0),
-            # Ana Beatriz — foco nutricional, alunos com objetivos metabólicos
-            ("Fernanda Rios",   "fernanda.aluna@omniconnect.fit", "ana",    74.0, 162.0, 38, "female", "31944445555", "lose_weight",  16.0),
-            ("Carlos Mendes",   "carlos.aluno@omniconnect.fit",   "ana",    88.0, 175.0, 42, "male",   "31944446666", "lose_weight",  26.0),
-            # Pedro Alves — dual; alunos com visão 360° (treino + dieta)
-            ("Isabela Ferreira","isabela.aluna@omniconnect.fit",  "pedro",  55.0, 160.0, 23, "female", "41933337777", "gain_mass",    14.0),
-            ("Rodrigo Campos",  "rodrigo.aluno@omniconnect.fit",  "pedro",  84.0, 178.0, 31, "male",   "41933338888", "maintenance",  35.0),
+            # Camila Rocha
+            ("Bruno Martins",   "bruno.aluno@omniconnect.fit",    "camila", 92.0, 180.0, 29, "male",   "5511966661111", "lose_weight",  32.0),
+            ("Juliana Costa",   "juliana.aluna@omniconnect.fit",  "camila", 61.0, 165.0, 26, "female", "5511966662222", "gain_mass",    18.0),
+            # Rafael Lima
+            ("Leonardo Souza",  "leonardo.aluno@omniconnect.fit", "rafael", 79.0, 173.0, 35, "male",   "5521955553333", "maintenance",  28.0),
+            ("Patricia Nunes",  "patricia.aluna@omniconnect.fit", "rafael", 70.0, 169.0, 32, "female", "5521955554444", "endurance",    20.0),
         ]
 
         students: List[User] = []
@@ -354,10 +329,6 @@ async def seed(force: bool = False) -> None:
             ("Aumentar carga no supino",     "strength",    50.0,  32.0,  "kg",            1, "camila"),
             ("Manter frequência semanal",    "frequency",    4.0,   3.0,  "treinos/semana",2, "rafael"),
             ("Melhorar VO2 máx (corrida)",   "endurance",   28.0,  33.5,  "min/5km",       3, "rafael"),
-            ("Reduzir índice glicêmico",     "composition", 22.0,  27.5,  "% gordura",     4, "ana"),
-            ("Atingir peso saudável",        "composition", 78.0,  88.0,  "kg",            5, "ana"),
-            ("Ganhar massa magra",           "strength",    48.0,  40.0,  "kg total magro",6, "pedro"),
-            ("Controle de composição corp.", "composition", 77.0,  84.0,  "kg",            7, "pedro"),
         ]
 
         for title, category, target, current, unit, student_idx, prof_key in goal_specs:
