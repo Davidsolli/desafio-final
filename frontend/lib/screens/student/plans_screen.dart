@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/theme_colors.dart';
 import '../../providers/payment_provider.dart';
@@ -450,17 +449,14 @@ class _PlansScreenState extends State<PlansScreen> {
     if (!mounted) return;
 
     if (result != null) {
-      final uri = Uri.tryParse(result.checkoutUrl);
-      if (uri != null && await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } else {
-        messenger.showSnackBar(
-          SnackBar(
-            content: const Text('Não foi possível abrir o link de pagamento'),
-            backgroundColor: AppColors.accentError,
-          ),
-        );
-      }
+      // Como estamos em fase de teste via WhatsApp, apenas informamos o sucesso.
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Link de pagamento enviado com sucesso via WhatsApp!'),
+          backgroundColor: AppColors.accentSuccess,
+          duration: Duration(seconds: 4),
+        ),
+      );
     } else {
       messenger.showSnackBar(
         SnackBar(
