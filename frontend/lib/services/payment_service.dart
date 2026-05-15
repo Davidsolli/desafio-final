@@ -101,6 +101,9 @@ class SubscriptionModel {
   bool get isActive => status == 'active';
   bool get isPending => status == 'pending';
   bool get isCanceledPending => status == 'canceled_pending';
+  bool get isExpired => status == 'expired';
+  bool get isCanceled => status == 'canceled';
+  bool get canRenew => isExpired || isCanceled;
 
   String get statusLabel {
     switch (status) {
@@ -320,12 +323,14 @@ class PaymentService {
   Future<CheckoutResponse> createCheckout({
     required String planId,
     required String paymentMethod,
+    String? replacementPolicy,
   }) async {
     return await _apiClient.post<CheckoutResponse>(
       '/subscriptions/checkout',
       body: {
         'plan_id': planId,
         'payment_method': paymentMethod,
+        'replacement_policy': ?replacementPolicy,
       },
       fromJson: (data) => CheckoutResponse.fromJson(data as Map<String, dynamic>),
     );
@@ -347,6 +352,19 @@ class PaymentService {
   Future<bool> hasActiveSubscription() async {
     final sub = await getCurrentSubscription();
     return sub?.isActive ?? false;
+  }
+
+  Future<bool> cancelMySubscription() async {
+    try {
+      await _apiClient.post<Map<String, dynamic>>(
+        '/subscriptions/cancel',
+        body: {},
+        fromJson: (data) => data as Map<String, dynamic>,
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<SubscriptionSummary> getDashboardSummary() async {

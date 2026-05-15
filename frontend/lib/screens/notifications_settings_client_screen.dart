@@ -186,26 +186,30 @@ class _NotificationsSettingsClientScreenState
         color: Colors.grey.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.public, color: AppColors.primary),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Text(
-              'Fuso horário',
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
+          Row(
+            children: const [
+              Icon(Icons.public, color: AppColors.primary, size: 20),
+              SizedBox(width: 8),
+              Text('Fuso horário', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+            ],
           ),
-          DropdownButton<String>(
-            value: selectedTimezone,
-            underline: const SizedBox.shrink(),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<String>(
+            initialValue: selectedTimezone,
+            decoration: InputDecoration(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: Colors.grey.withValues(alpha: 0.3)),
+              ),
+            ),
+            isExpanded: true,
             items: values
-                .map(
-                  (v) => DropdownMenuItem<String>(
-                    value: v,
-                    child: Text(labelOf(v)),
-                  ),
-                )
+                .map((v) => DropdownMenuItem<String>(value: v, child: Text(labelOf(v), overflow: TextOverflow.ellipsis)))
                 .toList(),
             onChanged: _onTimezoneChanged,
           ),

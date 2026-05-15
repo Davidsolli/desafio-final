@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io' show File;
 
 import 'package:animate_do/animate_do.dart';
@@ -13,11 +12,10 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:record/record.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
 
-import '../../config/api_config.dart';
 import '../../services/api_client.dart';
 import '../../services/chat_service.dart';
+import '../../services/chat_stream_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/theme_colors.dart';
 
@@ -81,8 +79,10 @@ class _ChatScreenState extends State<ChatScreen> {
   final ScrollController _scrollController = ScrollController();
   final List<_ChatMsg> _messages = [];
 
-  WebSocketChannel? _channel;
-  bool _isConnected = false;
+  final ChatStreamService _streamService = ChatStreamService();
+  StreamSubscription<Map<String, dynamic>>? _activeStream;
+  // Sempre online por padrão — SSE não tem handshake. Vira false só em 401.
+  bool _isConnected = true;
   bool _isTyping = false;
   String _typingStatus = '';
   String? _conversationId;
@@ -107,7 +107,17 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _bootstrap() async {
     await _loadStoredConversation();
     if (!mounted) return;
-    await _connectWebSocket();
+    // Greeting estático — não depende mais de handshake do servidor.
+    if (_messages.isEmpty) {
+      setState(() {
+        _messages.add(_ChatMsg.text(
+          role: 'assistant',
+          text: 'Olá! Eu sou o Vitali, assistente da FitLoop. Como posso te ajudar hoje?',
+          time: _formatTime(),
+        ));
+      });
+      _scrollToBottom();
+    }
   }
 
   // ── Histórico ──────────────────────────────────────────────────────────────
@@ -142,140 +152,25 @@ class _ChatScreenState extends State<ChatScreen> {
     await prefs.setString(_kConversationIdPrefsKey, id);
   }
 
-  // ── WebSocket ──────────────────────────────────────────────────────────────
+  // ── Envio de texto via SSE ─────────────────────────────────────────────────
 
-  Future<void> _connectWebSocket() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('jwt_token');
-    if (token == null || token.isEmpty) {
-      if (mounted) {
-        setState(() {
-          _messages.add(_ChatMsg.text(
-            role: 'assistant',
-            text: 'Erro de autenticação. Por favor, faça login novamente.',
-            time: _formatTime(),
-          ));
-        });
-      }
-      return;
-    }
-
-    final wsBaseUrl = ApiConfig.wsBaseUrl;
-    if (wsBaseUrl == null) return;
-
-    try {
-      _channel = WebSocketChannel.connect(Uri.parse('$wsBaseUrl/api/v1/chat/ws'));
-      _channel!.stream.listen(
-        (message) async {
-          final data = jsonDecode(message as String) as Map<String, dynamic>;
-
-          if (data['type'] == 'auth_success') {
-            if (mounted) {
-              setState(() {
-                _isConnected = true;
-                if (_messages.isEmpty) {
-                  _messages.add(_ChatMsg.text(
-                    role: 'assistant',
-                    text: 'Olá! Eu sou o Vitali, assistente da FitLoop. Como posso te ajudar hoje?',
-                    time: _formatTime(),
-                  ));
-                }
-              });
-              _scrollToBottom();
-            }
-          } else if (data['type'] == 'auth_error') {
-            if (mounted) {
-              setState(() {
-                _isConnected = false;
-                _messages.add(_ChatMsg.text(
-                  role: 'assistant',
-                  text: 'Erro de autenticação: ${data['error'] ?? 'Desconhecido'}',
-                  time: _formatTime(),
-                ));
-              });
-            }
-            _channel?.sink.close();
-          } else if (data['type'] == 'status') {
-            if (mounted) {
-              setState(() {
-                _isTyping = true;
-                _typingStatus = (data['message'] as String?) ?? 'Processando...';
-              });
-              _scrollToBottom();
-            }
-          } else if (data['type'] == 'response') {
-            final newId = data['conversation_id'] as String?;
-            if (newId != null) {
-              _conversationId = newId;
-              await _persistConversationId(newId);
-            }
-            if (mounted) {
-              setState(() {
-                _isTyping = false;
-                _typingStatus = '';
-                _messages.add(_ChatMsg.text(
-                  role: 'assistant',
-                  text: data['content'] as String? ?? '',
-                  time: _formatTime(),
-                ));
-              });
-              _scrollToBottom();
-            }
-          } else if (data['type'] == 'error' || data['type'] == 'timeout') {
-            if (mounted) {
-              setState(() {
-                _isTyping = false;
-                _typingStatus = '';
-                _messages.add(_ChatMsg.text(
-                  role: 'assistant',
-                  text: 'Desculpe, ocorreu um erro: ${data['error'] ?? 'Desconhecido'}',
-                  time: _formatTime(),
-                ));
-              });
-              _scrollToBottom();
-            }
-            if (data['type'] == 'timeout') _channel?.sink.close();
-          }
-        },
-        onDone: () {
-          if (mounted) setState(() { _isConnected = false; _isTyping = false; });
-        },
-        onError: (_) {
-          if (mounted) {
-            setState(() {
-              _isConnected = false;
-              _isTyping = false;
-              _messages.add(_ChatMsg.text(
-                role: 'assistant',
-                text: 'Erro de conexão com o servidor.',
-                time: _formatTime(),
-              ));
-            });
-          }
-        },
-      );
-
-      await Future.delayed(const Duration(milliseconds: 100));
-      _channel!.sink.add(jsonEncode({'type': 'auth', 'token': token}));
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isConnected = false;
-          _messages.add(_ChatMsg.text(
-            role: 'assistant',
-            text: 'Falha ao conectar no servidor: $e',
-            time: _formatTime(),
-          ));
-        });
-      }
-    }
-  }
-
-  // ── Envio de texto ─────────────────────────────────────────────────────────
-
-  void _sendMessage() {
+  Future<void> _sendMessage() async {
     final text = _messageController.text.trim();
     if (text.isEmpty || _isTyping) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    final token = prefs.getString('jwt_token');
+    if (token == null || token.isEmpty) {
+      setState(() {
+        _messages.add(_ChatMsg.text(
+          role: 'assistant',
+          text: 'Erro de autenticação. Por favor, faça login novamente.',
+          time: _formatTime(),
+        ));
+      });
+      return;
+    }
 
     setState(() {
       _messages.add(_ChatMsg.text(role: 'user', text: text, time: _formatTime()));
@@ -283,24 +178,98 @@ class _ChatScreenState extends State<ChatScreen> {
       _typingStatus = 'Analisando sua pergunta...';
     });
     _scrollToBottom();
+    _messageController.clear();
 
-    if (_isConnected && _channel != null) {
-      final payload = <String, dynamic>{'type': 'message', 'content': text};
-      if (_conversationId != null) payload['conversation_id'] = _conversationId;
-      _channel!.sink.add(jsonEncode(payload));
-    } else {
+    // Adiciona um balão vazio do assistente que será preenchido com chunks
+    final assistantIdx = _messages.length;
+    final assistantTime = _formatTime();
+    setState(() {
+      _messages.add(_ChatMsg.text(
+        role: 'assistant',
+        text: '',
+        time: assistantTime,
+      ));
+    });
+
+    String accumulated = '';
+
+    void replaceAssistant(String newText) {
+      if (!mounted) return;
       setState(() {
-        _isTyping = false;
-        _messages.add(_ChatMsg.text(
+        _messages[assistantIdx] = _ChatMsg.text(
           role: 'assistant',
-          text: 'Você está desconectado. Reinicie o aplicativo para tentar novamente.',
-          time: _formatTime(),
-        ));
+          text: newText,
+          time: assistantTime,
+        );
       });
-      _scrollToBottom();
     }
 
-    _messageController.clear();
+    _activeStream?.cancel();
+    _activeStream = _streamService
+        .sendMessageStream(
+      message: text,
+      token: token,
+      conversationId: _conversationId,
+    )
+        .listen(
+      (event) async {
+        final type = event['type'] as String?;
+        if (type == 'status') {
+          if (!mounted) return;
+          setState(() {
+            _typingStatus = (event['message'] as String?) ?? 'Processando...';
+          });
+        } else if (type == 'chunk') {
+          accumulated += (event['content'] as String? ?? '');
+          replaceAssistant(accumulated);
+          _scrollToBottom();
+        } else if (type == 'final') {
+          final newId = event['conversation_id'] as String?;
+          if (newId != null && newId.isNotEmpty) {
+            _conversationId = newId;
+            await _persistConversationId(newId);
+          }
+          if (!mounted) return;
+          setState(() {
+            _isTyping = false;
+            _typingStatus = '';
+          });
+          _scrollToBottom();
+        } else if (type == 'error') {
+          if (!mounted) return;
+          setState(() {
+            _isTyping = false;
+            _typingStatus = '';
+          });
+          replaceAssistant(
+            'Desculpe, ocorreu um erro: ${event['error'] ?? 'Desconhecido'}',
+          );
+        }
+      },
+      onError: (e) {
+        if (!mounted) return;
+        setState(() {
+          _isTyping = false;
+          _typingStatus = '';
+          if (e is UnauthorizedException) _isConnected = false;
+        });
+        replaceAssistant(
+          e is UnauthorizedException
+              ? 'Sessão expirada. Faça login novamente.'
+              : 'Falha na conexão com o servidor.',
+        );
+      },
+      onDone: () {
+        if (!mounted) return;
+        if (_isTyping) {
+          setState(() {
+            _isTyping = false;
+            _typingStatus = '';
+          });
+        }
+      },
+      cancelOnError: true,
+    );
   }
 
   // ── Gravação de áudio ──────────────────────────────────────────────────────
@@ -653,7 +622,8 @@ class _ChatScreenState extends State<ChatScreen> {
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
-    _channel?.sink.close();
+    _activeStream?.cancel();
+    _streamService.dispose();
     _recordingTimer?.cancel();
     _recorder.dispose();
     super.dispose();

@@ -62,7 +62,7 @@ class NetworkException extends ApiException {
 /// - Logging de requisições/respostas
 /// - Timeout automático
 class ApiClient {
-  static const String _baseUrl = ApiConfig.baseUrl;
+  static final String _baseUrl = ApiConfig.baseUrl;
   static const String _apiPrefix = '/api/v1';
   static const String _tokenKey = 'jwt_token';
   static const Duration _timeout = Duration(seconds: 30);

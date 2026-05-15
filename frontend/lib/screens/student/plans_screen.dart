@@ -198,18 +198,6 @@ class _PlansScreenState extends State<PlansScreen> {
                     ),
                   ],
                 ),
-                if (plan.modality != null) ...[
-                  const SizedBox(height: 8),
-                  _buildFeatureRow(context, Icons.location_on_outlined, plan.modality!),
-                ],
-                if (plan.evaluationsIncluded > 0) ...[
-                  const SizedBox(height: 4),
-                  _buildFeatureRow(
-                    context,
-                    Icons.assignment_outlined,
-                    '${plan.evaluationsIncluded} avaliação(ões) incluída(s)',
-                  ),
-                ],
                 _buildFeatureRow(context, Icons.fitness_center, 'Acesso completo: Treinos, Dieta e IA'),
                 const SizedBox(height: 16),
                 SizedBox(
@@ -258,6 +246,7 @@ class _PlansScreenState extends State<PlansScreen> {
 
   void _showCheckoutDialog(BuildContext context, PlanModel plan) {
     String selectedMethod = 'pix';
+    String selectedPolicy = 'immediate';
 
     showModalBottomSheet(
       context: context,
@@ -266,68 +255,142 @@ class _PlansScreenState extends State<PlansScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setModalState) => Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40, height: 4,
-                  decoration: BoxDecoration(
-                    color: context.colors.surfaceLight,
-                    borderRadius: BorderRadius.circular(2),
+        builder: (ctx, setModalState) => SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40, height: 4,
+                    decoration: BoxDecoration(
+                      color: context.colors.surfaceLight,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                'Finalizar Contratação',
-                style: TextStyle(
-                  color: context.colors.textPrimary,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '${plan.name} • ${plan.priceFormatted}',
-                style: TextStyle(color: context.colors.textSecondary, fontSize: 14),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                'Forma de pagamento',
-                style: TextStyle(
-                  color: context.colors.textPrimary,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 12),
-              _buildPaymentOption(ctx, 'pix', 'PIX', Icons.qr_code, selectedMethod, (v) {
-                setModalState(() => selectedMethod = v);
-              }),
-              const SizedBox(height: 8),
-              _buildPaymentOption(ctx, 'credit_card', 'Cartão de Crédito', Icons.credit_card, selectedMethod, (v) {
-                setModalState(() => selectedMethod = v);
-              }),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () => _doCheckout(ctx, plan, selectedMethod),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                const SizedBox(height: 20),
+                Text(
+                  'Finalizar Contratação',
+                  style: TextStyle(
+                    color: context.colors.textPrimary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
                   ),
-                  child: const Text('Confirmar e Pagar', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
                 ),
-              ),
-            ],
+                const SizedBox(height: 4),
+                Text(
+                  '${plan.name} • ${plan.priceFormatted}',
+                  style: TextStyle(color: context.colors.textSecondary, fontSize: 14),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  'Forma de pagamento',
+                  style: TextStyle(
+                    color: context.colors.textPrimary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _buildPaymentOption(ctx, 'pix', 'PIX', Icons.qr_code, selectedMethod, (v) {
+                  setModalState(() => selectedMethod = v);
+                }),
+                const SizedBox(height: 8),
+                _buildPaymentOption(ctx, 'credit_card', 'Cartão de Crédito', Icons.credit_card, selectedMethod, (v) {
+                  setModalState(() => selectedMethod = v);
+                }),
+                
+                if (context.read<PaymentProvider>().hasActiveSub) ...[
+                  const SizedBox(height: 24),
+                  Text(
+                    'Substituição de plano',
+                    style: TextStyle(
+                      color: context.colors.textPrimary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _buildReplacementOption(ctx, 'immediate', 'Substituir agora', 'O novo plano começa imediatamente e o atual será encerrado.', selectedPolicy, (v) {
+                    setModalState(() => selectedPolicy = v);
+                  }),
+                  const SizedBox(height: 8),
+                  _buildReplacementOption(ctx, 'on_expiry', 'Após vencimento', 'O novo plano será aplicado automaticamente quando o atual expirar.', selectedPolicy, (v) {
+                    setModalState(() => selectedPolicy = v);
+                  }),
+                ],
+                
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => _doCheckout(ctx, plan, selectedMethod, selectedPolicy),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Text('Confirmar e Pagar', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReplacementOption(
+    BuildContext context,
+    String value,
+    String label,
+    String description,
+    String selected,
+    ValueChanged<String> onChanged,
+  ) {
+    final isSelected = value == selected;
+    return GestureDetector(
+      onTap: () => onChanged(value),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.primary.withValues(alpha: 0.1) : context.colors.surfaceLight,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? AppColors.primary : Colors.transparent,
+          ),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: isSelected ? AppColors.primary : context.colors.textPrimary,
+                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                    ),
+                  ),
+                  Text(
+                    description,
+                    style: TextStyle(
+                      color: context.colors.textSecondary,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (isSelected)
+              const Icon(Icons.check_circle, color: AppColors.primary, size: 20),
+          ],
         ),
       ),
     );
@@ -373,12 +436,16 @@ class _PlansScreenState extends State<PlansScreen> {
     );
   }
 
-  Future<void> _doCheckout(BuildContext ctx, PlanModel plan, String method) async {
+  Future<void> _doCheckout(BuildContext ctx, PlanModel plan, String method, String policy) async {
     Navigator.pop(ctx);
 
     final provider = context.read<PaymentProvider>();
     final messenger = ScaffoldMessenger.of(context);
-    final result = await provider.createCheckout(planId: plan.id, paymentMethod: method);
+    final result = await provider.createCheckout(
+      planId: plan.id,
+      paymentMethod: method,
+      replacementPolicy: provider.hasActiveSub ? policy : null,
+    );
 
     if (!mounted) return;
 
