@@ -26,6 +26,7 @@ from app.dtos.diet_logbook_dto import (
     NutritionAnalyticsSummaryResponseDTO,
 )
 from app.models.user import User
+from app.utils.role_utils import has_role
 from app.services.diet_logbook_service import (
     LogbookEntryNotFoundError,
     LogbookForbiddenError,
@@ -230,7 +231,7 @@ async def get_nutrition_analytics_summary(
     # Determina o usuário alvo
     target_user_id = current_user.id
     if student_id is not None:
-        if current_user.role not in LOGBOOK_READ_ROLES:
+        if not any(has_role(current_user.role, r) for r in LOGBOOK_READ_ROLES):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Apenas profissionais podem acessar dados de alunos.",
@@ -285,7 +286,7 @@ async def get_student_logbook(
 
     Alunos não podem acessar este endpoint (devem usar `GET /diet-logbook/{date}`).
     """
-    if current_user.role not in LOGBOOK_READ_ROLES:
+    if not any(has_role(current_user.role, r) for r in LOGBOOK_READ_ROLES):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Apenas profissionais podem visualizar o logbook de alunos.",
