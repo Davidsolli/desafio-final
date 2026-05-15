@@ -255,6 +255,25 @@ class ApiClient {
     }
   }
 
+  /// Converte recursivamente Maps e Lists para tipos Dart tipados.
+  ///
+  /// No Flutter Web, jsonDecode pode retornar LinkedMap<dynamic, dynamic>
+  /// em vez de Map<String, dynamic> para objetos aninhados. Esta função
+  /// normaliza toda a estrutura antes de passá-la ao fromJson.
+  static dynamic _normalizeJson(dynamic value) {
+    if (value is Map) {
+      return Map<String, dynamic>.fromEntries(
+        value.entries.map<MapEntry<String, dynamic>>(
+          (e) => MapEntry(e.key.toString(), _normalizeJson(e.value)),
+        ),
+      );
+    }
+    if (value is List) {
+      return value.map<dynamic>(_normalizeJson).toList();
+    }
+    return value;
+  }
+
   /// Faz parsing da resposta
   T _parseResponse<T>(
     http.Response response,
@@ -268,7 +287,7 @@ class ApiClient {
         if (response.body.isEmpty) {
           return fromJson({});
         }
-        final data = jsonDecode(response.body);
+        final data = _normalizeJson(jsonDecode(response.body));
         return fromJson(data);
       } catch (e) {
         throw ApiException(
