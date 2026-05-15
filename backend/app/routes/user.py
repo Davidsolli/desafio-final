@@ -29,6 +29,7 @@ from app.services.user_service import UserAlreadyExistsError, UserNotFoundError,
 from app.config.database import get_db
 from app.dependencies.auth import get_current_user
 from app.models.user import User
+from app.utils.role_utils import is_professional
 
 router = APIRouter(
     prefix="/api/v1/users",
@@ -138,8 +139,8 @@ async def list_students(
     - Admin pode filtrar por trainer_id ou ver todos
     - Trainer_id ignorado para personal_trainer (sempre vê seus alunos)
     """
-    if current_user.role == "personal_trainer":
-        # Personal trainer sempre vê seus alunos (ignora trainer_id param)
+    if is_professional(current_user.role):
+        # Qualquer profissional (personal, nutricionista, ou dual) vê seus próprios alunos
         target_trainer_id = current_user.id
     elif current_user.role == "admin":
         # Admin pode filtrar por trainer_id ou ver todos
@@ -147,7 +148,7 @@ async def list_students(
     else:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Apenas personal_trainer ou admin podem listar alunos",
+            detail="Apenas profissionais ou admin podem listar alunos",
         )
 
     controller = UserController(session)
@@ -223,10 +224,10 @@ async def list_users(
     - limit: Itens por página
     - data: Lista de usuários
     """
-    if current_user.role not in ["admin", "personal_trainer"]:
+    if current_user.role != "admin" and not is_professional(current_user.role):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Apenas admin ou personal_trainer podem listar usuários",
+            detail="Apenas admin ou profissionais podem listar usuários",
         )
 
     controller = UserController(session)
@@ -289,12 +290,12 @@ async def get_user(
                 detail="Erro ao buscar usuário",
             )
 
-    # Personal trainer: validar se é seu aluno
-    if current_user.role == "personal_trainer":
+    # Profissional (personal, nutricionista, ou dual): validar se é seu aluno
+    if is_professional(current_user.role):
         controller = UserController(session)
         try:
             target_user = await controller.get_user_by_id(user_id)
-            # Verificar se é aluno (client) e se belongs ao trainer
+            # Verificar se é aluno (client) e se belongs ao profissional
             if target_user.role != "client":
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,

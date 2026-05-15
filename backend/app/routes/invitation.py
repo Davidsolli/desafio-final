@@ -224,10 +224,9 @@ async def approve_whatsapp_registration(
     # Resolver trainer_id: usar o fornecido ou auto-selecionar o único ativo
     trainer_id = dto.trainer_id
     if trainer_id is None:
-        from sqlalchemy import or_
         trainers_result = await session.execute(
             select(User).where(
-                User.role == "personal_trainer",
+                User.role.contains("personal_trainer"),
                 User.is_active == True,
             )
         )
@@ -253,10 +252,11 @@ async def approve_whatsapp_registration(
         select(User).where(User.id == trainer_id)
     )
     trainer = trainer_result.scalar_one_or_none()
-    if not trainer or trainer.role != "personal_trainer" or not trainer.is_active:
+    from app.utils.role_utils import is_professional
+    if not trainer or not is_professional(trainer.role) or not trainer.is_active:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Personal trainer inválido, inativo ou não encontrado",
+            detail="Profissional inválido, inativo ou não encontrado",
         )
 
     # Buscar pré-cadastro pendente

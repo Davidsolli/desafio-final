@@ -212,19 +212,22 @@ class AdminMetricsRepository:
     # ──────────────────────────────────────────────────────────────────────
 
     async def count_trainers(self) -> int:
-        """Retorna o total de personal trainers ativos."""
+        """Retorna o total de profissionais ativos (personal trainers e/ou nutricionistas)."""
         stmt = select(func.count(User.id)).where(
-            User.role == "personal_trainer",
+            User.role.contains("personal_trainer") | User.role.contains("nutritionist"),
             User.is_active == True,
         )
         result = await self.session.execute(stmt)
         return result.scalar() or 0
 
     async def get_trainers_page(self, page: int, limit: int) -> list[User]:
-        """Retorna uma página de personal trainers ativos."""
+        """Retorna uma página de profissionais ativos."""
         stmt = (
             select(User)
-            .where(User.role == "personal_trainer", User.is_active == True)
+            .where(
+                User.role.contains("personal_trainer") | User.role.contains("nutritionist"),
+                User.is_active == True,
+            )
             .order_by(User.created_at.desc())
             .offset((page - 1) * limit)
             .limit(limit)
@@ -443,7 +446,8 @@ class AdminMetricsRepository:
         """Retorna contagens gerais de usuários."""
         total_stmt = select(func.count(User.id)).where(User.is_active == True)
         trainers_stmt = select(func.count(User.id)).where(
-            User.role == "personal_trainer", User.is_active == True
+            User.role.contains("personal_trainer") | User.role.contains("nutritionist"),
+            User.is_active == True,
         )
         students_stmt = select(func.count(User.id)).where(
             User.role == "client", User.is_active == True

@@ -49,7 +49,13 @@ class DietValidationError(Exception):
 # Papéis com permissão de prescrição
 # ---------------------------------------------------------------------------
 
-WRITE_ROLES = {"admin", "personal_trainer", "professor", "gestor"}
+def _is_diet_writer(role: str) -> bool:
+    """Nutricionistas e personais podem prescrever dietas."""
+    from app.utils.role_utils import has_role
+    return any(has_role(role, r) for r in {"admin", "personal_trainer", "nutritionist", "professor", "gestor"})
+
+
+WRITE_ROLES = {"admin", "personal_trainer", "nutritionist", "professor", "gestor"}
 
 
 # ---------------------------------------------------------------------------
@@ -153,7 +159,7 @@ class DietService:
                 )
             is_custom = True
             professional_id = None
-        elif role in WRITE_ROLES:
+        elif _is_diet_writer(role):
             is_custom = False
             professional_id = requester_id
         else:
@@ -316,7 +322,7 @@ class DietService:
 
         Apenas Personal/Admin podem duplicar.
         """
-        if role not in WRITE_ROLES:
+        if not _is_diet_writer(role):
             raise DietForbiddenError("Apenas profissionais podem duplicar dietas.")
 
         original = await self.repository.get_diet_by_id(diet_id)
@@ -398,7 +404,7 @@ class DietService:
                 raise DietForbiddenError(
                     "Aluno só pode editar suas próprias dietas personalizadas."
                 )
-        elif role not in WRITE_ROLES:
+        elif not _is_diet_writer(role):
             raise DietForbiddenError("Sem permissão para editar dietas.")
 
         return diet

@@ -204,9 +204,10 @@ class StepService:
         if requesting_user.role == "admin":
             return await self.get_history(student_id, start_date, end_date)
 
-        if requesting_user.role != "personal_trainer":
+        from app.utils.role_utils import is_professional
+        if not is_professional(requesting_user.role):
             raise StepAccessDeniedError(
-                "Apenas personal trainers ou admins podem acessar o histórico de outros alunos"
+                "Apenas profissionais ou admins podem acessar o histórico de outros alunos"
             )
 
         result = await self.session.execute(select(User).where(User.id == student_id))

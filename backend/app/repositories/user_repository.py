@@ -141,7 +141,8 @@ class UserRepository:
         if not include_inactive:
             where_conditions.append(User.is_active == True)
         if role:
-            where_conditions.append(User.role == role)
+            # Suporte a roles compostas: usa contains para capturar "nutritionist,personal_trainer" ao filtrar por "personal_trainer"
+            where_conditions.append(User.role.contains(role))
         if trainer_id:
             where_conditions.append(User.trainer_id == trainer_id)
 
