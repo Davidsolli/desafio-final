@@ -23,7 +23,8 @@ class User(Base):
         name: Nome completo do usuário
         email: Email único do usuário
         password: Hash bcrypt da senha (nunca texto plano)
-        role: Papel do usuário (admin, personal_trainer, client)
+        role: Papel do usuário. Valores atômicos: admin, personal_trainer, nutritionist, client.
+              Profissionais podem ter múltiplas especialidades: "personal_trainer,nutritionist"
         trainer_id: FK opcional para users.id (personal trainer vinculado, se é client)
         is_active: Status ativo/inativo (soft delete)
         created_at: Data de criação (imutável)

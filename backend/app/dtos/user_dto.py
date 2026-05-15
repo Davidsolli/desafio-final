@@ -16,7 +16,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from pydantic import BaseModel, Field, EmailStr, field_validator, ConfigDict
 
 
-VALID_ROLES = {"admin", "personal_trainer", "client"}
+VALID_ATOMIC_ROLES = {"admin", "personal_trainer", "nutritionist", "client"}
+VALID_ROLES = VALID_ATOMIC_ROLES  # alias para compatibilidade
 VALID_THEMES = {"light", "dark", "system"}
 PASSWORD_REGEX = r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@!#$%^&*])[a-zA-Z0-9@!#$%^&*]{8,}$"
 
@@ -114,12 +115,18 @@ class CreateUserDTO(BaseModel):
     @field_validator("role")
     @classmethod
     def validate_role(cls, v: str) -> str:
-        """Validar role: deve ser um dos valores válidos."""
-        if v not in VALID_ROLES:
+        """Validar role: aceita role atômica ou composta (ex: 'nutritionist,personal_trainer')."""
+        parts = {r.strip() for r in v.split(",")}
+        invalid = parts - VALID_ATOMIC_ROLES
+        if invalid:
             raise ValueError(
-                f"Role deve ser um de: {', '.join(VALID_ROLES)}"
+                f"Roles inválidas: {invalid}. Válidas: {VALID_ATOMIC_ROLES}"
             )
-        return v
+        if len(parts) > 1 and "client" in parts:
+            raise ValueError("client não pode ser combinado com outras roles")
+        if len(parts) > 1 and "admin" in parts:
+            raise ValueError("admin não pode ser combinado com outras roles")
+        return ",".join(sorted(parts))
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -152,6 +159,10 @@ class UpdateUserDTO(BaseModel):
         min_length=3,
         max_length=255,
         description="Nome completo do usuário",
+    )
+    trainer_id: Optional[UUID] = Field(
+        None,
+        description="UUID do profissional vinculado ao aluno (transferência de aluno)",
     )
     role: Optional[str] = Field(
         None,
@@ -211,14 +222,20 @@ class UpdateUserDTO(BaseModel):
     @field_validator("role")
     @classmethod
     def validate_role(cls, v: Optional[str]) -> Optional[str]:
-        """Validar role: deve ser um dos valores válidos."""
+        """Validar role: aceita role atômica ou composta (ex: 'nutritionist,personal_trainer')."""
         if v is None:
             return v
-        if v not in VALID_ROLES:
+        parts = {r.strip() for r in v.split(",")}
+        invalid = parts - VALID_ATOMIC_ROLES
+        if invalid:
             raise ValueError(
-                f"Role deve ser um de: {', '.join(VALID_ROLES)}"
+                f"Roles inválidas: {invalid}. Válidas: {VALID_ATOMIC_ROLES}"
             )
-        return v
+        if len(parts) > 1 and "client" in parts:
+            raise ValueError("client não pode ser combinado com outras roles")
+        if len(parts) > 1 and "admin" in parts:
+            raise ValueError("admin não pode ser combinado com outras roles")
+        return ",".join(sorted(parts))
 
     @field_validator("theme_preference")
     @classmethod

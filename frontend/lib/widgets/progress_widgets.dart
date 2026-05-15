@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:omniconnect_fitness/providers/logbook_provider.dart';
 import 'package:omniconnect_fitness/services/logbook_service.dart';
 import 'package:omniconnect_fitness/theme/app_colors.dart';
+import 'package:omniconnect_fitness/shared/utils/muscle_group_helper.dart';
 
 /// Extensão helper para cores do tema
 extension _ThemeX on BuildContext {
@@ -284,7 +285,7 @@ class _PRRow extends StatelessWidget {
             ),
             child: Center(
               child: Text(
-                _muscleEmoji(record.muscleGroup),
+                MuscleGroupHelper.getEmoji(record.muscleGroup),
                 style: const TextStyle(fontSize: 18),
               ),
             ),
@@ -331,22 +332,6 @@ class _PRRow extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  String _muscleEmoji(String g) {
-    const m = {
-      'peito': '💪',
-      'costa': '🔙',
-      'ombro': '🏋️',
-      'bíceps': '💪',
-      'tríceps': '💪',
-      'antebraço': '🦾',
-      'core': '🎯',
-      'perna_anterior': '🦵',
-      'perna_posterior': '🦵',
-      'panturrilha': '🦶',
-    };
-    return m[g] ?? '🏋️';
   }
 }
 

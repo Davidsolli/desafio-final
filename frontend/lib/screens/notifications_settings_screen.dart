@@ -42,22 +42,16 @@ class _NotificationsSettingsScreenState
   Widget build(BuildContext context) {
     final role = context.watch<AuthProvider>().user?.role;
 
-    switch (role) {
-      case 'client':
-        return const NotificationsSettingsClientScreen();
-      case 'personal_trainer':
-        return const NotificationsSettingsTrainerScreen();
-      case 'admin':
-        _scheduleAdminRedirect();
-        return const Scaffold(
-          body: Center(child: CircularProgressIndicator()),
-        );
-      default:
-        // Não autenticado ou role inesperado — o router protege a rota,
-        // mas mantemos um fallback visual para evitar tela branca.
-        return const Scaffold(
-          body: Center(child: CircularProgressIndicator()),
-        );
+    if (role == 'client') {
+      return const NotificationsSettingsClientScreen();
+    } else if (role == 'admin') {
+      _scheduleAdminRedirect();
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    } else if (role != null) {
+      // personal_trainer, nutritionist, ou combinação
+      return const NotificationsSettingsTrainerScreen();
     }
+    // Não autenticado ou role inesperado
+    return const Scaffold(body: Center(child: CircularProgressIndicator()));
   }
 }

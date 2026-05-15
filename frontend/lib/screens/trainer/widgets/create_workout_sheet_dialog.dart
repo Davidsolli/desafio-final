@@ -7,6 +7,7 @@ import '../../../models/workout_sheet_model.dart';
 import '../../../providers/workout_sheet_provider.dart';
 import '../../../services/workout_sheet_service.dart';
 import 'exercise_catalog_picker.dart';
+import '../../../shared/utils/muscle_group_helper.dart';
 
 /// Dialog para criar uma nova ficha de treino.
 ///
@@ -474,7 +475,7 @@ class _CreateWorkoutSheetDialogState extends State<CreateWorkoutSheetDialog> {
             items: validMuscleGroups.map((g) {
               return DropdownMenuItem(
                 value: g,
-                child: Text(g,
+                child: Text(MuscleGroupHelper.getName(g),
                     style:
                         TextStyle(color: context.colors.textPrimary)),
               );

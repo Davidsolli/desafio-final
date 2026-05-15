@@ -91,7 +91,8 @@ class SubscriptionRepository:
         student_id: UUID,
         plan_id: UUID,
         admin_id: UUID,
-        payment_method: str
+        payment_method: str,
+        replacement_policy: Optional[str] = None
     ) -> Subscription:
         """Criar nova assinatura (status PENDING)"""
         subscription = Subscription(
@@ -99,6 +100,7 @@ class SubscriptionRepository:
             plan_id=plan_id,
             admin_id=admin_id,
             payment_method=payment_method,
+            replacement_policy=replacement_policy,
             status="pending"
         )
         session.add(subscription)
@@ -136,6 +138,16 @@ class SubscriptionRepository:
         return result.scalars().first()
 
     @staticmethod
+    async def find_student_latest(session: AsyncSession, student_id: UUID) -> Optional[Subscription]:
+        """Buscar assinatura mais recente do aluno (qualquer status)"""
+        result = await session.execute(
+            select(Subscription)
+            .where(Subscription.student_id == student_id)
+            .order_by(Subscription.created_at.desc())
+        )
+        return result.scalars().first()
+
+    @staticmethod
     async def find_by_admin(
         session: AsyncSession,
         admin_id: UUID,
@@ -165,9 +177,33 @@ class SubscriptionRepository:
 
         # Calcular datas
         now = datetime.utcnow()
+        
+        start_date = now
+        # Se a política for 'on_expiry', buscamos a assinatura ativa atual para começar depois dela
+        if subscription.replacement_policy == "on_expiry":
+            # Busca a assinatura ativa que expira mais tarde
+            from sqlalchemy import select, desc
+            query = (
+                select(Subscription)
+                .where(
+                    and_(
+                        Subscription.student_id == subscription.student_id,
+                        Subscription.status == "active",
+                        Subscription.id != subscription.id
+                    )
+                )
+                .order_by(desc(Subscription.expires_at))
+                .limit(1)
+            )
+            result = await session.execute(query)
+            active_sub = result.scalar_one_or_none()
+            
+            if active_sub and active_sub.expires_at and active_sub.expires_at > now:
+                start_date = active_sub.expires_at
+
         subscription.status = "active"
-        subscription.started_at = now
-        subscription.expires_at = now + timedelta(days=30 * plan.duration_months)
+        subscription.started_at = start_date
+        subscription.expires_at = start_date + timedelta(days=30 * plan.duration_months)
         subscription.external_payment_id = external_payment_id
 
         await session.flush()

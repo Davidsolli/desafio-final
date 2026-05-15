@@ -289,6 +289,15 @@ class UserService:
             user.theme_preference = dto.theme_preference
         if dto.timezone is not None:
             user.timezone = dto.timezone
+        if dto.trainer_id is not None:
+            # Valida que o profissional destino existe e é realmente um profissional
+            from app.utils.role_utils import is_professional
+            target = await self.repository.get_by_id(dto.trainer_id)
+            if not target:
+                raise UserNotFoundError("Profissional destino não encontrado")
+            if not is_professional(target.role):
+                raise Exception("O usuário destino não é um profissional")
+            user.trainer_id = dto.trainer_id
 
         try:
             updated_user = await self.repository.update(user)

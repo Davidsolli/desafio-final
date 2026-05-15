@@ -45,6 +45,7 @@ class AdminPTFormScreen extends StatefulWidget {
   final String? trainerName;
   final String? trainerEmail;
   final String? trainerPhone;
+  final String? trainerRole;
 
   const AdminPTFormScreen({
     Key? key,
@@ -53,6 +54,7 @@ class AdminPTFormScreen extends StatefulWidget {
     this.trainerName,
     this.trainerEmail,
     this.trainerPhone,
+    this.trainerRole,
   }) : super(key: key);
 
   @override
@@ -70,6 +72,8 @@ class _AdminPTFormScreenState extends State<AdminPTFormScreen> {
   String? _phoneError;
   String? _passwordError;
 
+  Set<String> _selectedSpecialties = {'personal_trainer'};
+
   @override
   void initState() {
     super.initState();
@@ -81,7 +85,6 @@ class _AdminPTFormScreenState extends State<AdminPTFormScreen> {
         _emailController.text = widget.trainerEmail!;
       }
       if (widget.trainerPhone != null) {
-        // Formatar o telefone: 11111111111 -> (11) 11111-1111
         final phone = widget.trainerPhone!;
         if (phone.isNotEmpty) {
           String formatted = '';
@@ -96,6 +99,16 @@ class _AdminPTFormScreenState extends State<AdminPTFormScreen> {
             formatted += phone[i];
           }
           _phoneController.text = formatted;
+        }
+      }
+      if (widget.trainerRole != null) {
+        _selectedSpecialties = widget.trainerRole!
+            .split(',')
+            .map((r) => r.trim())
+            .where((r) => r == 'personal_trainer' || r == 'nutritionist')
+            .toSet();
+        if (_selectedSpecialties.isEmpty) {
+          _selectedSpecialties = {'personal_trainer'};
         }
       }
     }
@@ -129,7 +142,7 @@ class _AdminPTFormScreenState extends State<AdminPTFormScreen> {
     return true;
   }
 
-  Future<void> _saveTrainer() async {
+  Future<void> _saveProfessional() async {
     setState(() {
       _emailError = null;
       _phoneError = null;
@@ -143,9 +156,14 @@ class _AdminPTFormScreenState extends State<AdminPTFormScreen> {
       return;
     }
 
-    // Validações apenas para criação (não para edição)
+    if (_selectedSpecialties.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Selecione ao menos uma especialidade')),
+      );
+      return;
+    }
+
     if (!widget.isEditing) {
-      // Na criação, email e senha são obrigatórios
       if (_emailController.text.isEmpty) {
         setState(() => _emailError = 'Email é obrigatório');
         return;
@@ -182,9 +200,11 @@ class _AdminPTFormScreenState extends State<AdminPTFormScreen> {
         final phone = _phoneController.text.isEmpty
           ? null
           : _phoneController.text.replaceAll(RegExp(r'[^\d]'), '');
+        final sorted = _selectedSpecialties.toList()..sort();
         final updateDto = UpdateAdminUserDTO(
           name: _nameController.text,
           phoneWhatsapp: phone,
+          role: sorted.join(','),
         );
         await provider.updateTrainer(widget.trainerId!, updateDto);
       } else {
@@ -196,6 +216,7 @@ class _AdminPTFormScreenState extends State<AdminPTFormScreen> {
           email: _emailController.text,
           password: _passwordController.text,
           phoneWhatsapp: phone,
+          specialties: _selectedSpecialties.toList(),
         );
         await provider.createTrainer(createDto);
       }
@@ -204,7 +225,7 @@ class _AdminPTFormScreenState extends State<AdminPTFormScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              widget.isEditing ? 'Trainer atualizado!' : 'Trainer criado!',
+              widget.isEditing ? 'Profissional atualizado!' : 'Profissional criado!',
             ),
             backgroundColor: Colors.green,
           ),
@@ -232,7 +253,7 @@ class _AdminPTFormScreenState extends State<AdminPTFormScreen> {
     return Scaffold(
       backgroundColor: context.colors.background,
       appBar: AppBar(
-        title: Text(widget.isEditing ? 'Editar Trainer' : 'Adicionar Trainer'),
+        title: Text(widget.isEditing ? 'Editar Profissional' : 'Adicionar Profissional'),
         backgroundColor: AppColors.primary,
         elevation: 0,
       ),
@@ -242,7 +263,7 @@ class _AdminPTFormScreenState extends State<AdminPTFormScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Informações do Trainer',
+              'Informações do Profissional',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.bold,
               ),
@@ -260,6 +281,61 @@ class _AdminPTFormScreenState extends State<AdminPTFormScreen> {
                 ),
               ),
             ),
+            const SizedBox(height: 16),
+            Text(
+              'Especialidades *',
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Container(
+              decoration: BoxDecoration(
+                border: Border.all(color: context.colors.border),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                children: [
+                  CheckboxListTile(
+                    title: const Text('Personal Trainer'),
+                    secondary: const Icon(Icons.fitness_center),
+                    value: _selectedSpecialties.contains('personal_trainer'),
+                    onChanged: _isLoading
+                        ? null
+                        : (v) => setState(() {
+                              if (v!) {
+                                _selectedSpecialties.add('personal_trainer');
+                              } else {
+                                _selectedSpecialties.remove('personal_trainer');
+                              }
+                            }),
+                  ),
+                  const Divider(height: 1),
+                  CheckboxListTile(
+                    title: const Text('Nutricionista'),
+                    secondary: const Icon(Icons.restaurant_menu),
+                    value: _selectedSpecialties.contains('nutritionist'),
+                    onChanged: _isLoading
+                        ? null
+                        : (v) => setState(() {
+                              if (v!) {
+                                _selectedSpecialties.add('nutritionist');
+                              } else {
+                                _selectedSpecialties.remove('nutritionist');
+                              }
+                            }),
+                  ),
+                ],
+              ),
+            ),
+            if (_selectedSpecialties.isEmpty)
+              Padding(
+                padding: const EdgeInsets.only(left: 4, top: 4),
+                child: Text(
+                  'Selecione ao menos uma especialidade',
+                  style: TextStyle(color: Colors.red.shade700, fontSize: 12),
+                ),
+              ),
             const SizedBox(height: 16),
             TextField(
               controller: _emailController,
@@ -337,7 +413,7 @@ class _AdminPTFormScreenState extends State<AdminPTFormScreen> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: _isLoading ? null : _saveTrainer,
+                onPressed: _isLoading ? null : _saveProfessional,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   padding: const EdgeInsets.symmetric(vertical: 14),
@@ -352,7 +428,7 @@ class _AdminPTFormScreenState extends State<AdminPTFormScreen> {
                         ),
                       )
                     : Text(
-                        widget.isEditing ? 'Atualizar' : 'Criar Trainer',
+                        widget.isEditing ? 'Atualizar' : 'Criar Profissional',
                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                           color: Colors.white,
                           fontWeight: FontWeight.w600,

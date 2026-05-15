@@ -5,6 +5,7 @@ import '../../theme/app_colors.dart';
 import '../../theme/theme_colors.dart';
 import '../../routes/app_routes.dart';
 import '../../providers/auth_provider.dart';
+import '../../models/admin_models.dart';
 import '../../providers/dashboard_provider.dart';
 import '../../services/dashboard_service.dart';
 import '../../services/api_client.dart';
@@ -179,36 +180,42 @@ class _TrainerHomeScreenState extends State<TrainerHomeScreen> {
                                 ?.copyWith(fontWeight: FontWeight.bold),
                           ),
                           const SizedBox(height: 12),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _QuickActionButton(
-                                  icon: Icons.person_add_outlined,
-                                  label: 'Convidar\nAluno',
-                                  color: AppColors.primary,
-                                  onTap: () => context.push(AppRoutes.generateInvite),
+                          Builder(builder: (context) {
+                            final role = context.read<AuthProvider>().user?.role ?? 'personal_trainer';
+                            final canCreateSheet = hasRole(role, 'personal_trainer') || role == 'admin';
+                            return Row(
+                              children: [
+                                Expanded(
+                                  child: _QuickActionButton(
+                                    icon: Icons.person_add_outlined,
+                                    label: 'Convidar\nAluno',
+                                    color: AppColors.primary,
+                                    onTap: () => context.push(AppRoutes.generateInvite),
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: _QuickActionButton(
-                                  icon: Icons.assignment_outlined,
-                                  label: 'Criar\nFicha',
-                                  color: AppColors.accentInfo,
-                                  onTap: () => context.go(AppRoutes.trainerSheets),
+                                if (canCreateSheet) ...[
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: _QuickActionButton(
+                                      icon: Icons.assignment_outlined,
+                                      label: 'Criar\nFicha',
+                                      color: AppColors.accentInfo,
+                                      onTap: () => context.go(AppRoutes.trainerSheets),
+                                    ),
+                                  ),
+                                ],
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: _QuickActionButton(
+                                    icon: Icons.people_outlined,
+                                    label: 'Ver\nAlunos',
+                                    color: AppColors.accentWarning,
+                                    onTap: () => context.go(AppRoutes.trainerStudents),
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: _QuickActionButton(
-                                  icon: Icons.people_outlined,
-                                  label: 'Ver\nAlunos',
-                                  color: AppColors.accentWarning,
-                                  onTap: () => context.go(AppRoutes.trainerStudents),
-                                ),
-                              ),
-                            ],
-                          ),
+                              ],
+                            );
+                          }),
                         ],
                       ),
                     ),

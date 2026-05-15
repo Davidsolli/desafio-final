@@ -5,6 +5,7 @@ import '../../../theme/app_colors.dart';
 import '../../../theme/theme_colors.dart';
 import '../../../models/workout_sheet_model.dart';
 import '../../../providers/workout_sheet_provider.dart';
+import '../../../shared/utils/muscle_group_helper.dart';
 
 /// Bottom sheet para buscar e selecionar exercícios do catálogo da API.
 ///
@@ -195,7 +196,7 @@ class _ExerciseCatalogPickerSheetState
               padding: const EdgeInsets.symmetric(horizontal: 16),
               children: [
                 _buildMuscleChip(null, 'Todos os Músc.'),
-                ...validMuscleGroups.map((g) => _buildMuscleChip(g, _muscleGroupLabel(g))),
+                ...validMuscleGroups.map((g) => _buildMuscleChip(g, MuscleGroupHelper.getName(g))),
               ],
             ),
           ),
@@ -338,14 +339,14 @@ class _ExerciseCatalogPickerSheetState
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) => Center(
                           child: Text(
-                            _muscleGroupEmoji(item.muscleGroupMapped),
+                            MuscleGroupHelper.getEmoji(item.muscleGroupMapped ?? ''),
                             style: const TextStyle(fontSize: 20),
                           ),
                         ),
                       )
                     : Center(
                         child: Text(
-                          _muscleGroupEmoji(item.muscleGroupMapped),
+                          MuscleGroupHelper.getEmoji(item.muscleGroupMapped ?? ''),
                           style: const TextStyle(fontSize: 20),
                         ),
                       ),
@@ -377,7 +378,7 @@ class _ExerciseCatalogPickerSheetState
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
-                            _muscleGroupLabel(item.muscleGroupMapped!),
+                            MuscleGroupHelper.getName(item.muscleGroupMapped!),
                             style: Theme.of(context)
                                 .textTheme
                                 .labelSmall
@@ -416,22 +417,6 @@ class _ExerciseCatalogPickerSheetState
     );
   }
 
-  String _muscleGroupLabel(String? group) {
-    const labels = {
-      'peito': 'Peito',
-      'costa': 'Costas',
-      'ombro': 'Ombro',
-      'bíceps': 'Bíceps',
-      'tríceps': 'Tríceps',
-      'antebraço': 'Antebraço',
-      'core': 'Core',
-      'perna_anterior': 'Quadríceps',
-      'perna_posterior': 'Posterior',
-      'panturrilha': 'Panturrilha',
-    };
-    return labels[group] ?? (group ?? '');
-  }
-
   String _equipmentLabel(String? equipment) {
     if (equipment == null) return 'Todos os Equip.';
     const labels = {
@@ -444,21 +429,5 @@ class _ExerciseCatalogPickerSheetState
       'faixas': 'Faixas',
     };
     return labels[equipment] ?? equipment;
-  }
-
-  String _muscleGroupEmoji(String? group) {
-    const emojis = {
-      'peito': '💪',
-      'costa': '🔙',
-      'ombro': '🏋️',
-      'bíceps': '💪',
-      'tríceps': '💪',
-      'antebraço': '🦾',
-      'core': '🎯',
-      'perna_anterior': '🦵',
-      'perna_posterior': '🦵',
-      'panturrilha': '🦶',
-    };
-    return emojis[group] ?? '🏃';
   }
 }

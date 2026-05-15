@@ -65,10 +65,18 @@ class _TrainerSheetsState extends State<TrainerSheets> {
     try {
       final provider = context.read<WorkoutSheetProvider>();
       await provider.loadPrograms(userId: userId);
-      
+
       setState(() {
         if (provider.programs.isNotEmpty) {
-          _selectedProgram = provider.programs.first;
+          // Tenta manter o programa selecionado anteriormente pelo id;
+          // caso não exista mais, seleciona o primeiro da lista.
+          final previousId = _selectedProgram?.id;
+          _selectedProgram = previousId != null
+              ? provider.programs.firstWhere(
+                  (p) => p.id == previousId,
+                  orElse: () => provider.programs.first,
+                )
+              : provider.programs.first;
         } else {
           _selectedProgram = null;
         }
@@ -156,15 +164,90 @@ class _TrainerSheetsState extends State<TrainerSheets> {
     }
   }
 
+  Future<void> _deleteSelectedProgram() async {
+    if (_selectedProgram == null) return;
+    final program = _selectedProgram!;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remover Programa'),
+        content: Text(
+          'Deseja remover o programa "${program.name}"?\n\n'
+          'Todas as fichas e exercícios vinculados também serão removidos.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Remover',
+                style: TextStyle(color: AppColors.accentError)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    try {
+      await context.read<WorkoutSheetProvider>().deleteProgram(program.id);
+      setState(() => _selectedProgram = null);
+      if (_selectedStudent != null) {
+        await _loadStudentPrograms(_selectedStudent!.id);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Programa removido com sucesso.'),
+            backgroundColor: AppColors.accentSuccess,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Erro ao remover programa.'),
+            backgroundColor: AppColors.accentError,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Retorna o programa selecionado apenas se ele ainda existir na lista atual do provider.
+  /// Evita o assertion do DropdownButtonFormField quando a lista é recarregada.
+  WorkoutProgramResponse? _effectiveProgram(List<WorkoutProgramResponse> programs) {
+    if (_selectedProgram == null) return null;
+    try {
+      return programs.firstWhere((p) => p.id == _selectedProgram!.id);
+    } catch (_) {
+      return null;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final workoutProvider = context.watch<WorkoutSheetProvider>();
+    final effectiveProgram = _effectiveProgram(workoutProvider.programs);
+
+    // Sincroniza _selectedProgram com o objeto real da lista para evitar divergências
+    if (effectiveProgram != null && effectiveProgram != _selectedProgram) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _selectedProgram = effectiveProgram);
+      });
+    }
 
     return SafeArea(
       child: Column(
         children: [
           // Seletor de Aluno e Programa
-          _buildSelectorHeader(workoutProvider),
+          _buildSelectorHeader(workoutProvider, effectiveProgram),
 
           // Área de Conteúdo Principal
           Expanded(
@@ -174,7 +257,7 @@ class _TrainerSheetsState extends State<TrainerSheets> {
                     ? _buildErrorWidget()
                     : _students.isEmpty
                         ? _buildEmptyStudentsWidget()
-                        : _selectedProgram == null
+                        : effectiveProgram == null
                             ? _buildEmptyProgramsWidget()
                             : _buildSheetsList(workoutProvider),
           ),
@@ -183,7 +266,7 @@ class _TrainerSheetsState extends State<TrainerSheets> {
     );
   }
 
-  Widget _buildSelectorHeader(WorkoutSheetProvider workoutProvider) {
+  Widget _buildSelectorHeader(WorkoutSheetProvider workoutProvider, WorkoutProgramResponse? effectiveProgram) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -261,7 +344,9 @@ class _TrainerSheetsState extends State<TrainerSheets> {
                       children: [
                         Expanded(
                           child: DropdownButtonFormField<WorkoutProgramResponse>(
-                            value: _selectedProgram,
+                            // Usa _effectiveProgram para garantir que value sempre
+                            // pertence à lista atual de items — evita o assertion do Dropdown
+                            value: _effectiveProgram(workoutProvider.programs),
                             dropdownColor: context.colors.surface,
                             isExpanded: true,
                             decoration: _dropdownDecoration(),
@@ -302,6 +387,25 @@ class _TrainerSheetsState extends State<TrainerSheets> {
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: const Icon(Icons.add, color: AppColors.primary, size: 20),
+                            ),
+                          ),
+                        ],
+                        // Botão deletar programa — só aparece quando o programa foi
+                        // criado pelo profissional (personalTrainerId != null)
+                        if (effectiveProgram != null &&
+                            effectiveProgram.personalTrainerId != null) ...[
+                          const SizedBox(width: 8),
+                          GestureDetector(
+                            onTap: _deleteSelectedProgram,
+                            child: Container(
+                              height: 45,
+                              width: 45,
+                              decoration: BoxDecoration(
+                                color: AppColors.accentError.withValues(alpha: 0.08),
+                                border: Border.all(color: AppColors.accentError.withValues(alpha: 0.3)),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(Icons.delete_outline, color: AppColors.accentError, size: 20),
                             ),
                           ),
                         ],

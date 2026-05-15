@@ -38,8 +38,21 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
 
                   final sub = provider.currentSubscription;
 
-                  if (sub == null) {
-                    return _buildNoSubscription(context);
+                  if (sub == null) return _buildNoSubscription(context);
+
+                  if (sub.canRenew) {
+                    return SingleChildScrollView(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        children: [
+                          _buildStatusCard(context, sub.statusLabel, sub.isActive),
+                          const SizedBox(height: 16),
+                          if (sub.plan != null) _buildPlanCardFaded(context, sub),
+                          const SizedBox(height: 24),
+                          _buildRenewCard(context, sub),
+                        ],
+                      ),
+                    );
                   }
 
                   return SingleChildScrollView(
@@ -51,9 +64,17 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                         if (sub.plan != null) _buildPlanCard(context, sub),
                         const SizedBox(height: 16),
                         _buildDetailsCard(context, sub),
+                        if (sub.isActive && sub.daysRemaining <= 7) ...[
+                          const SizedBox(height: 16),
+                          _buildRenewReminderCard(context),
+                        ],
                         if (sub.isActive || sub.isCanceledPending) ...[
                           const SizedBox(height: 24),
                           _buildAccessCard(context),
+                        ],
+                        if (sub.isActive) ...[
+                          const SizedBox(height: 16),
+                          _buildActionButtons(context, sub),
                         ],
                       ],
                     ),
@@ -333,6 +354,227 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildRenewReminderCard(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.accentWarning.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.accentWarning.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.warning_amber_rounded, color: AppColors.accentWarning, size: 28),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Seu plano está acabando!',
+                  style: TextStyle(color: AppColors.accentWarning, fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Renove agora para não perder o acesso.',
+                  style: TextStyle(color: AppColors.accentWarning.withValues(alpha: 0.85), fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          ElevatedButton(
+            onPressed: () => context.push(AppRoutes.plans),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.accentWarning,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('Renovar', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlanCardFaded(BuildContext context, sub) {
+    final plan = sub.plan!;
+    return Opacity(
+      opacity: 0.45,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: context.colors.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: context.colors.surfaceLight),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Último Plano', style: TextStyle(color: context.colors.textSecondary, fontSize: 12)),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(plan.durationLabel,
+                      style: TextStyle(color: context.colors.textMuted, fontSize: 12, fontWeight: FontWeight.w600)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(plan.name,
+                style: TextStyle(color: context.colors.textPrimary, fontSize: 20, fontWeight: FontWeight.bold)),
+            if (plan.description != null) ...[
+              const SizedBox(height: 4),
+              Text(plan.description!, style: TextStyle(color: context.colors.textSecondary, fontSize: 13)),
+            ],
+            const SizedBox(height: 12),
+            Text(plan.priceFormatted,
+                style: TextStyle(color: context.colors.textMuted, fontSize: 24, fontWeight: FontWeight.bold)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRenewCard(BuildContext context, sub) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.card_membership_outlined, color: AppColors.primary, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Assinatura encerrada',
+                        style: TextStyle(color: context.colors.textPrimary, fontSize: 15, fontWeight: FontWeight.bold)),
+                    Text('Renove para continuar acessando treinos, dieta e IA.',
+                        style: TextStyle(color: context.colors.textSecondary, fontSize: 13)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () => context.push(AppRoutes.plans),
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('Renovar Plano', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionButtons(BuildContext context, sub) {
+    return Column(
+      children: [
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: () => context.push(AppRoutes.plans),
+            icon: const Icon(Icons.swap_horiz, size: 18),
+            label: const Text('Trocar Plano'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.primary,
+              side: const BorderSide(color: AppColors.primary),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: () => _confirmCancel(context),
+            icon: const Icon(Icons.cancel_outlined, size: 18),
+            label: const Text('Cancelar Assinatura'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.accentError,
+              side: const BorderSide(color: AppColors.accentError),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _confirmCancel(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: context.colors.surface,
+        title: Text('Cancelar Assinatura', style: TextStyle(color: context.colors.textPrimary)),
+        content: Text(
+          'Tem certeza que deseja cancelar sua assinatura? Você perderá o acesso ao final do período pago.',
+          style: TextStyle(color: context.colors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Voltar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.accentError),
+            child: const Text('Cancelar Assinatura'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && context.mounted) {
+      final success = await context.read<PaymentProvider>().cancelMySubscription();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(success ? 'Assinatura cancelada com sucesso.' : 'Erro ao cancelar assinatura.'),
+            backgroundColor: success ? AppColors.accentSuccess : AppColors.accentError,
+          ),
+        );
+      }
+    }
   }
 
   String _formatDate(DateTime dt) {

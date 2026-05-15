@@ -6,6 +6,18 @@
 
 import 'api_client.dart';
 
+/// Converte qualquer Map para Map<String, dynamic> de forma segura.
+/// Resolve o problema de LinkedMap<dynamic, dynamic> vindo do JSON decoder.
+/// Converte qualquer Map para Map<String, dynamic> de forma segura.
+/// Resolve o problema de LinkedMap<dynamic, dynamic> vindo do JSON decoder.
+Map<String, dynamic> _m(dynamic value) {
+  if (value is Map<String, dynamic>) return value;
+  if (value is Map) {
+    return Map<String, dynamic>.from(value);
+  }
+  return <String, dynamic>{};
+}
+
 class StudentDashboardData {
   final String id;
   final String name;
@@ -71,12 +83,12 @@ class DashboardService {
       final response = await _apiClient.get<Map<String, dynamic>>(
         '/users/students',
         queryParameters: {'page': '1', 'limit': limit.toString()},
-        fromJson: (data) => data as Map<String, dynamic>,
+        fromJson: (data) => _m(data),
       );
 
       final dataRaw = response['data'];
       final List<dynamic> students = dataRaw is List<dynamic> ? dataRaw : [];
-      return students.whereType<Map<String, dynamic>>().toList();
+      return students.map((s) => _m(s)).toList();
     } catch (e) {
       return [];
     }
@@ -87,7 +99,7 @@ class DashboardService {
     try {
       return await _apiClient.get<Map<String, dynamic>>(
         '/users/$studentId',
-        fromJson: (data) => data as Map<String, dynamic>,
+        fromJson: (data) => _m(data),
       );
     } catch (e) {
       rethrow;
@@ -104,13 +116,13 @@ class DashboardService {
           'status': 'completed',
           'limit': '1',
         },
-        fromJson: (data) => data as Map<String, dynamic>,
+        fromJson: (data) => _m(data),
       );
 
       final sessions = response['data'] as List<dynamic>? ?? [];
       if (sessions.isEmpty) return null;
 
-      return sessions.first as Map<String, dynamic>;
+      return _m(sessions.first);
     } catch (e) {
       // Se não houver sessões, retorna null em vez de erro
       return null;
@@ -128,10 +140,10 @@ class DashboardService {
           'year': now.year.toString(),
           'month': now.month.toString(),
         },
-        fromJson: (data) => data as Map<String, dynamic>,
+        fromJson: (data) => _m(data),
       );
 
-      final summary = response['summary'] as Map<String, dynamic>? ?? {};
+      final summary = _m(response['summary']);
       final completed = (summary['completed'] as num?)?.toInt() ?? 0;
       final planned = (summary['planned'] as num?)?.toInt() ?? 1;
 
@@ -148,18 +160,18 @@ class DashboardService {
       final response = await _apiClient.get<Map<String, dynamic>>(
         '/workout-programs',
         queryParameters: {'user_id': studentId, 'limit': '10'},
-        fromJson: (data) => data as Map<String, dynamic>,
+        fromJson: (data) => _m(data),
       );
 
       final programs = response['data'] as List<dynamic>? ?? [];
       final days = <int>{};
       for (final prog in programs) {
-        if (prog is! Map<String, dynamic>) continue;
-        final sheets = prog['workout_sheets'] as List<dynamic>? ?? [];
+        final progMap = _m(prog);
+        final sheets = progMap['workout_sheets'] as List<dynamic>? ?? [];
         for (final sheet in sheets) {
-          if (sheet is! Map<String, dynamic>) continue;
-          final day = sheet['day_of_week'];
-          if (day != null) days.add(day as int);
+          final sheetMap = _m(sheet);
+          final day = sheetMap['day_of_week'];
+          if (day != null) days.add((day as num).toInt());
         }
       }
       return days.length;
@@ -177,7 +189,7 @@ class DashboardService {
         if (r == null) return 0;
         final points = r['data_points'] as List<dynamic>? ?? [];
         if (points.isEmpty) return 0;
-        final last = points.last as Map<String, dynamic>;
+        final last = _m(points.last);
         return (last['count'] as num?)?.toInt() ?? 0;
       });
       final counts = await Future.wait(futures);
@@ -205,7 +217,7 @@ class DashboardService {
       final response = await _apiClient.get<Map<String, dynamic>>(
         '/logbook/frequency',
         queryParameters: queryParams,
-        fromJson: (data) => data as Map<String, dynamic>,
+        fromJson: (data) => _m(data),
       );
 
       return response;
@@ -236,7 +248,7 @@ class DashboardService {
       final response = await _apiClient.get<Map<String, dynamic>>(
         '/logbook/progression/$exerciseId',
         queryParameters: queryParams,
-        fromJson: (data) => data as Map<String, dynamic>,
+        fromJson: (data) => _m(data),
       );
 
       return response;
@@ -259,7 +271,7 @@ class DashboardService {
       final response = await _apiClient.get<Map<String, dynamic>>(
         '/logbook/muscle-group-distribution',
         queryParameters: queryParams,
-        fromJson: (data) => data as Map<String, dynamic>,
+        fromJson: (data) => _m(data),
       );
 
       return response;
@@ -273,7 +285,7 @@ class DashboardService {
     try {
       final response = await _apiClient.get<Map<String, dynamic>>(
         '/invitations',
-        fromJson: (data) => data as Map<String, dynamic>,
+        fromJson: (data) => _m(data),
       );
       return (response['pending'] as num?)?.toInt() ?? 0;
     } catch (_) {
@@ -298,14 +310,14 @@ class DashboardService {
         final goalType = ref['goal_type'] as String?;
 
         final results = await Future.wait([
-          getLastSession(studentId).then((v) => v ?? {}),
+          getLastSession(studentId).then((v) => v ?? <String, dynamic>{}),
           getWeeklyFrequency(studentId),
           getMonthAdherence(studentId),
         ]);
 
-        final lastSession = results[0] as Map<String, dynamic>;
-        final frequency = results[1] as int;
-        final adherence = results[2] as double;
+        final lastSession = _m(results[0]);
+        final frequency = (results[1] as num?)?.toInt() ?? 0;
+        final adherence = (results[2] as num?)?.toDouble() ?? 0.0;
 
         return StudentDashboardData(
           id: studentId,
@@ -313,7 +325,7 @@ class DashboardService {
           goalType: goalType,
           weeklyFrequency: frequency,
           lastWorkout: lastSession['session_date'] != null
-              ? DateTime.parse(lastSession['session_date'].toString())
+              ? DateTime.tryParse(lastSession['session_date'].toString())
               : null,
           adherencePercent: adherence,
         );

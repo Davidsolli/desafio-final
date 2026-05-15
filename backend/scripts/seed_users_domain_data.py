@@ -60,7 +60,6 @@ async def get_or_create_user(
     result = await session.execute(select(User).where(User.email == email))
     existing = result.scalars().first()
     if existing:
-        # Atualiza dados basicos para manter seed consistente.
         existing.name = name
         existing.role = role
         existing.is_active = True
@@ -71,7 +70,6 @@ async def get_or_create_user(
         existing.gender = gender
         existing.phone_whatsapp = phone_whatsapp
         existing.goal_type = goal_type
-        # Atualiza senha apenas quando usuario ainda nao possui hash bcrypt valido.
         if not (existing.password or "").startswith("$2"):
             existing.password = hash_password(password)
         await session.flush()
@@ -108,13 +106,19 @@ def _sample_unique(candidates: Sequence, count: int) -> List:
 async def _build_exercise_template(
     session: AsyncSession,
     student_index: int,
+    base_load: float = 30.0,
 ) -> List[Dict]:
     """
     Monta template de exercicios com base no exercise_catalog.
 
-    Usa grupos musculares para manter ficha equilibrada.
+    Usa 4 grupos musculares para manter ficha equilibrada.
+    A carga base varia por aluno para gerar progressoes distintas.
     """
-    target_groups = ["perna_anterior", "peito", "costa"]
+    target_groups = ["perna_anterior", "peito", "costa", "ombro"]
+    series_map = {"perna_anterior": 4, "peito": 4, "costa": 3, "ombro": 3}
+    reps_map = {"perna_anterior": 10, "peito": 8, "costa": 12, "ombro": 12}
+    load_offsets = {"perna_anterior": 15.0, "peito": 5.0, "costa": 2.0, "ombro": -5.0}
+
     selected_templates: List[Dict] = []
 
     for group in target_groups:
@@ -126,13 +130,14 @@ async def _build_exercise_template(
         if not chosen:
             continue
         row = chosen[0]
+        load = max(5.0, base_load + load_offsets.get(group, 0.0))
         selected_templates.append(
             {
                 "name": row.name,
                 "group": row.muscle_group_mapped or group,
-                "series": 4 if group in {"perna_anterior", "peito"} else 3,
-                "reps": 10 if group != "costa" else 12,
-                "load": 28.0 + (student_index * 2),
+                "series": series_map.get(group, 3),
+                "reps": reps_map.get(group, 10),
+                "load": round(load, 1),
                 "obs": f"Baseado no catalogo: {row.id}",
             }
         )
@@ -142,9 +147,10 @@ async def _build_exercise_template(
 
     logger.warning("[seed_domain] exercise_catalog vazio. Aplicando fallback de exercicios.")
     return [
-        {"name": "Agachamento Livre", "group": "perna_anterior", "series": 4, "reps": 10, "load": 45.0, "obs": "Fallback"},
-        {"name": "Supino Reto", "group": "peito", "series": 4, "reps": 8, "load": 35.0, "obs": "Fallback"},
-        {"name": "Remada Curvada", "group": "costa", "series": 3, "reps": 12, "load": 28.0, "obs": "Fallback"},
+        {"name": "Agachamento Livre",  "group": "perna_anterior", "series": 4, "reps": 10, "load": base_load + 15.0, "obs": "Fallback"},
+        {"name": "Supino Reto",        "group": "peito",          "series": 4, "reps": 8,  "load": base_load + 5.0,  "obs": "Fallback"},
+        {"name": "Remada Curvada",     "group": "costa",          "series": 3, "reps": 12, "load": base_load + 2.0,  "obs": "Fallback"},
+        {"name": "Desenvolvimento",    "group": "ombro",          "series": 3, "reps": 12, "load": max(5.0, base_load - 5.0), "obs": "Fallback"},
     ]
 
 
@@ -169,7 +175,6 @@ async def _pick_foods_for_meals(session: AsyncSession) -> Dict[str, FoodCatalog]
         if any(keyword in name for keyword in lunch_keywords):
             lunch_pool.append(food)
 
-    # Fallback para qualquer alimento caso filtros sejam muito restritivos.
     if not breakfast_pool:
         breakfast_pool = all_foods
     if not lunch_pool:
@@ -185,11 +190,6 @@ def _macro_by_quantity(per_100g: float, quantity_g: float) -> float:
 
 
 def _resolve_admin_bootstrap() -> Dict[str, str]:
-    """
-    Resolve credenciais do admin com fallback para ambiente de desenvolvimento.
-
-    Mantem o seed funcional mesmo se o time esquecer de atualizar o .env.
-    """
     defaults = {
         "ADMIN_NAME": "Administrador OmniConnect",
         "ADMIN_EMAIL": "admin@omniconnect.fit",
@@ -215,7 +215,15 @@ def _resolve_admin_bootstrap() -> Dict[str, str]:
 
 async def seed(force: bool = False) -> None:
     """
-    Popula base com admin, personais e alunos com dados correlacionados.
+    Popula base com admin, profissionais e alunos com dados correlacionados.
+
+    Profissionais:
+      - Camila Rocha    → personal_trainer
+      - Rafael Lima     → personal_trainer
+      - Ana Beatriz     → nutritionist
+      - Pedro Alves     → nutritionist,personal_trainer  (dual)
+
+    Alunos: 2 por profissional = 8 alunos no total.
 
     Se force=True, remove dados de dominio antes de recriar.
     """
@@ -243,6 +251,7 @@ async def seed(force: bool = False) -> None:
                     await session.delete(row)
             await session.commit()
 
+        # ── Admin ──────────────────────────────────────────────────────────
         admin_bootstrap = _resolve_admin_bootstrap()
         admin = await get_or_create_user(
             session,
@@ -250,257 +259,239 @@ async def seed(force: bool = False) -> None:
             email=admin_bootstrap["ADMIN_EMAIL"],
             password=admin_bootstrap["ADMIN_PASSWORD"],
             role="admin",
-            phone_whatsapp="+55 11 90000-0000",
+            phone_whatsapp="5511900000000",
         )
 
-        trainers: Dict[str, User] = {}
-        trainers["camila"] = await get_or_create_user(
+        # ── Profissionais ──────────────────────────────────────────────────
+        # Agora todos os profissionais têm a função dual: nutricionista e personal trainer
+        professionals: Dict[str, User] = {}
+
+        professionals["camila"] = await get_or_create_user(
             session,
             name="Camila Rocha",
             email="camila.personal@omniconnect.fit",
             password="TreinoForte123!",
-            role="personal_trainer",
+            role="nutritionist,personal_trainer",
             age=31,
             gender="female",
-            phone_whatsapp="+55 11 98888-1010",
+            phone_whatsapp="5511988881010",
         )
-        trainers["rafael"] = await get_or_create_user(
+        professionals["rafael"] = await get_or_create_user(
             session,
             name="Rafael Lima",
             email="rafael.personal@omniconnect.fit",
             password="TreinoForte123!",
-            role="personal_trainer",
+            role="nutritionist,personal_trainer",
             age=34,
             gender="male",
-            phone_whatsapp="+55 21 97777-2020",
+            phone_whatsapp="5521977772020",
         )
 
-        students: List[User] = []
-        students.append(
-            await get_or_create_user(
-                session,
-                name="Bruno Martins",
-                email="bruno.aluno@omniconnect.fit",
-                password="AlunoForte123!",
-                role="client",
-                trainer_id=trainers["camila"].id,
-                weight=92.0,
-                height=180.0,
-                age=29,
-                gender="male",
-                phone_whatsapp="+55 11 96666-1111",
-                goal_type="lose_weight",
-            )
-        )
-        students.append(
-            await get_or_create_user(
-                session,
-                name="Juliana Costa",
-                email="juliana.aluna@omniconnect.fit",
-                password="AlunoForte123!",
-                role="client",
-                trainer_id=trainers["camila"].id,
-                weight=61.0,
-                height=165.0,
-                age=26,
-                gender="female",
-                phone_whatsapp="+55 11 96666-2222",
-                goal_type="gain_mass",
-            )
-        )
-        students.append(
-            await get_or_create_user(
-                session,
-                name="Leonardo Souza",
-                email="leonardo.aluno@omniconnect.fit",
-                password="AlunoForte123!",
-                role="client",
-                trainer_id=trainers["rafael"].id,
-                weight=79.0,
-                height=173.0,
-                age=35,
-                gender="male",
-                phone_whatsapp="+55 21 95555-3333",
-                goal_type="maintenance",
-            )
-        )
-        students.append(
-            await get_or_create_user(
-                session,
-                name="Patricia Nunes",
-                email="patricia.aluna@omniconnect.fit",
-                password="AlunoForte123!",
-                role="client",
-                trainer_id=trainers["rafael"].id,
-                weight=70.0,
-                height=169.0,
-                age=32,
-                gender="female",
-                phone_whatsapp="+55 21 95555-4444",
-                goal_type="endurance",
-            )
-        )
-        await session.flush()
-
-        goal_specs = [
-            ("Reduzir peso corporal", "composition", 82.0, 90.5, "kg", students[0], trainers["camila"]),
-            ("Aumentar carga no agachamento", "strength", 90.0, 62.5, "kg", students[1], trainers["camila"]),
-            ("Manter frequencia semanal", "frequency", 4.0, 3.0, "treinos/semana", students[2], trainers["rafael"]),
-            ("Melhorar corrida 5km", "endurance", 28.0, 33.0, "min", students[3], trainers["rafael"]),
+        # ── Alunos — 2 por profissional (Total 4) ──────────────────────────
+        #
+        # Estrutura: (nome, email, prof_key, peso, altura, idade, genero, fone, objetivo, carga_base)
+        #
+        student_specs = [
+            # Camila Rocha
+            ("Bruno Martins",   "bruno.aluno@omniconnect.fit",    "camila", 92.0, 180.0, 29, "male",   "5511966661111", "lose_weight",  32.0),
+            ("Juliana Costa",   "juliana.aluna@omniconnect.fit",  "camila", 61.0, 165.0, 26, "female", "5511966662222", "gain_mass",    18.0),
+            # Rafael Lima
+            ("Leonardo Souza",  "leonardo.aluno@omniconnect.fit", "rafael", 79.0, 173.0, 35, "male",   "5521955553333", "maintenance",  28.0),
+            ("Patricia Nunes",  "patricia.aluna@omniconnect.fit", "rafael", 70.0, 169.0, 32, "female", "5521955554444", "endurance",    20.0),
         ]
 
-        for title, category, target, current, unit, student, trainer in goal_specs:
-            existing_goal = await session.execute(
+        students: List[User] = []
+        for (name, email, prof_key, weight, height, age, gender, phone, goal_type, _base_load) in student_specs:
+            student = await get_or_create_user(
+                session,
+                name=name,
+                email=email,
+                password="AlunoForte123!",
+                role="client",
+                trainer_id=professionals[prof_key].id,
+                weight=weight,
+                height=height,
+                age=age,
+                gender=gender,
+                phone_whatsapp=phone,
+                goal_type=goal_type,
+            )
+            students.append(student)
+
+        await session.flush()
+
+        # ── Metas ──────────────────────────────────────────────────────────
+        #
+        # (titulo, categoria, target, current, unidade, student_idx, prof_key)
+        #
+        goal_specs = [
+            ("Reduzir gordura corporal",     "composition", 82.0,  92.0,  "kg",            0, "camila"),
+            ("Aumentar carga no supino",     "strength",    50.0,  32.0,  "kg",            1, "camila"),
+            ("Manter frequência semanal",    "frequency",    4.0,   3.0,  "treinos/semana",2, "rafael"),
+            ("Melhorar VO2 máx (corrida)",   "endurance",   28.0,  33.5,  "min/5km",       3, "rafael"),
+        ]
+
+        for title, category, target, current, unit, student_idx, prof_key in goal_specs:
+            student = students[student_idx]
+            prof = professionals[prof_key]
+            existing = await session.execute(
                 select(Goal).where(Goal.user_id == student.id, Goal.title == title)
             )
-            goal = existing_goal.scalars().first()
+            goal = existing.scalars().first()
             if not goal:
+                going_up = target > current
+                initial = current - 1.5 if going_up else current + 1.5
+                progress = round(abs(current - initial) / max(abs(target - initial), 0.01) * 100, 1)
                 goal = Goal(
                     user_id=student.id,
-                    created_by_id=trainer.id,
+                    created_by_id=prof.id,
                     title=title,
                     description=f"Meta principal de {student.name}",
                     category=category,
                     target_value=target,
                     current_value=current,
-                    initial_value=current - 1.5 if target > current else current + 1.5,
+                    initial_value=initial,
                     unit=unit,
-                    start_date=datetime.utcnow() - timedelta(days=15),
-                    target_date=datetime.utcnow() + timedelta(days=90),
+                    start_date=datetime.utcnow() - timedelta(days=20),
+                    target_date=datetime.utcnow() + timedelta(days=80),
                     status="active",
-                    progress_percentage=25.0,
+                    progress_percentage=min(progress, 99.0),
                 )
                 session.add(goal)
                 await session.flush()
 
-                entry = GoalProgressEntry(
+                session.add(GoalProgressEntry(
                     goal_id=goal.id,
                     current_value=current,
-                    recorded_at=datetime.utcnow() - timedelta(days=2),
-                    notes="Atualizacao inicial da consultoria",
-                )
-                session.add(entry)
+                    recorded_at=datetime.utcnow() - timedelta(days=3),
+                    notes="Atualização inicial da consultoria",
+                ))
 
-        for index, student in enumerate(students):
-            trainer = trainers["camila"] if index < 2 else trainers["rafael"]
-            
-            program_name = f"Programa Base {student.name.split()[0]}"
-            existing_program_result = await session.execute(
-                select(WorkoutProgram).where(
-                    WorkoutProgram.user_id == student.id,
-                    WorkoutProgram.name == program_name,
-                )
-            )
-            program = existing_program_result.scalars().first()
+        # ── Programas de treino, fichas e histórico ────────────────────────
+        for index, spec in enumerate(student_specs):
+            name, email, prof_key, weight, height, age, gender, phone, goal_type, base_load = spec
+            student = students[index]
+            prof = professionals[prof_key]
 
-            if not program:
-                program = WorkoutProgram(
-                    user_id=student.id,
-                    personal_trainer_id=trainer.id,
-                    name=program_name,
-                    description="Programa inicial para ciclo de 4 semanas",
-                    goal="Hipertrofia" if student.goal_type == "gain_mass" else "Emagrecimento",
-                    is_active=True,
-                )
-                session.add(program)
-                await session.flush()
+            # Personais e o dual criam programas; nutricionista puro não precisa de programa de treino
+            is_trainer_prof = "personal_trainer" in prof.role
 
-            # Garante que sempre temos fichas associadas ao programa
-            sheets_result = await session.execute(
-                select(WorkoutSheet).where(
-                    WorkoutSheet.workout_program_id == program.id,
-                    WorkoutSheet.is_active.is_(True),
-                )
-            )
-            sheets_list = sheets_result.scalars().all()
-
-            if not sheets_list:
-                sheet_name = f"Treino A"
-                sheet = WorkoutSheet(
-                    workout_program_id=program.id,
-                    name=sheet_name,
-                    description="Ficha base adaptacao",
-                    day_of_week=index % 5,
-                    order=1,
-                    is_active=True,
-                )
-                session.add(sheet)
-                await session.flush()
-
-                exercise_list = await _build_exercise_template(session, index)
-                for order, exercise_tpl in enumerate(exercise_list, start=1):
-                    ex = Exercise(
-                        workout_sheet_id=sheet.id,
-                        name=exercise_tpl["name"],
-                        muscle_group=exercise_tpl["group"],
-                        series=exercise_tpl["series"],
-                        repetitions=exercise_tpl["reps"],
-                        load_kg=exercise_tpl["load"],
-                        rest_seconds=75,
-                        observations=exercise_tpl["obs"],
-                        order=order,
+            if is_trainer_prof:
+                program_name = f"Programa Base {student.name.split()[0]}"
+                existing_program = await session.execute(
+                    select(WorkoutProgram).where(
+                        WorkoutProgram.user_id == student.id,
+                        WorkoutProgram.name == program_name,
                     )
-                    session.add(ex)
-                await session.flush()
-            else:
-                sheet = sheets_list[0]
-
-            existing_session_result = await session.execute(
-                select(WorkoutSession).where(
-                    WorkoutSession.user_id == student.id,
-                    WorkoutSession.status == "completed",
                 )
-            )
-            workout_session = existing_session_result.scalars().first()
-            if not workout_session:
-                # Seed de histórico de 8 semanas de progresso (16 treinos)
-                past_session_offsets = [53, 50, 46, 43, 39, 36, 32, 29, 25, 22, 18, 15, 11, 8, 4, 1]
+                program = existing_program.scalars().first()
 
-                # Carrega os exercícios cadastrados para esta ficha
-                exercises_result = await session.execute(
-                    select(Exercise).where(Exercise.workout_sheet_id == sheet.id).order_by(Exercise.order)
-                )
-                sheet_exercises = exercises_result.scalars().all()
-
-                for offset in past_session_offsets:
-                    week_idx = 7 - (offset // 7)  # Semana 0 a 7
-                    s_date = datetime.utcnow() - timedelta(days=offset)
-
-                    workout_session = WorkoutSession(
+                if not program:
+                    goal_label = (
+                        "Hipertrofia" if goal_type == "gain_mass"
+                        else "Emagrecimento" if goal_type == "lose_weight"
+                        else "Resistência" if goal_type == "endurance"
+                        else "Manutenção"
+                    )
+                    program = WorkoutProgram(
                         user_id=student.id,
-                        workout_sheet_id=sheet.id,
-                        session_date=s_date,
-                        status="completed",
-                        general_notes=f"Treino excelente da semana {week_idx + 1}.",
-                        difficulty_level=RNG.choice([6, 7, 8]),
-                        mood=RNG.choice(["good", "excellent"]),
-                        completed_at=s_date + timedelta(minutes=RNG.randint(45, 60)),
-                        approved_by_personal_id=trainer.id,
-                        approved_at=s_date + timedelta(hours=1),
+                        personal_trainer_id=prof.id,
+                        name=program_name,
+                        description=f"Programa de 4 semanas — foco em {goal_label.lower()}",
+                        goal=goal_label,
+                        is_active=True,
                     )
-                    session.add(workout_session)
+                    session.add(program)
                     await session.flush()
 
-                    for ex in sheet_exercises:
-                        # Progressão linear de carga: começa com 70% e evolui para 100% da carga ideal
-                        progression_factor = 0.7 + (0.3 * (week_idx / 7.0))
-                        actual_load = round(ex.load_kg * progression_factor, 1)
-                        actual_load = max(5.0, actual_load)  # Garante carga mínima plausível
+                sheets_result = await session.execute(
+                    select(WorkoutSheet).where(
+                        WorkoutSheet.workout_program_id == program.id,
+                        WorkoutSheet.is_active.is_(True),
+                    )
+                )
+                sheets_list = sheets_result.scalars().all()
 
-                        # Detalhes das séries com fadiga leve no final do treino
-                        series_details = []
-                        for s_num in range(1, ex.series + 1):
-                            fatigue = RNG.choice([0, 0, 1]) if s_num > 2 else 0
-                            reps = max(6, ex.repetitions - fatigue)
-                            series_details.append({
-                                "series": s_num,
-                                "reps": reps,
-                                "load": actual_load
-                            })
+                if not sheets_list:
+                    sheet = WorkoutSheet(
+                        workout_program_id=program.id,
+                        name="Treino A",
+                        description="Ficha base — adaptação",
+                        day_of_week=index % 5,
+                        order=1,
+                        is_active=True,
+                    )
+                    session.add(sheet)
+                    await session.flush()
 
-                        session.add(
-                            SessionExercise(
-                                session_id=workout_session.id,
+                    exercise_list = await _build_exercise_template(session, index, base_load)
+                    for order, tpl in enumerate(exercise_list, start=1):
+                        session.add(Exercise(
+                            workout_sheet_id=sheet.id,
+                            name=tpl["name"],
+                            muscle_group=tpl["group"],
+                            series=tpl["series"],
+                            repetitions=tpl["reps"],
+                            load_kg=tpl["load"],
+                            rest_seconds=75,
+                            observations=tpl["obs"],
+                            order=order,
+                        ))
+                    await session.flush()
+                else:
+                    sheet = sheets_list[0]
+
+                # Histórico de 10 semanas (20 treinos) com progressão de carga
+                existing_session = await session.execute(
+                    select(WorkoutSession).where(
+                        WorkoutSession.user_id == student.id,
+                        WorkoutSession.status == "completed",
+                    )
+                )
+                if not existing_session.scalars().first():
+                    # Offsets espaçados de 3-4 dias para simular frequência real
+                    offsets = [70, 66, 62, 59, 55, 52, 48, 45, 41, 38, 34, 31, 27, 24, 20, 17, 13, 10, 6, 3]
+
+                    exercises_result = await session.execute(
+                        select(Exercise).where(Exercise.workout_sheet_id == sheet.id).order_by(Exercise.order)
+                    )
+                    sheet_exercises = exercises_result.scalars().all()
+
+                    for session_num, offset in enumerate(offsets):
+                        week_idx = session_num // 2  # ~2 treinos por semana
+                        s_date = datetime.utcnow() - timedelta(days=offset)
+
+                        ws = WorkoutSession(
+                            user_id=student.id,
+                            workout_sheet_id=sheet.id,
+                            session_date=s_date,
+                            status="completed",
+                            general_notes=f"Semana {week_idx + 1} — treino concluído.",
+                            difficulty_level=RNG.choice([6, 7, 7, 8]),
+                            mood=RNG.choice(["good", "good", "excellent"]),
+                            completed_at=s_date + timedelta(minutes=RNG.randint(45, 65)),
+                            approved_by_personal_id=prof.id,
+                            approved_at=s_date + timedelta(hours=2),
+                        )
+                        session.add(ws)
+                        await session.flush()
+
+                        for ex in sheet_exercises:
+                            # Progressão linear: 65 % → 100 % ao longo das 10 semanas
+                            factor = 0.65 + (0.35 * (week_idx / 9.0))
+                            actual_load = max(5.0, round(ex.load_kg * factor, 1))
+
+                            series_details = []
+                            for s_num in range(1, ex.series + 1):
+                                fatigue = RNG.choice([0, 0, 1]) if s_num >= 3 else 0
+                                series_details.append({
+                                    "series": s_num,
+                                    "reps": max(6, ex.repetitions - fatigue),
+                                    "load": actual_load,
+                                })
+
+                            session.add(SessionExercise(
+                                session_id=ws.id,
                                 exercise_id=ex.id,
                                 planned_series=ex.series,
                                 planned_repetitions=ex.repetitions,
@@ -512,145 +503,133 @@ async def seed(force: bool = False) -> None:
                                 exercise_notes="Execução controlada.",
                                 pain_or_discomfort=False,
                                 status="completed",
-                            )
-                        )
-                await session.flush()
+                            ))
+                    await session.flush()
 
+            # ── Dieta prescrita (todos os alunos recebem dieta) ────────────
             meal_foods = await _pick_foods_for_meals(session)
 
             diet_name = f"Dieta Inicial {student.name.split()[0]}"
-            existing_diet_result = await session.execute(
+            existing_diet = await session.execute(
                 select(Diet).where(Diet.user_id == student.id, Diet.name == diet_name)
             )
-            diet = existing_diet_result.scalars().first()
+            diet = existing_diet.scalars().first()
             if not diet:
                 diet = Diet(
                     user_id=student.id,
-                    professional_id=trainer.id,
+                    professional_id=prof.id,
                     is_custom=False,
                     name=diet_name,
-                    goal="cutting" if student.goal_type == "lose_weight" else "bulking",
+                    goal="cutting" if goal_type == "lose_weight" else "bulking",
                     is_active=True,
                 )
                 session.add(diet)
                 await session.flush()
 
                 breakfast = DietMeal(diet_id=diet.id, name="Café da Manhã", time="07:30", order=1)
-                lunch = DietMeal(diet_id=diet.id, name="Almoço", time="12:30", order=2)
-                session.add_all([breakfast, lunch])
+                lunch    = DietMeal(diet_id=diet.id, name="Almoço",         time="12:30", order=2)
+                dinner   = DietMeal(diet_id=diet.id, name="Jantar",         time="19:30", order=3)
+                session.add_all([breakfast, lunch, dinner])
                 await session.flush()
 
                 if meal_foods:
-                    session.add_all(
-                        [
-                            DietItem(
-                                meal_id=breakfast.id,
-                                food_id=meal_foods["breakfast"].id,
-                                quantity_g=180.0,
-                                observations=f"TACO: {meal_foods['breakfast'].name}",
-                            ),
-                            DietItem(
-                                meal_id=lunch.id,
-                                food_id=meal_foods["lunch"].id,
-                                quantity_g=220.0,
-                                observations=f"TACO: {meal_foods['lunch'].name}",
-                            ),
-                        ]
-                    )
+                    session.add_all([
+                        DietItem(
+                            meal_id=breakfast.id,
+                            food_id=meal_foods["breakfast"].id,
+                            quantity_g=180.0,
+                            observations=f"TACO: {meal_foods['breakfast'].name}",
+                        ),
+                        DietItem(
+                            meal_id=lunch.id,
+                            food_id=meal_foods["lunch"].id,
+                            quantity_g=220.0,
+                            observations=f"TACO: {meal_foods['lunch'].name}",
+                        ),
+                        DietItem(
+                            meal_id=dinner.id,
+                            food_id=meal_foods["lunch"].id,  # reutiliza proteína do almoço
+                            quantity_g=180.0,
+                            observations="Refeição noturna — porção reduzida",
+                        ),
+                    ])
                 else:
-                    logger.warning("[seed_domain] Dieta criada sem itens para %s por falta de dados TACO.", student.email)
+                    logger.warning(
+                        "[seed_domain] Dieta criada sem itens para %s (food_catalog vazio).",
+                        student.email,
+                    )
 
+            # ── Diário alimentar do dia ────────────────────────────────────
             today = date.today()
-            existing_logbook_result = await session.execute(
-                select(DietLogbook).where(DietLogbook.user_id == student.id, DietLogbook.date == today)
+            existing_logbook = await session.execute(
+                select(DietLogbook).where(
+                    DietLogbook.user_id == student.id,
+                    DietLogbook.date == today,
+                )
             )
-            logbook = existing_logbook_result.scalars().first()
-            if not logbook:
-                breakfast_food = meal_foods.get("breakfast") if meal_foods else None
-                lunch_food = meal_foods.get("lunch") if meal_foods else None
+            if not existing_logbook.scalars().first() and meal_foods:
+                bf = meal_foods["breakfast"]
+                lf = meal_foods["lunch"]
+                bf_qty, lf_qty = 180.0, 220.0
 
-                breakfast_qty = 180.0
-                lunch_qty = 220.0
-                breakfast_kcal = _macro_by_quantity(
-                    breakfast_food.energy_kcal if breakfast_food else 0.0,
-                    breakfast_qty,
-                )
-                lunch_kcal = _macro_by_quantity(
-                    lunch_food.energy_kcal if lunch_food else 0.0,
-                    lunch_qty,
-                )
-                breakfast_protein = _macro_by_quantity(
-                    breakfast_food.protein_g if breakfast_food else 0.0,
-                    breakfast_qty,
-                )
-                lunch_protein = _macro_by_quantity(
-                    lunch_food.protein_g if lunch_food else 0.0,
-                    lunch_qty,
-                )
-                breakfast_carbs = _macro_by_quantity(
-                    breakfast_food.carbohydrate_g if breakfast_food else 0.0,
-                    breakfast_qty,
-                )
-                lunch_carbs = _macro_by_quantity(
-                    lunch_food.carbohydrate_g if lunch_food else 0.0,
-                    lunch_qty,
-                )
-                breakfast_fats = _macro_by_quantity(
-                    breakfast_food.lipid_g if breakfast_food else 0.0,
-                    breakfast_qty,
-                )
-                lunch_fats = _macro_by_quantity(
-                    lunch_food.lipid_g if lunch_food else 0.0,
-                    lunch_qty,
-                )
+                def macro(food, attr, qty): return _macro_by_quantity(getattr(food, attr, 0.0) or 0.0, qty)
 
                 logbook = DietLogbook(
                     user_id=student.id,
                     date=today,
-                    total_kcal=round(breakfast_kcal + lunch_kcal, 2),
-                    total_protein=round(breakfast_protein + lunch_protein, 2),
-                    total_carbs=round(breakfast_carbs + lunch_carbs, 2),
-                    total_fats=round(breakfast_fats + lunch_fats, 2),
+                    total_kcal=round(macro(bf, "energy_kcal", bf_qty) + macro(lf, "energy_kcal", lf_qty), 2),
+                    total_protein=round(macro(bf, "protein_g", bf_qty) + macro(lf, "protein_g", lf_qty), 2),
+                    total_carbs=round(macro(bf, "carbohydrate_g", bf_qty) + macro(lf, "carbohydrate_g", lf_qty), 2),
+                    total_fats=round(macro(bf, "lipid_g", bf_qty) + macro(lf, "lipid_g", lf_qty), 2),
                 )
                 session.add(logbook)
                 await session.flush()
 
-                if meal_foods:
-                    session.add_all(
-                        [
-                            DietLogbookEntry(
-                                logbook_id=logbook.id,
-                                meal_name="Café da Manhã",
-                                food_name=breakfast_food.name,
-                                food_id=breakfast_food.id,
-                                quantity_g=breakfast_qty,
-                                kcal=breakfast_kcal,
-                                protein=breakfast_protein,
-                                carbs=breakfast_carbs,
-                                fats=breakfast_fats,
-                            ),
-                            DietLogbookEntry(
-                                logbook_id=logbook.id,
-                                meal_name="Almoço",
-                                food_name=lunch_food.name,
-                                food_id=lunch_food.id,
-                                quantity_g=lunch_qty,
-                                kcal=lunch_kcal,
-                                protein=lunch_protein,
-                                carbs=lunch_carbs,
-                                fats=lunch_fats,
-                            ),
-                        ]
-                    )
+                session.add_all([
+                    DietLogbookEntry(
+                        logbook_id=logbook.id,
+                        meal_name="Café da Manhã",
+                        food_name=bf.name,
+                        food_id=bf.id,
+                        quantity_g=bf_qty,
+                        kcal=macro(bf, "energy_kcal", bf_qty),
+                        protein=macro(bf, "protein_g", bf_qty),
+                        carbs=macro(bf, "carbohydrate_g", bf_qty),
+                        fats=macro(bf, "lipid_g", bf_qty),
+                    ),
+                    DietLogbookEntry(
+                        logbook_id=logbook.id,
+                        meal_name="Almoço",
+                        food_name=lf.name,
+                        food_id=lf.id,
+                        quantity_g=lf_qty,
+                        kcal=macro(lf, "energy_kcal", lf_qty),
+                        protein=macro(lf, "protein_g", lf_qty),
+                        carbs=macro(lf, "carbohydrate_g", lf_qty),
+                        fats=macro(lf, "lipid_g", lf_qty),
+                    ),
+                ])
 
         await session.commit()
-        print("[seed_domain] Seed de usuarios e dados de dominio concluido com sucesso.")
-        print(f"[seed_domain] Admin: {admin.email}")
-        print(f"[seed_domain] Personais: {len(trainers)} | Alunos: {len(students)}")
+
+    print("[seed_domain] Seed de usuarios e dados de dominio concluido com sucesso.")
+    print(f"[seed_domain]   Admin:         {admin.email}")
+    print(f"[seed_domain]   Profissionais: {len(professionals)}")
+    for key, p in professionals.items():
+        role_label = (
+            "Personal + Nutricionista" if "," in p.role
+            else "Nutricionista" if p.role == "nutritionist"
+            else "Personal Trainer"
+        )
+        print(f"[seed_domain]     [{role_label}] {p.name} ({p.email})")
+    print(f"[seed_domain]   Alunos:        {len(students)}")
+    for s in students:
+        prof = next((p for p in professionals.values() if p.id == s.trainer_id), None)
+        print(f"[seed_domain]     {s.name} ({s.email}) → {prof.name if prof else '?'}")
 
 
 if __name__ == "__main__":
     force = "--force" in sys.argv
     if force:
-        print("[seed_domain] Modo --force ativado.")
+        print("[seed_domain] Modo --force ativado: dados de dominio serao recriados.")
     asyncio.run(seed(force=force))

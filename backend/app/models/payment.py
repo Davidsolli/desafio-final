@@ -55,6 +55,8 @@ class Subscription(Base):
     expires_at = Column(TIMESTAMP, nullable=True)
     canceled_at = Column(TIMESTAMP, nullable=True)
 
+    replacement_policy = Column(String(20), nullable=True)  # immediate, on_expiry
+    
     created_at = Column(TIMESTAMP, default=datetime.utcnow)
     updated_at = Column(TIMESTAMP, default=datetime.utcnow, onupdate=datetime.utcnow)
 

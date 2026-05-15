@@ -8,7 +8,9 @@ import '../../theme/app_colors.dart';
 import '../../theme/theme_colors.dart';
 import '../../models/workout_sheet_model.dart';
 import '../../models/diet_models.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/workout_sheet_provider.dart';
+import '../../models/admin_models.dart';
 import '../../services/nutrition_service.dart';
 import '../../services/user_service.dart';
 import '../../services/workout_sheet_service.dart';
@@ -16,6 +18,7 @@ import '../../services/api_client.dart';
 import '../../services/step_service.dart';
 import '../../models/step_models.dart';
 import '../../shared/widgets/index.dart';
+import 'widgets/create_workout_program_dialog.dart';
 import 'widgets/create_workout_sheet_dialog.dart';
 import 'widgets/edit_workout_sheet_dialog.dart';
 import '../student/widgets/food_search_modal.dart';
@@ -38,11 +41,15 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
   bool _studentLoading = true;
   String? _studentError;
 
-  // Estado local para fichas do aluno (carregadas via API)
-  List<WorkoutSheetListItem> _studentSheets = [];
+  // Estado local para programas e fichas do aluno
+  List<WorkoutProgramResponse> _allPrograms = [];
+  List<WorkoutSheetListItem> _studentSheets = []; // fichas do programa ativo (para evolução)
   WorkoutProgramResponse? _activeProgram;
   bool _sheetsLoading = true;
   String? _sheetsError;
+  String? _expandedProgramId;
+  final Map<String, List<WorkoutSheetListItem>> _sheetsCache = {};
+  final Map<String, bool> _sheetsLoadingCache = {};
   List<Diet> _studentDiets = [];
   bool _nutritionLoading = false;
   String? _nutritionError;
@@ -257,38 +264,29 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
     });
     try {
       final provider = context.read<WorkoutSheetProvider>();
-      await provider.loadPrograms(userId: widget.studentId);
-      
+      await provider.loadPrograms(userId: widget.studentId, limit: 50);
+
       if (provider.programs.isNotEmpty) {
-        final active = provider.programs.firstWhere((p) => p.isActive, orElse: () => provider.programs.first);
-        await provider.loadSheets(workoutProgramId: active.id);
-        
-        final List<ExerciseResponse> exercises = [];
-        final sheetService = provider.service;
-        for (final s in provider.sheets) {
-          try {
-            final detailedSheet = await sheetService.getWorkoutSheet(s.id);
-            exercises.addAll(detailedSheet.exercises);
-          } catch (_) {}
-        }
-        
-        final uniqueExercises = <String, ExerciseResponse>{};
-        for (final ex in exercises) {
-          uniqueExercises[ex.name] = ex;
-        }
+        final active = provider.programs.firstWhere(
+          (p) => p.isActive,
+          orElse: () => provider.programs.first,
+        );
 
         if (mounted) {
           setState(() {
+            _allPrograms = provider.programs;
             _activeProgram = active;
-            _studentSheets = provider.sheets;
-            _studentExercises = uniqueExercises.values.toList();
+            _expandedProgramId ??= active.id;
             _sheetsLoading = false;
           });
+          // Carrega fichas do programa expandido para uso em Evolução
+          await _loadSheetsForProgram(active.id, forEvolution: true);
           _loadEvolutionData();
         }
       } else {
         if (mounted) {
           setState(() {
+            _allPrograms = [];
             _activeProgram = null;
             _studentSheets = [];
             _studentExercises = [];
@@ -300,10 +298,45 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
     } catch (e) {
       if (mounted) {
         setState(() {
-          _sheetsError = 'Erro ao carregar fichas';
+          _sheetsError = 'Erro ao carregar programas';
           _sheetsLoading = false;
         });
       }
+    }
+  }
+
+  Future<void> _loadSheetsForProgram(String programId, {bool forEvolution = false}) async {
+    if (_sheetsLoadingCache[programId] == true) return;
+    setState(() => _sheetsLoadingCache[programId] = true);
+    try {
+      final provider = context.read<WorkoutSheetProvider>();
+      await provider.loadSheets(workoutProgramId: programId);
+      final sheets = List<WorkoutSheetListItem>.from(provider.sheets);
+
+      if (!mounted) return;
+      setState(() {
+        _sheetsCache[programId] = sheets;
+        _sheetsLoadingCache[programId] = false;
+      });
+
+      if (forEvolution) {
+        _studentSheets = sheets;
+        final List<ExerciseResponse> exercises = [];
+        final sheetService = provider.service;
+        for (final s in sheets) {
+          try {
+            final detail = await sheetService.getWorkoutSheet(s.id);
+            exercises.addAll(detail.exercises);
+          } catch (_) {}
+        }
+        final unique = <String, ExerciseResponse>{};
+        for (final ex in exercises) {
+          unique[ex.name] = ex;
+        }
+        if (mounted) setState(() => _studentExercises = unique.values.toList());
+      }
+    } catch (_) {
+      if (mounted) setState(() => _sheetsLoadingCache[programId] = false);
     }
   }
 
@@ -627,33 +660,39 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
   }
 
   Widget _buildWorkoutsTab() {
+    final role = context.read<AuthProvider>().user?.role ?? 'personal_trainer';
+    final canCreateProgram = hasRole(role, 'personal_trainer') || role == 'admin';
+
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Header
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Fichas Atribuídas', style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
-              GestureDetector(
-                onTap: _showCreateWorkoutDialog,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.add, color: Colors.white, size: 14),
-                      const SizedBox(width: 4),
-                      Text('Novo',
-                          style: Theme.of(context).textTheme.labelSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
-                    ],
+              Text('Programas de Treino',
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
+              if (canCreateProgram)
+                GestureDetector(
+                  onTap: _showCreateProgramDialog,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(8)),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.add, color: Colors.white, size: 14),
+                        const SizedBox(width: 4),
+                        Text('Novo Programa',
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelSmall
+                                ?.copyWith(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
+                      ],
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -661,90 +700,319 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
           if (_sheetsLoading)
             const OmniLoader()
           else if (_sheetsError != null)
-            OmniErrorState(
-              message: _sheetsError!,
-              onRetry: _loadStudentSheets,
-            )
-          else if (_studentSheets.isEmpty)
+            OmniErrorState(message: _sheetsError!, onRetry: _loadStudentSheets)
+          else if (_allPrograms.isEmpty)
             const OmniEmptyState(
               icon: Icons.fitness_center_outlined,
-              title: 'Nenhuma ficha atribuída',
+              title: 'Nenhum programa de treino',
+              subtitle: 'Crie o primeiro programa para este aluno',
             )
-          // Lista de fichas reais da API
           else
-            ..._studentSheets.map((sheet) {
-              return FadeInUp(
-                child: Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: context.colors.surface,
-                    border: Border.all(color: context.colors.border, width: 1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Row(
-                              children: [
-                                Text(sheet.emoji, style: const TextStyle(fontSize: 18)),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(sheet.name,
-                                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
-                                      Text('${sheet.dayOfWeekLabel} • ${sheet.exerciseCount} exercícios',
-                                          style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.colors.textMuted)),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Row(
-                            children: [
-                              GestureDetector(
-                                onTap: () => _duplicateSheetForStudent(sheet),
-                                child: Icon(Icons.copy, color: context.colors.textMuted, size: 16),
-                              ),
-                              const SizedBox(width: 8),
-                              GestureDetector(
-                                onTap: () => _showEditSheetDialog(sheet),
-                                child: Icon(Icons.edit, color: context.colors.textMuted, size: 16),
-                              ),
-                              const SizedBox(width: 8),
-                              GestureDetector(
-                                onTap: () => _deleteSheet(sheet),
-                                child: const Icon(Icons.delete, color: AppColors.accentError, size: 16),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }),
+            ..._allPrograms.map((program) => _buildProgramCard(program, role)),
         ],
       ),
     );
+  }
+
+  Widget _buildProgramCard(WorkoutProgramResponse program, String role) {
+    final isExpanded = _expandedProgramId == program.id;
+    final isStudentOwned = program.personalTrainerId == null;
+    final canEditSheets =
+        (hasRole(role, 'personal_trainer') || role == 'admin') && !isStudentOwned;
+    final sheets = _sheetsCache[program.id];
+    final isLoadingSheets = _sheetsLoadingCache[program.id] == true;
+
+    return FadeInUp(
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: context.colors.surface,
+          border: Border.all(
+            color: isExpanded ? AppColors.primary.withOpacity(0.5) : context.colors.border,
+            width: isExpanded ? 1.5 : 1,
+          ),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          children: [
+            // ── Cabeçalho do programa ───────────────────────────────
+            GestureDetector(
+              onTap: () async {
+                final isClosing = _expandedProgramId == program.id;
+                setState(() => _expandedProgramId = isClosing ? null : program.id);
+                if (!isClosing && sheets == null) {
+                  await _loadSheetsForProgram(program.id);
+                }
+              },
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: isStudentOwned
+                            ? AppColors.accentWarning.withOpacity(0.15)
+                            : AppColors.primary.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        isStudentOwned ? Icons.person_outline : Icons.fitness_center,
+                        color: isStudentOwned ? AppColors.accentWarning : AppColors.primary,
+                        size: 18,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(program.name,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium
+                                        ?.copyWith(fontWeight: FontWeight.bold)),
+                              ),
+                              if (program.isActive)
+                                Container(
+                                  margin: const EdgeInsets.only(left: 6),
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.green.withOpacity(0.15),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text('Ativo',
+                                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                          color: Colors.green, fontWeight: FontWeight.bold)),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Row(children: [
+                            if (program.goal != null)
+                              Text(program.goal!,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .labelSmall
+                                      ?.copyWith(color: context.colors.textMuted)),
+                            if (isStudentOwned) ...[
+                              if (program.goal != null) const Text(' · ', style: TextStyle(fontSize: 10)),
+                              Text('Criado pelo aluno',
+                                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                      color: AppColors.accentWarning, fontWeight: FontWeight.w500)),
+                            ],
+                          ]),
+                        ],
+                      ),
+                    ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (canEditSheets)
+                          GestureDetector(
+                            onTap: () => _deleteProgram(program),
+                            child: Padding(
+                              padding: const EdgeInsets.only(right: 4),
+                              child: Icon(Icons.delete_outline,
+                                  color: AppColors.accentError, size: 18),
+                            ),
+                          ),
+                        Icon(
+                          isExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                          color: context.colors.textMuted,
+                          size: 20,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // ── Fichas (expansível) ─────────────────────────────────
+            if (isExpanded) ...[
+              Divider(height: 1, color: context.colors.border),
+              if (isLoadingSheets)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 20),
+                  child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                )
+              else if (sheets == null || sheets.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 12),
+                  child: Row(
+                    children: [
+                      Icon(Icons.assignment_outlined, color: context.colors.textMuted, size: 18),
+                      const SizedBox(width: 8),
+                      Text('Nenhuma ficha neste programa',
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(color: context.colors.textMuted)),
+                    ],
+                  ),
+                )
+              else
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                  child: Column(
+                    children: sheets.map((sheet) => _buildSheetRow(sheet, canEditSheets)).toList(),
+                  ),
+                ),
+
+              // Botão Nova Ficha (só para personal em programas do trainer)
+              if (canEditSheets)
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: GestureDetector(
+                    onTap: () => _showCreateWorkoutDialog(programId: program.id),
+                    child: DottedBorderContainer(
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.add, color: AppColors.primary, size: 16),
+                          const SizedBox(width: 6),
+                          Text('Nova Ficha',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: AppColors.primary, fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSheetRow(WorkoutSheetListItem sheet, bool canEdit) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: context.colors.background,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: context.colors.border),
+      ),
+      child: Row(
+        children: [
+          Text(sheet.emoji, style: const TextStyle(fontSize: 16)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(sheet.name,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600)),
+                Text('${sheet.dayOfWeekLabel} · ${sheet.exerciseCount} exercício${sheet.exerciseCount == 1 ? '' : 's'}',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.colors.textMuted)),
+              ],
+            ),
+          ),
+          // Ver exercícios — sempre visível
+          GestureDetector(
+            onTap: () => _showSheetDetailModal(sheet),
+            child: const Icon(Icons.visibility_outlined, color: AppColors.primary, size: 18),
+          ),
+          if (canEdit) ...[
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: () => _duplicateSheetForStudent(sheet),
+              child: Icon(Icons.copy, color: context.colors.textMuted, size: 16),
+            ),
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: () => _showEditSheetDialog(sheet),
+              child: Icon(Icons.edit, color: context.colors.textMuted, size: 16),
+            ),
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: () => _deleteSheet(sheet),
+              child: const Icon(Icons.delete, color: AppColors.accentError, size: 16),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showSheetDetailModal(WorkoutSheetListItem sheet) async {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _SheetDetailModal(sheet: sheet),
+    );
+  }
+
+  Future<void> _deleteProgram(WorkoutProgramResponse program) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: context.colors.surface,
+        title: const Text('Remover Programa'),
+        content: Text(
+          'Deseja remover o programa "${program.name}"?\n\n'
+          'Todas as fichas e exercícios vinculados também serão removidos.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Remover', style: TextStyle(color: AppColors.accentError)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    try {
+      await context.read<WorkoutSheetProvider>().deleteProgram(program.id);
+      _sheetsCache.remove(program.id);
+      _sheetsLoadingCache.remove(program.id);
+      if (_expandedProgramId == program.id) {
+        setState(() => _expandedProgramId = null);
+      }
+      await _loadStudentSheets();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Programa removido com sucesso.'),
+            backgroundColor: AppColors.accentSuccess,
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Erro ao remover programa.'),
+            backgroundColor: AppColors.accentError,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _duplicateSheetForStudent(WorkoutSheetListItem sheet) async {
     try {
       final dto = DuplicateWorkoutSheetDTO(
         name: '${sheet.name} (Cópia)',
-        workoutProgramId: _activeProgram!.id,
+        workoutProgramId: sheet.workoutProgramId,
       );
       await context.read<WorkoutSheetProvider>().duplicateSheet(sheet.id, dto);
-      await _loadStudentSheets();
+      _sheetsCache.remove(sheet.workoutProgramId);
+      await _loadSheetsForProgram(sheet.workoutProgramId);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -797,22 +1065,17 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
     if (confirm == true) {
       try {
         await context.read<WorkoutSheetProvider>().deleteSheet(sheet.id);
-        await _loadStudentSheets();
+        _sheetsCache.remove(sheet.workoutProgramId);
+        await _loadSheetsForProgram(sheet.workoutProgramId);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Ficha removida com sucesso.'),
-              backgroundColor: AppColors.accentSuccess,
-            ),
+            const SnackBar(content: Text('Ficha removida com sucesso.'), backgroundColor: AppColors.accentSuccess),
           );
         }
       } catch (_) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Erro ao remover ficha.'),
-              backgroundColor: AppColors.accentError,
-            ),
+            const SnackBar(content: Text('Erro ao remover ficha.'), backgroundColor: AppColors.accentError),
           );
         }
       }
@@ -1054,19 +1317,24 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                             ],
                           ),
                         ),
-                        Row(
-                          children: [
-                            GestureDetector(
-                              onTap: () => _showEditMealDialog(activeDiet, m),
-                              child: Icon(Icons.edit, color: context.colors.textMuted, size: 16),
-                            ),
-                            const SizedBox(width: 12),
-                            GestureDetector(
-                              onTap: () => _deleteMeal(activeDiet, m),
-                              child: const Icon(Icons.delete_outline, color: AppColors.accentError, size: 16),
-                            ),
-                          ],
-                        ),
+                        Builder(builder: (context) {
+                          final role = context.read<AuthProvider>().user?.role ?? 'personal_trainer';
+                          final canEditDiet = hasRole(role, 'nutritionist') || role == 'admin';
+                          if (!canEditDiet) return const SizedBox.shrink();
+                          return Row(
+                            children: [
+                              GestureDetector(
+                                onTap: () => _showEditMealDialog(activeDiet, m),
+                                child: Icon(Icons.edit, color: context.colors.textMuted, size: 16),
+                              ),
+                              const SizedBox(width: 12),
+                              GestureDetector(
+                                onTap: () => _deleteMeal(activeDiet, m),
+                                child: const Icon(Icons.delete_outline, color: AppColors.accentError, size: 16),
+                              ),
+                            ],
+                          );
+                        }),
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -1084,19 +1352,24 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
             );
           }),
           const SizedBox(height: 8),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: () => _showAddMealDialog(activeDiet),
-              icon: const Icon(Icons.add, size: 16, color: AppColors.primary),
-              label: const Text('Adicionar Refeição', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: AppColors.primary, width: 1.2),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                padding: const EdgeInsets.symmetric(vertical: 12),
+          Builder(builder: (context) {
+            final role = context.read<AuthProvider>().user?.role ?? 'personal_trainer';
+            final canEditDiet = hasRole(role, 'nutritionist') || role == 'admin';
+            if (!canEditDiet) return const SizedBox.shrink();
+            return SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => _showAddMealDialog(activeDiet),
+                icon: const Icon(Icons.add, size: 16, color: AppColors.primary),
+                label: const Text('Adicionar Refeição', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: AppColors.primary, width: 1.2),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
               ),
-            ),
-          ),
+            );
+          }),
           const SizedBox(height: 16),
           Text(
             'Totais da dieta: ${activeDiet.totalKcal.toStringAsFixed(0)} kcal • '
@@ -1891,21 +2164,26 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
                   ],
                 ),
               ),
-              ElevatedButton.icon(
-                onPressed: () => _showEditWaterTargetDialog(activeDiet),
-                icon: const Icon(Icons.edit, size: 14, color: Colors.white),
-                label: const Text('Prescrever'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF16C1F3).withOpacity(0.4),
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    side: BorderSide(color: const Color(0xFF16C1F3).withOpacity(0.5)),
+              Builder(builder: (context) {
+                final role = context.read<AuthProvider>().user?.role ?? 'personal_trainer';
+                final canEditDiet = hasRole(role, 'nutritionist') || role == 'admin';
+                if (!canEditDiet) return const SizedBox.shrink();
+                return ElevatedButton.icon(
+                  onPressed: () => _showEditWaterTargetDialog(activeDiet),
+                  icon: const Icon(Icons.edit, size: 14, color: Colors.white),
+                  label: const Text('Prescrever'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF16C1F3).withOpacity(0.4),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      side: BorderSide(color: const Color(0xFF16C1F3).withOpacity(0.5)),
+                    ),
                   ),
-                ),
-              ),
+                );
+              }),
             ],
           ),
           const SizedBox(height: 16),
@@ -2258,40 +2536,42 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
     }
   }
 
-  Future<void> _showCreateWorkoutDialog() async {
-    if (_activeProgram == null) {
-      // Cria um programa padrão automaticamente se não existir
-      try {
-        final provider = context.read<WorkoutSheetProvider>();
-        final newProgram = await provider.createProgram(CreateWorkoutProgramDTO(
-          userId: widget.studentId,
-          name: 'Programa Padrão',
-          goal: 'Geral',
-        ));
-        setState(() => _activeProgram = newProgram);
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Erro ao criar programa inicial.'), backgroundColor: AppColors.accentError),
-          );
-        }
-        return;
-      }
+  Future<void> _showCreateWorkoutDialog({String? programId}) async {
+    final targetProgramId = programId ?? _activeProgram?.id;
+    if (targetProgramId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Selecione um programa para adicionar a ficha.')),
+      );
+      return;
     }
 
     final result = await showDialog<bool>(
       context: context,
-      builder: (_) => CreateWorkoutSheetDialog(
-        workoutProgramId: _activeProgram!.id,
-      ),
+      builder: (_) => CreateWorkoutSheetDialog(workoutProgramId: targetProgramId),
     );
     if (result == true && mounted) {
+      // Invalida cache para recarregar fichas do programa
+      _sheetsCache.remove(targetProgramId);
+      await _loadSheetsForProgram(targetProgramId);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ficha criada com sucesso!'), backgroundColor: AppColors.accentSuccess),
+      );
+    }
+  }
+
+  Future<void> _showCreateProgramDialog() async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (_) => CreateWorkoutProgramDialog(userId: widget.studentId),
+    );
+    if (result == true && mounted) {
+      setState(() {
+        _sheetsCache.clear();
+        _sheetsLoadingCache.clear();
+      });
       await _loadStudentSheets();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Ficha criada com sucesso!'),
-          backgroundColor: AppColors.accentSuccess,
-        ),
+        const SnackBar(content: Text('Programa criado com sucesso!'), backgroundColor: AppColors.accentSuccess),
       );
     }
   }
@@ -2304,12 +2584,10 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
     );
 
     if (updated == true && mounted) {
-      await _loadStudentSheets();
+      _sheetsCache.remove(sheet.workoutProgramId);
+      await _loadSheetsForProgram(sheet.workoutProgramId);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Ficha atualizada com sucesso.'),
-          backgroundColor: AppColors.accentSuccess,
-        ),
+        const SnackBar(content: Text('Ficha atualizada com sucesso.'), backgroundColor: AppColors.accentSuccess),
       );
     }
   }
@@ -2741,8 +3019,15 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
       );
     }
     final history = _stepHistory;
+    
+    // Se estiver carregando e ainda não temos histórico (primeira carga), mostramos o loader
+    // para evitar o flash de "Sem registros".
+    if (_stepsLoading && history == null) {
+      return const OmniLoader();
+    }
+
     if (history == null || history.logs.isEmpty) {
-      return OmniEmptyState(
+      return const OmniEmptyState(
         icon: Icons.directions_walk,
         title: 'Sem registros de passos',
         subtitle: 'Este aluno ainda não sincronizou nenhum dia.',
@@ -3131,6 +3416,326 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
       'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez',
     ];
     return '${d.day.toString().padLeft(2, '0')} ${months[d.month - 1]} ${d.year}';
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Widgets auxiliares
+// ---------------------------------------------------------------------------
+
+class DottedBorderContainer extends StatelessWidget {
+  final Widget child;
+  const DottedBorderContainer({required this.child, super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      painter: _DottedBorderPainter(color: AppColors.primary.withOpacity(0.5)),
+      child: Padding(padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16), child: child),
+    );
+  }
+}
+
+class _DottedBorderPainter extends CustomPainter {
+  final Color color;
+  _DottedBorderPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1.2
+      ..style = PaintingStyle.stroke;
+    const dashWidth = 5.0;
+    const dashSpace = 4.0;
+    final radius = Radius.circular(8);
+    final rRect = RRect.fromRectAndRadius(Rect.fromLTWH(0, 0, size.width, size.height), radius);
+    final path = Path()..addRRect(rRect);
+    for (final metric in path.computeMetrics()) {
+      double distance = 0;
+      while (distance < metric.length) {
+        canvas.drawPath(metric.extractPath(distance, distance + dashWidth), paint);
+        distance += dashWidth + dashSpace;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+// ---------------------------------------------------------------------------
+// Modal de detalhes de ficha de treino (leitura — disponível para todos)
+// ---------------------------------------------------------------------------
+
+class _SheetDetailModal extends StatefulWidget {
+  final WorkoutSheetListItem sheet;
+  const _SheetDetailModal({required this.sheet});
+
+  @override
+  State<_SheetDetailModal> createState() => _SheetDetailModalState();
+}
+
+class _SheetDetailModalState extends State<_SheetDetailModal> {
+  WorkoutSheetResponse? _detail;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final service = WorkoutSheetService(
+        apiClient: context.read<ApiClient>(),
+      );
+      final detail = await service.getWorkoutSheet(widget.sheet.id);
+      if (mounted) setState(() { _detail = detail; _loading = false; });
+    } catch (e) {
+      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final sheet = widget.sheet;
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.75,
+      minChildSize: 0.4,
+      maxChildSize: 0.95,
+      builder: (_, controller) => Container(
+        decoration: BoxDecoration(
+          color: colors.background,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          children: [
+            // Handle
+            Center(
+              child: Container(
+                margin: const EdgeInsets.only(top: 12, bottom: 8),
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: colors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            // Header
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  Text(sheet.emoji, style: const TextStyle(fontSize: 22)),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          sheet.name,
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          '${sheet.dayOfWeekLabel} • ${sheet.exerciseCount} exercício${sheet.exerciseCount == 1 ? '' : 's'}',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: colors.textMuted),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.of(context).pop(),
+                    color: colors.textMuted,
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            // Body
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _error != null
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.error_outline, color: AppColors.accentError, size: 32),
+                              const SizedBox(height: 8),
+                              Text('Erro ao carregar exercícios', style: Theme.of(context).textTheme.bodyMedium),
+                              TextButton(onPressed: _load, child: const Text('Tentar novamente')),
+                            ],
+                          ),
+                        )
+                      : _detail == null || _detail!.exercises.isEmpty
+                          ? Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.fitness_center_outlined, color: colors.textMuted, size: 40),
+                                  const SizedBox(height: 12),
+                                  Text('Nenhum exercício nesta ficha', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: colors.textMuted)),
+                                ],
+                              ),
+                            )
+                          : ListView.separated(
+                              controller: controller,
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              itemCount: _detail!.exercises.length,
+                              separatorBuilder: (_, __) => const SizedBox(height: 10),
+                              itemBuilder: (_, i) {
+                                final ex = _detail!.exercises[i];
+                                return _ExerciseCard(exercise: ex);
+                              },
+                            ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ExerciseCard extends StatelessWidget {
+  final ExerciseResponse exercise;
+  const _ExerciseCard({required this.exercise});
+
+  String get _muscleLabel {
+    const labels = {
+      'peito': 'Peito',
+      'costa': 'Costas',
+      'ombro': 'Ombro',
+      'bíceps': 'Bíceps',
+      'tríceps': 'Tríceps',
+      'antebraço': 'Antebraço',
+      'core': 'Core / Abdômen',
+      'perna_anterior': 'Perna (Quadríceps)',
+      'perna_posterior': 'Perna (Posterior)',
+      'panturrilha': 'Panturrilha',
+    };
+    return labels[exercise.muscleGroup] ?? exercise.muscleGroup;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Container(
+      decoration: BoxDecoration(
+        color: colors.surface,
+        border: Border.all(color: colors.border),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Imagem do exercício
+          if (exercise.imageUrl != null)
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+              child: Image.network(
+                exercise.imageUrl!,
+                height: 140,
+                width: double.infinity,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(
+                  height: 80,
+                  color: colors.background,
+                  child: Icon(Icons.fitness_center, color: colors.textMuted, size: 32),
+                ),
+                loadingBuilder: (_, child, progress) => progress == null
+                    ? child
+                    : Container(
+                        height: 140,
+                        color: colors.background,
+                        child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                      ),
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        exercise.name,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        _muscleLabel,
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                // Stats: séries × reps × carga × descanso
+                Row(
+                  children: [
+                    _Stat(label: 'Séries', value: '${exercise.series}'),
+                    const SizedBox(width: 16),
+                    _Stat(label: 'Reps', value: '${exercise.repetitions}'),
+                    const SizedBox(width: 16),
+                    _Stat(label: 'Carga', value: exercise.loadKg > 0 ? '${exercise.loadKg.toStringAsFixed(exercise.loadKg % 1 == 0 ? 0 : 1)} kg' : 'Livre'),
+                    const SizedBox(width: 16),
+                    _Stat(label: 'Descanso', value: '${exercise.restSeconds}s'),
+                  ],
+                ),
+                if (exercise.observations != null && exercise.observations!.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    exercise.observations!,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colors.textSecondary,
+                          fontStyle: FontStyle.italic,
+                        ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Stat extends StatelessWidget {
+  final String label;
+  final String value;
+  const _Stat({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.colors.textMuted)),
+        const SizedBox(height: 2),
+        Text(value,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.bold)),
+      ],
+    );
   }
 }
 

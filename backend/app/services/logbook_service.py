@@ -380,9 +380,10 @@ class LogbookService:
         session_obj = await self._get_session_and_check_access(
             session_id, user_id, role, require_owner=True
         )
-        if role in ("personal_trainer",):
+        from app.utils.role_utils import is_professional
+        if is_professional(role):
             raise SessionForbiddenError(
-                "Personal não tem permissão para deletar sessões de alunos."
+                "Profissionais não têm permissão para deletar sessões de alunos."
             )
         await self.repository.soft_delete_session(session_obj.id)
         await self.repository.commit()
@@ -594,10 +595,11 @@ class LogbookService:
                 "Você não tem permissão para acessar esta sessão."
             )
 
-        if require_owner and role in ("personal_trainer",):
+        from app.utils.role_utils import is_professional
+        if require_owner and is_professional(role):
             if session_obj.user_id != user_id:
                 raise SessionForbiddenError(
-                    "Personal não tem permissão para editar sessões de alunos."
+                    "Profissionais não têm permissão para editar sessões de alunos."
                 )
 
         return session_obj

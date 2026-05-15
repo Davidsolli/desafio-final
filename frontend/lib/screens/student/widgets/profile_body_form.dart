@@ -87,10 +87,20 @@ class _ProfileBodyFormState extends State<ProfileBodyForm> {
     );
   }
 
+  int _calcTdee() {
+    final weight = double.tryParse(weightController.text) ?? widget.user.weight;
+    final height = double.tryParse(heightController.text) ?? widget.user.height;
+    final age = int.tryParse(ageController.text) ?? widget.user.age;
+    final int tmb = selectedGender == 'male'
+        ? (88.362 + (13.397 * weight) + (4.799 * height) - (5.677 * age)).toInt()
+        : (447.593 + (9.247 * weight) + (3.098 * height) - (4.330 * age)).toInt();
+    return (tmb * double.parse(selectedActivityLevel)).toInt();
+  }
+
   @override
   Widget build(BuildContext context) {
     final userProvider = context.watch<UserProvider>();
-    final tdee = widget.user.tdee;
+    final tdee = _calcTdee();
 
     return Container(
       padding: const EdgeInsets.all(16),

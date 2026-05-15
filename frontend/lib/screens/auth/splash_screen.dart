@@ -62,16 +62,13 @@ class _SplashScreenState extends State<SplashScreen> {
   void _navigateByRole(String role) {
     if (!mounted) return;
 
-    switch (role) {
-      case 'personal_trainer':
-        context.go(AppRoutes.trainerStudents);
-        break;
-      case 'admin':
-        context.go(AppRoutes.adminDashboard);
-        break;
-      case 'client':
-      default:
-        context.go(AppRoutes.home);
+    if (role == 'admin') {
+      context.go(AppRoutes.adminDashboard);
+    } else if (role != 'client') {
+      // personal_trainer, nutritionist, ou combinação (ex: "nutritionist,personal_trainer")
+      context.go(AppRoutes.trainerStudents);
+    } else {
+      context.go(AppRoutes.home);
     }
   }
 

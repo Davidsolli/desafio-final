@@ -6,6 +6,7 @@ class AdminProvider extends ChangeNotifier {
   final AdminService _service;
 
   List<AdminUserDTO> _trainers = [];
+  List<AdminUserDTO> _allStudents = [];
   List<AdminUserDTO> _studentsOfTrainer = [];
   AdminUserDTO? _currentAdmin;
   bool _isLoading = false;
@@ -16,6 +17,7 @@ class AdminProvider extends ChangeNotifier {
 
   // Getters públicos
   List<AdminUserDTO> get trainers => _trainers;
+  List<AdminUserDTO> get allStudents => _allStudents;
   List<AdminUserDTO> get studentsOfTrainer => _studentsOfTrainer;
   AdminUserDTO? get currentAdmin => _currentAdmin;
   bool get isLoading => _isLoading;
@@ -28,6 +30,30 @@ class AdminProvider extends ChangeNotifier {
     notifyListeners();
     try {
       _trainers = await _service.listTrainers();
+    } catch (e) {
+      _error = e.toString();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> loadAllStudents() async {
+    try {
+      _allStudents = await _service.listAllStudents();
+      notifyListeners();
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
+
+  Future<void> loadAllUsers() async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+    try {
+      await Future.wait([loadTrainers(), loadAllStudents()]);
     } catch (e) {
       _error = e.toString();
     } finally {
@@ -116,6 +142,37 @@ class AdminProvider extends ChangeNotifier {
       rethrow;
     } finally {
       _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> updateProfessionalSpecialties(
+    String trainerId,
+    List<String> specialties,
+  ) async {
+    final sorted = specialties.toSet().toList()..sort();
+    final role = sorted.join(',');
+    final dto = UpdateAdminUserDTO(role: role);
+    await updateTrainer(trainerId, dto);
+  }
+
+  Future<void> transferStudent(String studentId, String newTrainerId) async {
+    final dto = UpdateAdminUserDTO(trainerId: newTrainerId);
+    await _service.updateUser(studentId, dto);
+    // Atualiza o trainerId localmente para refletir imediatamente na UI
+    final idx = _allStudents.indexWhere((s) => s.id == studentId);
+    if (idx != -1) {
+      final s = _allStudents[idx];
+      _allStudents[idx] = AdminUserDTO(
+        id: s.id,
+        name: s.name,
+        email: s.email,
+        role: s.role,
+        phoneWhatsapp: s.phoneWhatsapp,
+        trainerId: newTrainerId,
+        isActive: s.isActive,
+        createdAt: s.createdAt,
+      );
       notifyListeners();
     }
   }

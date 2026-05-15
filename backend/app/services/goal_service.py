@@ -123,7 +123,8 @@ class GoalService:
         - Personal trainer ou admin (qualquer meta)
         """
         is_owner = goal.user_id == requesting_user_id or goal.created_by_id == requesting_user_id
-        is_privileged = user_role in ["personal_trainer", "admin"]
+        from app.utils.role_utils import has_role
+        is_privileged = user_role == "admin" or has_role(user_role, "personal_trainer") or has_role(user_role, "nutritionist")
 
         if not (is_owner or is_privileged):
             raise GoalAccessDeniedError(

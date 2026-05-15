@@ -55,6 +55,12 @@ class WorkoutSheetValidationError(Exception):
 # Papéis com permissão de escrita
 # ---------------------------------------------------------------------------
 
+def _is_workout_writer(role: str) -> bool:
+    """Apenas personal trainers (e admins/gestores) podem criar fichas de treino. Nutricionistas não."""
+    from app.utils.role_utils import has_role
+    return any(has_role(role, r) for r in {"admin", "personal_trainer", "professor", "gestor"})
+
+
 WRITE_ROLES = {"admin", "personal_trainer", "professor", "gestor"}
 
 
@@ -463,8 +469,8 @@ class WorkoutSheetService:
             )
 
     def _check_write_permission(self, role: str) -> None:
-        """Verifica se o role tem permissão de escrita (RN-02)."""
-        if role not in WRITE_ROLES:
+        """Verifica se o role tem permissão de escrita (RN-02). Nutricionistas não têm acesso."""
+        if not _is_workout_writer(role):
             raise WorkoutSheetForbiddenError(
                 "Apenas personal/professor/gestor/admin podem criar ou editar fichas."
             )
