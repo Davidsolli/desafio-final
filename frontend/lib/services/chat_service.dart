@@ -239,7 +239,7 @@ class ChatService {
       final body = await streamed.stream.bytesToString();
 
       if (streamed.statusCode == 200) {
-        final json = jsonDecode(body) as Map<String, dynamic>;
+        final json = ApiClient.normalizeJson(jsonDecode(body)) as Map<String, dynamic>;
         return AudioFoodResponseDTO.fromJson(json);
       }
 
@@ -289,7 +289,7 @@ class ChatService {
       final body = await streamed.stream.bytesToString();
 
       if (streamed.statusCode == 200) {
-        final json = jsonDecode(body) as Map<String, dynamic>;
+        final json = ApiClient.normalizeJson(jsonDecode(body)) as Map<String, dynamic>;
         return PhotoFoodResponseDTO.fromJson(json);
       }
 
@@ -308,12 +308,15 @@ class ChatService {
   String _extractErrorMessage(String body) {
     try {
       if (body.isEmpty) return 'Erro desconhecido';
-      final data = jsonDecode(body) as Map<String, dynamic>;
-      final detail = data['detail'];
-      if (detail is Map) {
-        return detail['message'] as String? ?? 'Erro desconhecido';
+      final data = ApiClient.normalizeJson(jsonDecode(body));
+      if (data is Map) {
+        final detail = data['detail'];
+        if (detail is Map) {
+          return detail['message'] as String? ?? 'Erro desconhecido';
+        }
+        return detail as String? ?? 'Erro desconhecido';
       }
-      return detail as String? ?? 'Erro desconhecido';
+      return 'Erro desconhecido';
     } catch (_) {
       return 'Erro desconhecido';
     }

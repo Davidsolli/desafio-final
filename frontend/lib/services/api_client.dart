@@ -257,19 +257,17 @@ class ApiClient {
 
   /// Converte recursivamente Maps e Lists para tipos Dart tipados.
   ///
-  /// No Flutter Web, jsonDecode pode retornar LinkedMap<dynamic, dynamic>
-  /// em vez de Map<String, dynamic> para objetos aninhados. Esta função
-  /// normaliza toda a estrutura antes de passá-la ao fromJson.
-  static dynamic _normalizeJson(dynamic value) {
+  /// Converte recursivamente Maps e Lists para tipos Dart tipados.
+  static dynamic normalizeJson(dynamic value) {
     if (value is Map) {
-      return Map<String, dynamic>.fromEntries(
-        value.entries.map<MapEntry<String, dynamic>>(
-          (e) => MapEntry(e.key.toString(), _normalizeJson(e.value)),
-        ),
-      );
+      final map = <String, dynamic>{};
+      value.forEach((k, v) {
+        map[k.toString()] = normalizeJson(v);
+      });
+      return map;
     }
     if (value is List) {
-      return value.map<dynamic>(_normalizeJson).toList();
+      return value.map<dynamic>((item) => normalizeJson(item)).toList();
     }
     return value;
   }
@@ -285,13 +283,14 @@ class ApiClient {
     if (statusCode >= 200 && statusCode < 300) {
       try {
         if (response.body.isEmpty) {
-          return fromJson({});
+          return fromJson(<String, dynamic>{});
         }
-        final data = _normalizeJson(jsonDecode(response.body));
-        return fromJson(data);
+        final dynamic decoded = jsonDecode(response.body);
+        final dynamic normalized = normalizeJson(decoded);
+        return fromJson(normalized);
       } catch (e) {
         throw ApiException(
-          message: 'Erro ao parsear resposta',
+          message: 'Erro ao parsear resposta: $e',
           statusCode: statusCode,
           originalError: e,
         );
@@ -339,14 +338,17 @@ class ApiClient {
 
   /// Extrai mensagem de erro da resposta
   String _extractErrorMessage(String body) {
+    if (body.isEmpty) return 'Erro desconhecido';
+
     try {
-      if (body.isEmpty) {
-        return 'Erro desconhecido';
+      final dynamic decoded = jsonDecode(body);
+      final normalized = normalizeJson(decoded);
+      if (normalized is Map) {
+        return normalized['detail'] ?? normalized['message'] ?? normalized['error'] ?? 'Erro no servidor';
       }
-      final data = jsonDecode(body) as Map<String, dynamic>;
-      return data['detail'] ?? data['message'] ?? 'Erro desconhecido';
+      return 'Erro no servidor: $body';
     } catch (e) {
-      return 'Erro desconhecido';
+      return 'Erro no servidor ($body)';
     }
   }
 

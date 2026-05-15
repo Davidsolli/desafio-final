@@ -31,8 +31,11 @@ from app.services.invitation_service import InvitationService
 from app.services.whatsapp_service import WhatsAppService
 from app.config.database import get_db
 from app.dependencies.auth import get_current_user
+from app.utils.role_utils import is_professional
 
-_ALLOWED_ROLES = {"personal_trainer", "admin"}
+def _check_invitation_access(role: str) -> bool:
+    """Profissionais (personal e/ou nutricionista) e admins podem gerenciar convites."""
+    return role == "admin" or is_professional(role)
 
 router = APIRouter(
     prefix="/api/v1/invitations",
@@ -58,7 +61,7 @@ async def generate_invitation(
     session: AsyncSession = Depends(get_db),
 ) -> InvitationResponseDTO:
     """Gerar novo código de convite. Permitido para personal_trainer e admin."""
-    if current_user.role not in _ALLOWED_ROLES:
+    if not _check_invitation_access(current_user.role):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Apenas personal trainers e admins podem gerar convites",
@@ -112,7 +115,7 @@ async def list_invitations(
     session: AsyncSession = Depends(get_db),
 ) -> ListInvitationsResponseDTO:
     """Listar convites gerados. Permitido para personal_trainer e admin."""
-    if current_user.role not in _ALLOWED_ROLES:
+    if not _check_invitation_access(current_user.role):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Apenas personal trainers e admins podem listar convites",

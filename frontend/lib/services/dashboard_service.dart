@@ -13,9 +13,9 @@ import 'api_client.dart';
 Map<String, dynamic> _m(dynamic value) {
   if (value is Map<String, dynamic>) return value;
   if (value is Map) {
-    return value.map<String, dynamic>((k, v) => MapEntry(k.toString(), v));
+    return Map<String, dynamic>.from(value);
   }
-  return {};
+  return <String, dynamic>{};
 }
 
 class StudentDashboardData {
@@ -171,7 +171,7 @@ class DashboardService {
         for (final sheet in sheets) {
           final sheetMap = _m(sheet);
           final day = sheetMap['day_of_week'];
-          if (day != null) days.add(day as int);
+          if (day != null) days.add((day as num).toInt());
         }
       }
       return days.length;
@@ -310,14 +310,14 @@ class DashboardService {
         final goalType = ref['goal_type'] as String?;
 
         final results = await Future.wait([
-          getLastSession(studentId).then((v) => v ?? {}),
+          getLastSession(studentId).then((v) => v ?? <String, dynamic>{}),
           getWeeklyFrequency(studentId),
           getMonthAdherence(studentId),
         ]);
 
-        final lastSession = results[0] as Map<String, dynamic>;
-        final frequency = results[1] as int;
-        final adherence = results[2] as double;
+        final lastSession = _m(results[0]);
+        final frequency = (results[1] as num?)?.toInt() ?? 0;
+        final adherence = (results[2] as num?)?.toDouble() ?? 0.0;
 
         return StudentDashboardData(
           id: studentId,
@@ -325,7 +325,7 @@ class DashboardService {
           goalType: goalType,
           weeklyFrequency: frequency,
           lastWorkout: lastSession['session_date'] != null
-              ? DateTime.parse(lastSession['session_date'].toString())
+              ? DateTime.tryParse(lastSession['session_date'].toString())
               : null,
           adherencePercent: adherence,
         );

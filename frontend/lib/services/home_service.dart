@@ -317,8 +317,8 @@ class HomeService {
             return [];
           }
           return items
-              .whereType<Map<String, dynamic>>()
-              .map(HomeGoalData.fromJson)
+              .whereType<Map>()
+              .map((e) => HomeGoalData.fromJson(Map<String, dynamic>.from(e)))
               .toList();
         },
       );
@@ -365,8 +365,10 @@ class HomeService {
         },
       );
 
-      final sessionMaps =
-          sessions.whereType<Map<String, dynamic>>().toList();
+      final sessionMaps = sessions
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
 
       // Extract last session from the first item (most recent, limit=60 ordered desc).
       HomeLastSession? lastSession;
@@ -436,8 +438,9 @@ class HomeService {
       final items = listResult['data'] as List<dynamic>?;
       if (items == null || items.isEmpty) return null;
 
-      final sheetId =
-          (items.first as Map<String, dynamic>)['id'] as String?;
+      final sheetId = (items.first is Map)
+          ? Map<String, dynamic>.from(items.first as Map)['id'] as String?
+          : null;
       if (sheetId == null) return null;
 
       // Step 2: fetch detail with full exercise list.
