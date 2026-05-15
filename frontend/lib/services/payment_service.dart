@@ -323,12 +323,14 @@ class PaymentService {
   Future<CheckoutResponse> createCheckout({
     required String planId,
     required String paymentMethod,
+    String? replacementPolicy,
   }) async {
     return await _apiClient.post<CheckoutResponse>(
       '/subscriptions/checkout',
       body: {
         'plan_id': planId,
         'payment_method': paymentMethod,
+        'replacement_policy': ?replacementPolicy,
       },
       fromJson: (data) => CheckoutResponse.fromJson(data as Map<String, dynamic>),
     );

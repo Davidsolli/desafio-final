@@ -74,11 +74,13 @@ class PaymentProvider extends ChangeNotifier {
   Future<CheckoutResponse?> createCheckout({
     required String planId,
     required String paymentMethod,
+    String? replacementPolicy,
   }) async {
     try {
       final result = await _service.createCheckout(
         planId: planId,
         paymentMethod: paymentMethod,
+        replacementPolicy: replacementPolicy,
       );
       await loadCurrentSubscription();
       return result;

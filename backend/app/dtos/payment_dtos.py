@@ -71,6 +71,7 @@ class PlanResponseDTO(BaseModel):
 class CreateSubscriptionDTO(BaseModel):
     plan_id: UUID
     payment_method: str = Field(..., pattern="^(credit_card|pix)$")
+    replacement_policy: Optional[str] = Field(None, pattern="^(immediate|on_expiry)$")
 
     model_config = {
         "json_schema_extra": {

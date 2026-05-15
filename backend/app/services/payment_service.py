@@ -142,7 +142,8 @@ class SubscriptionService:
         session: AsyncSession,
         student_id: UUID,
         plan_id: UUID,
-        payment_method: str
+        payment_method: str,
+        replacement_policy: Optional[str] = None
     ) -> Optional[CheckoutResponseDTO]:
         """
         Criar checkout para assinatura via InfinitePay.
@@ -172,7 +173,8 @@ class SubscriptionService:
             student_id,
             plan_id,
             plan.admin_id,
-            payment_method
+            payment_method,
+            replacement_policy
         )
         await session.commit()
         logger.info(f"Assinatura criada (PENDING): {subscription.id}")
@@ -305,8 +307,24 @@ class SubscriptionService:
             external_payment_id,
             plan
         )
-
+        
         if success:
+            # Se a política for 'immediate', desativamos as outras agora
+            if subscription.replacement_policy == "immediate":
+                from sqlalchemy import update, and_
+                stmt = (
+                    update(Subscription)
+                    .where(
+                        and_(
+                            Subscription.student_id == subscription.student_id,
+                            Subscription.id != subscription.id,
+                            Subscription.status == "active"
+                        )
+                    )
+                    .values(status="canceled", canceled_at=datetime.utcnow())
+                )
+                await session.execute(stmt)
+            
             await session.commit()
             logger.info(f"Assinatura ativada: {subscription_id}")
             return await SubscriptionService.get_subscription(session, subscription_id)

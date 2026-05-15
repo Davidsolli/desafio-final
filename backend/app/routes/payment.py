@@ -146,7 +146,8 @@ async def create_checkout(
         session,
         current_user.id,
         dto.plan_id,
-        dto.payment_method
+        dto.payment_method,
+        dto.replacement_policy
     )
 
     if not result:
