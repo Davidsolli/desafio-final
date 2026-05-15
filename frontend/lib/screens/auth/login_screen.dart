@@ -83,16 +83,13 @@ class _LoginScreenState extends State<LoginScreen> {
   void _navigateByRole(String role) {
     if (!mounted) return;
 
-    switch (role) {
-      case 'personal_trainer':
-        context.go(AppRoutes.trainerHome);
-        break;
-      case 'admin':
-        context.go(AppRoutes.adminDashboard);
-        break;
-      case 'client':
-      default:
-        context.go(AppRoutes.home);
+    if (role == 'admin') {
+      context.go(AppRoutes.adminDashboard);
+    } else if (role != 'client') {
+      // personal_trainer, nutritionist, ou combinação
+      context.go(AppRoutes.trainerHome);
+    } else {
+      context.go(AppRoutes.home);
     }
   }
 

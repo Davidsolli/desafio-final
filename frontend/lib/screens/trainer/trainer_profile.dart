@@ -7,6 +7,7 @@ import '../../theme/theme_provider.dart';
 import '../../routes/app_routes.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/user_provider.dart';
+import '../../models/admin_models.dart';
 import '../../shared/widgets/change_password_dialog.dart';
 import '../../widgets/profile_photo_avatar.dart';
 
@@ -212,16 +213,26 @@ class _TrainerProfileState extends State<TrainerProfile> {
           Text(email,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.textSecondary)),
           const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text('Personal Trainer',
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 11)),
-          ),
+          Builder(builder: (context) {
+            final role = context.read<AuthProvider>().user?.role ?? 'personal_trainer';
+            final isPersonal = hasRole(role, 'personal_trainer');
+            final isNutri = hasRole(role, 'nutritionist');
+            final label = (isPersonal && isNutri)
+                ? 'Personal + Nutricionista'
+                : isNutri
+                    ? 'Nutricionista'
+                    : 'Personal Trainer';
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(label,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 11)),
+            );
+          }),
         ],
       ),
     );
