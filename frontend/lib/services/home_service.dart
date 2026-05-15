@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:omniconnect_fitness/services/api_client.dart';
+import 'package:omniconnect_fitness/shared/utils/muscle_group_helper.dart';
 
 // ---------------------------------------------------------------------------
 // Models
@@ -149,14 +150,14 @@ class HomeWorkoutData {
     final parts = name.split(' - ');
     if (parts.length > 1) return parts.sublist(1).join(' - ');
     if (exercises.isNotEmpty) {
-      return _formatMuscleGroup(exercises.first.muscleGroup);
+      return MuscleGroupHelper.getName(exercises.first.muscleGroup);
     }
     return '';
   }
 
   String get emoji {
     if (exercises.isEmpty) return '🏋️';
-    return _emojiForMuscleGroup(exercises.first.muscleGroup);
+    return MuscleGroupHelper.getEmoji(exercises.first.muscleGroup);
   }
 
   // Rough estimate: each set takes ~45 s of work + rest between sets.
@@ -167,48 +168,6 @@ class HomeWorkoutData {
       (sum, ex) => sum + (ex.series * 45) + ((ex.series - 1) * ex.restSeconds),
     );
     return (totalSeconds / 60).ceil().clamp(10, 120);
-  }
-
-  // Inclui variantes com e sem acento para não depender da normalização do backend.
-  static const _muscleEmoji = <String, String>{
-    'peito': '💪',
-    'costa': '🔙',
-    'costas': '🔙',
-    'perna_anterior': '🦵',
-    'perna_posterior': '🦵',
-    'panturrilha': '🦵',
-    'ombro': '🏋️',
-    'biceps': '💪',
-    'bíceps': '💪',
-    'triceps': '💪',
-    'tríceps': '💪',
-    'antebraco': '💪',
-    'antebraço': '💪',
-    'core': '🔥',
-  };
-
-  static String _emojiForMuscleGroup(String group) {
-    return _muscleEmoji[group] ?? _muscleEmoji[group.toLowerCase()] ?? '🏃';
-  }
-
-  static String _formatMuscleGroup(String group) {
-    const map = {
-      'peito': 'Peito',
-      'costa': 'Costas',
-      'costas': 'Costas',
-      'perna_anterior': 'Quadríceps',
-      'perna_posterior': 'Posterior',
-      'ombro': 'Ombros',
-      'biceps': 'Bíceps',
-      'bíceps': 'Bíceps',
-      'triceps': 'Tríceps',
-      'tríceps': 'Tríceps',
-      'core': 'Core',
-      'panturrilha': 'Panturrilha',
-      'antebraco': 'Antebraço',
-      'antebraço': 'Antebraço',
-    };
-    return map[group] ?? map[group.toLowerCase()] ?? group;
   }
 }
 

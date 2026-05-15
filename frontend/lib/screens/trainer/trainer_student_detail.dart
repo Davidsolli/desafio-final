@@ -3019,8 +3019,15 @@ class _TrainerStudentDetailState extends State<TrainerStudentDetail> with Single
       );
     }
     final history = _stepHistory;
+    
+    // Se estiver carregando e ainda não temos histórico (primeira carga), mostramos o loader
+    // para evitar o flash de "Sem registros".
+    if (_stepsLoading && history == null) {
+      return const OmniLoader();
+    }
+
     if (history == null || history.logs.isEmpty) {
-      return OmniEmptyState(
+      return const OmniEmptyState(
         icon: Icons.directions_walk,
         title: 'Sem registros de passos',
         subtitle: 'Este aluno ainda não sincronizou nenhum dia.',
