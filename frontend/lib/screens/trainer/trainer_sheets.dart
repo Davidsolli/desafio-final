@@ -156,6 +156,62 @@ class _TrainerSheetsState extends State<TrainerSheets> {
     }
   }
 
+  Future<void> _deleteSelectedProgram() async {
+    if (_selectedProgram == null) return;
+    final program = _selectedProgram!;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remover Programa'),
+        content: Text(
+          'Deseja remover o programa "${program.name}"?\n\n'
+          'Todas as fichas e exercícios vinculados também serão removidos.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Remover',
+                style: TextStyle(color: AppColors.accentError)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    try {
+      await context.read<WorkoutSheetProvider>().deleteProgram(program.id);
+      setState(() => _selectedProgram = null);
+      if (_selectedStudent != null) {
+        await _loadStudentPrograms(_selectedStudent!.id);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Programa removido com sucesso.'),
+            backgroundColor: AppColors.accentSuccess,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Erro ao remover programa.'),
+            backgroundColor: AppColors.accentError,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final workoutProvider = context.watch<WorkoutSheetProvider>();
@@ -302,6 +358,25 @@ class _TrainerSheetsState extends State<TrainerSheets> {
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: const Icon(Icons.add, color: AppColors.primary, size: 20),
+                            ),
+                          ),
+                        ],
+                        // Botão deletar programa — só aparece quando o programa foi
+                        // criado pelo profissional (personalTrainerId != null)
+                        if (_selectedProgram != null &&
+                            _selectedProgram!.personalTrainerId != null) ...[
+                          const SizedBox(width: 8),
+                          GestureDetector(
+                            onTap: _deleteSelectedProgram,
+                            child: Container(
+                              height: 45,
+                              width: 45,
+                              decoration: BoxDecoration(
+                                color: AppColors.accentError.withValues(alpha: 0.08),
+                                border: Border.all(color: AppColors.accentError.withValues(alpha: 0.3)),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(Icons.delete_outline, color: AppColors.accentError, size: 20),
                             ),
                           ),
                         ],
