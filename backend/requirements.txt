@@ -18,9 +18,31 @@ pydantic>=2.0.0
 # Segurança
 bcrypt>=4.1.0
 python-jose[cryptography]>=3.3.0
+email-validator>=2.1.0
+
+# Email e Rate Limiting
+resend>=2.0.0
+slowapi>=0.1.9
 
 # Testes
 pytest>=7.4.0
 pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0
 httpx>=0.24.0
+
+# ── IA / RAG ─────────────────────────────────────────────────────────────────
+langchain>=0.2.0
+langchain-core>=0.2.0
+langchain-groq>=0.1.4
+langchain-huggingface>=0.0.3
+sentence-transformers>=2.7.0
+groq>=0.9.0                    # SDK direto para Whisper (áudio)
+tavily-python>=0.5.0           # Busca web para dados nutricionais
+
+# ── Upload de arquivos ────────────────────────────────────────────────────────
+python-multipart>=0.0.9
+
+# ── Integrações ──────────────────────────────────────────────────────────────
+firebase-admin>=6.5.0
+apscheduler>=3.10.4
 

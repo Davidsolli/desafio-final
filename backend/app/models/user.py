@@ -7,7 +7,7 @@ role, phone_whatsapp, is_active, created_at, updated_at.
 
 from datetime import datetime
 from uuid import uuid4
-from sqlalchemy import Column, String, Boolean, DateTime
+from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Float, Integer
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import declarative_base
 
@@ -23,8 +23,9 @@ class User(Base):
         name: Nome completo do usuário
         email: Email único do usuário
         password: Hash bcrypt da senha (nunca texto plano)
-        role: Papel do usuário (admin, personal_trainer, client)
-        phone_whatsapp: Número WhatsApp (+55 XX XXXXX-XXXX)
+        role: Papel do usuário. Valores atômicos: admin, personal_trainer, nutritionist, client.
+              Profissionais podem ter múltiplas especialidades: "personal_trainer,nutritionist"
+        trainer_id: FK opcional para users.id (personal trainer vinculado, se é client)
         is_active: Status ativo/inativo (soft delete)
         created_at: Data de criação (imutável)
         updated_at: Data da última atualização
@@ -57,7 +58,12 @@ class User(Base):
         index=True,
     )
 
-    phone_whatsapp = Column(String(20), nullable=False)
+    trainer_id = Column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("users.id"),
+        nullable=True,
+        index=True,
+    )
 
     is_active = Column(Boolean, nullable=False, default=True, index=True)
 
@@ -68,6 +74,38 @@ class User(Base):
         nullable=False,
         default=datetime.utcnow,
         onupdate=datetime.utcnow,
+    )
+
+    weight = Column(Float, nullable=True)
+
+    height = Column(Float, nullable=True)
+
+    age = Column(Integer, nullable=True)
+
+    gender = Column(String(10), nullable=True)
+
+    phone_whatsapp = Column(String(20), nullable=True)
+
+    goal_type = Column(String(50), nullable=True)
+
+    theme_preference = Column(
+        String(20),
+        nullable=True,
+        default=None,
+        comment="Preferência de tema: 'light', 'dark', 'system', ou NULL para padrão do dispositivo"
+    )
+
+    token_version = Column(Integer, nullable=False, default=0)
+
+    fcm_token = Column(String(500), nullable=True)
+
+    daily_step_goal = Column(Integer, nullable=False, default=1000)
+
+    timezone = Column(
+        String(50),
+        nullable=True,
+        default=None,
+        comment="Fuso horário IANA (ex: America/Sao_Paulo). NULL = default America/Sao_Paulo"
     )
 
     def __repr__(self) -> str:

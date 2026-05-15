@@ -1,114 +1,214 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:animate_do/animate_do.dart';
+import 'package:provider/provider.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/theme_colors.dart';
 import '../../routes/app_routes.dart';
-import '../../models/mock_data.dart';
+import '../../services/api_client.dart';
+import '../../services/home_service.dart';
+import '../../providers/home_provider.dart';
+import '../../providers/logbook_provider.dart';
+import '../../shared/widgets/index.dart';
+import '../../widgets/progress_widgets.dart';
+import 'widgets/step_summary_card.dart';
 
-class HomeScreen extends StatefulWidget {
+// HomeScreen creates and injects HomeProvider locally so main.dart stays
+// untouched. The provider is scoped to this route and disposed with it.
+class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  Widget build(BuildContext context) {
+    final apiClient = context.read<ApiClient>();
+    return ChangeNotifierProvider(
+      create: (_) => HomeProvider(
+        homeService: HomeService(apiClient: apiClient),
+      )..fetchHomeData(),
+      child: const _HomeBody(),
+    );
+  }
 }
 
-class _HomeScreenState extends State<HomeScreen> {
-  int _selectedNavIndex = 0;
-  String _userRole = 'student';
+// ---------------------------------------------------------------------------
+// Body
+// ---------------------------------------------------------------------------
 
-  final List<Map<String, dynamic>> _navItems = [
-    {'icon': Icons.home_outlined, 'label': 'Home', 'route': AppRoutes.home},
-    {'icon': Icons.fitness_center_outlined, 'label': 'Treinos', 'route': AppRoutes.workouts},
-    {'icon': Icons.restaurant_outlined, 'label': 'Nutrição', 'route': AppRoutes.nutrition},
-    {'icon': Icons.chat_bubble_outline, 'label': 'Chat', 'route': AppRoutes.chat},
-    {'icon': Icons.person_outline, 'label': 'Perfil', 'route': AppRoutes.profile},
-  ];
+class _HomeBody extends StatefulWidget {
+  const _HomeBody();
+
+  @override
+  State<_HomeBody> createState() => _HomeBodyState();
+}
+
+class _HomeBodyState extends State<_HomeBody> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<LogbookProvider>().loadSessions().catchError((e) {
+        debugPrint('Erro ao carregar sessões no Home: $e');
+      });
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                child: _buildHeader(),
+    return Consumer<HomeProvider>(
+      builder: (context, provider, _) {
+        // ----- Loading -----
+        if (provider.isLoading) {
+          return Scaffold(
+            backgroundColor: context.colors.background,
+            body: const OmniLoader(),
+          );
+        }
+
+        // ----- Error -----
+        if (provider.error != null) {
+          return Scaffold(
+            backgroundColor: context.colors.background,
+            body: OmniErrorState(
+              message: provider.error!,
+              icon: Icons.wifi_off_outlined,
+              onRetry: provider.fetchHomeData,
+            ),
+          );
+        }
+
+        // ----- Success -----
+        final data = provider.data;
+        if (data == null) {
+          return Scaffold(
+            backgroundColor: context.colors.background,
+            body: OmniErrorState(
+              message: 'Não foi possível carregar os dados',
+              onRetry: provider.fetchHomeData,
+            ),
+          );
+        }
+
+        return Scaffold(
+          backgroundColor: context.colors.background,
+          body: SafeArea(
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
+                    child: _buildHeader(context, data),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: _buildStatsRow(context, data),
+                  ),
+                  const SizedBox(height: 12),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16),
+                    child: StepSummaryCard(),
+                  ),
+                  const SizedBox(height: 12),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: _buildNutritionCard(context, data),
+                  ),
+                  const SizedBox(height: 12),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: _buildTodayWorkout(context, data),
+                  ),
+                  const SizedBox(height: 20),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16),
+                    child: WorkoutHistorySection(),
+                  ),
+                  const SizedBox(height: 20),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: _buildQuickActions(context),
+                  ),
+                  const SizedBox(height: 32),
+                ],
               ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: _buildStatsRow(),
-              ),
-              const SizedBox(height: 12),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: _buildTodayWorkout(),
-              ),
-              const SizedBox(height: 20),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: _buildGoalsSection(),
-              ),
-              const SizedBox(height: 32),
-            ],
+            ),
           ),
-        ),
-      ),
-      bottomNavigationBar: _buildBottomNav(),
+        );
+      },
     );
   }
 
-  Widget _buildHeader() {
+  // ---------------------------------------------------------------------------
+  // Header
+  // ---------------------------------------------------------------------------
+
+  Widget _buildHeader(BuildContext context, HomeData data) {
     return Row(
       children: [
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Olá,', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
+            Text(
+              'Olá,',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: context.colors.textSecondary),
+            ),
             Row(
               children: [
-                Text(userName, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+                Text(
+                  data.user.name,
+                  style: Theme.of(context)
+                      .textTheme
+                      .headlineSmall
+                      ?.copyWith(fontWeight: FontWeight.bold),
+                ),
                 const SizedBox(width: 6),
-                const Text('👋', style: TextStyle(fontSize: 20)),
+                const Icon(Icons.waving_hand_outlined, color: AppColors.accentWarning, size: 20),
               ],
             ),
+            if (data.workoutStreak > 0) ...[
+              const SizedBox(height: 4),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.local_fire_department, color: AppColors.primary, size: 14),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${data.workoutStreak} ${data.workoutStreak == 1 ? 'dia' : 'dias'} consecutivos',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
         ),
         const Spacer(),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            border: Border.all(color: AppColors.border),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: DropdownButton<String>(
-            value: _userRole,
-            onChanged: (value) => setState(() => _userRole = value ?? 'student'),
-            items: [
-              DropdownMenuItem(value: 'student', child: Text('Aluno', style: Theme.of(context).textTheme.bodySmall)),
-              DropdownMenuItem(value: 'trainer', child: Text('Personal', style: Theme.of(context).textTheme.bodySmall)),
-            ],
-            underline: const SizedBox(),
-            style: const TextStyle(color: AppColors.textPrimary),
-            dropdownColor: AppColors.surface,
-            icon: const Icon(Icons.expand_more, color: AppColors.primary, size: 18),
-          ),
-        ),
-        const SizedBox(width: 8),
         GestureDetector(
-          onTap: () => context.go(AppRoutes.notifications),
+          onTap: () => context.push(AppRoutes.notifications),
           child: Stack(
             children: [
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  border: Border.all(color: AppColors.border),
+                  color: context.colors.surface,
+                  border: Border.all(color: context.colors.border),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(Icons.notifications_outlined, color: AppColors.textMuted, size: 20),
+                child: Icon(Icons.notifications_outlined,
+                    color: context.colors.textMuted, size: 20),
               ),
               Positioned(
                 top: 4,
@@ -129,43 +229,94 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildStatsRow() {
-    final stats = [
-      {'icon': Icons.trending_up, 'value': '$userIMC', 'label': 'IMC — $userIMCLabel', 'delay': 0},
-      {'icon': Icons.local_fire_department, 'value': '$userTMB', 'label': 'kcal/dia', 'delay': 100},
-      {'icon': Icons.fitness_center, 'value': '$weeklyWorkouts', 'label': 'treinos', 'delay': 200},
-    ];
+  // ---------------------------------------------------------------------------
+  // Stats row (IMC, TMB)
+  // ---------------------------------------------------------------------------
+
+  Widget _buildStatsRow(BuildContext context, HomeData data) {
+    final user = data.user;
+    final imcValue = user.imc?.toStringAsFixed(1) ?? '—';
+    final imcLabel = user.imc != null ? 'IMC — ${user.imcLabel}' : 'IMC';
+    final tmbValue = user.tmb?.toString() ?? '—';
 
     return Row(
-      children: stats.map((s) {
-        return Expanded(
+      children: [
+        Expanded(
           child: FadeInUp(
-            delay: Duration(milliseconds: s['delay'] as int),
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                border: Border.all(color: AppColors.border, width: 1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                children: [
-                  Icon(s['icon'] as IconData, color: AppColors.primary, size: 18),
-                  const SizedBox(height: 6),
-                  Text('${s['value']}', style: Theme.of(context).textTheme.displayMedium?.copyWith(fontSize: 20)),
-                  const SizedBox(height: 2),
-                  Text('${s['label']}', style: Theme.of(context).textTheme.bodySmall),
-                ],
-              ),
+            delay: Duration.zero,
+            child: OmniStatCard(
+              icon: Icons.trending_up,
+              value: imcValue,
+              label: imcLabel,
             ),
           ),
-        );
-      }).toList(),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: FadeInUp(
+            delay: const Duration(milliseconds: 100),
+            child: OmniStatCard(
+              icon: Icons.local_fire_department,
+              value: tmbValue,
+              label: 'kcal/dia',
+            ),
+          ),
+        ),
+      ],
     );
   }
 
-  Widget _buildTodayWorkout() {
-    final workout = workouts[0];
+  // ---------------------------------------------------------------------------
+  // Today's workout
+  // ---------------------------------------------------------------------------
+
+  Widget _buildTodayWorkout(BuildContext context, HomeData data) {
+    final workout = data.todayWorkout;
+
+    if (workout == null) {
+      return FadeInUp(
+        delay: const Duration(milliseconds: 300),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: context.colors.surface,
+            border: Border.all(color: context.colors.border, width: 1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.bedtime_outlined, color: context.colors.textMuted, size: 32),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Dia de descanso',
+                    style: Theme.of(context)
+                        .textTheme
+                        .headlineSmall
+                        ?.copyWith(
+                            fontSize: 17, fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    'Nenhum treino programado para hoje',
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: context.colors.textSecondary),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final durationText = workout.duration != null
+        ? '${workout.label} • ${workout.duration} min'
+        : workout.label;
+
     return FadeInUp(
       delay: const Duration(milliseconds: 300),
       child: GestureDetector(
@@ -173,8 +324,8 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: AppColors.surface,
-            border: Border.all(color: AppColors.border, width: 1),
+            color: context.colors.surface,
+            border: Border.all(color: context.colors.border, width: 1),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Column(
@@ -183,9 +334,13 @@ class _HomeScreenState extends State<HomeScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('TREINO DE HOJE',
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(letterSpacing: 0.5, color: AppColors.textMuted)),
-                  const Icon(Icons.chevron_right, color: AppColors.textMuted, size: 20),
+                  Text(
+                    'TREINO DE HOJE',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        letterSpacing: 0.5, color: context.colors.textMuted),
+                  ),
+                  Icon(Icons.chevron_right,
+                      color: context.colors.textMuted, size: 20),
                 ],
               ),
               const SizedBox(height: 12),
@@ -203,27 +358,193 @@ class _HomeScreenState extends State<HomeScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Center(
-                      child: Text(workout.emoji, style: const TextStyle(fontSize: 24)),
+                      child: Text(
+                        workout.emoji,
+                        style: const TextStyle(fontSize: 24),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          workout.name,
+                          style: Theme.of(context)
+                              .textTheme
+                              .headlineSmall
+                              ?.copyWith(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.bold),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          durationText,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(
+                                  color: context.colors.textSecondary),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              if (workout.exercises.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 6,
+                  children: [
+                    ...workout.exercises
+                        .take(3)
+                        .map((ex) => _buildChip(context, ex.name)),
+                    if (workout.exercises.length > 3)
+                      _buildChip(
+                          context, '+${workout.exercises.length - 3}'),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Nutrition today
+  // ---------------------------------------------------------------------------
+
+  Widget _buildNutritionCard(BuildContext context, HomeData data) {
+    final consumed = data.todayKcal;
+    final goal = data.user.tmb;
+    final ratio = (goal != null && goal > 0)
+        ? (consumed / goal).clamp(0.0, 1.0)
+        : 0.0;
+    final pct = (ratio * 100).toStringAsFixed(0);
+
+    Color barColor = AppColors.primary;
+    if (goal != null && goal > 0) {
+      final r = consumed / goal;
+      if (r > 1.2) {
+        barColor = AppColors.accentError;
+      } else if (r > 1.0) {
+        barColor = AppColors.accentWarning;
+      }
+    }
+
+    return FadeInUp(
+      delay: const Duration(milliseconds: 250),
+      child: GestureDetector(
+        onTap: () => context.go(AppRoutes.nutrition),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: context.colors.surface,
+            border: Border.all(color: context.colors.border, width: 1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'NUTRIÇÃO HOJE',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        letterSpacing: 0.5, color: context.colors.textMuted),
+                  ),
+                  Row(
                     children: [
-                      Text(workout.name,
-                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontSize: 17, fontWeight: FontWeight.bold)),
-                      Text('${workout.label} • ${workout.duration} min',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
+                      const Icon(Icons.restaurant_outlined,
+                          color: AppColors.accentInfo, size: 18),
+                      const SizedBox(width: 4),
+                      Icon(Icons.chevron_right,
+                          color: context.colors.textMuted, size: 20),
                     ],
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 6,
+              const SizedBox(height: 10),
+              // Kcal row
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  ...workout.exercises.take(3).map((ex) => _buildChip(ex.name)).toList(),
-                  if (workout.exercises.length > 3) _buildChip('+${workout.exercises.length - 3}'),
+                  Text(
+                    consumed.toString(),
+                    style: Theme.of(context)
+                        .textTheme
+                        .headlineSmall
+                        ?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(width: 4),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 2),
+                    child: Text(
+                      goal != null ? '/ $goal kcal (basal)' : 'kcal',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: context.colors.textSecondary),
+                    ),
+                  ),
+                  const Spacer(),
+                  if (goal != null)
+                    Text(
+                      '$pct%',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: barColor,
+                            fontWeight: FontWeight.bold,
+                          ),
+                    ),
+                ],
+              ),
+              // Progress bar
+              if (goal != null) ...[
+                const SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: ratio,
+                    minHeight: 6,
+                    backgroundColor: context.colors.border,
+                    valueColor: AlwaysStoppedAnimation<Color>(barColor),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 12),
+              // Macros pills
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildMacroPill(
+                      context,
+                      label: 'Proteína',
+                      value: data.todayProtein,
+                      color: AppColors.macroProtein,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _buildMacroPill(
+                      context,
+                      label: 'Carboidrato',
+                      value: data.todayCarbs,
+                      color: AppColors.macroCarbs,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _buildMacroPill(
+                      context,
+                      label: 'Gordura',
+                      value: data.todayFats,
+                      color: AppColors.macroFat,
+                    ),
+                  ),
                 ],
               ),
             ],
@@ -233,109 +554,124 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildChip(String text) {
+  Widget _buildMacroPill(
+    BuildContext context, {
+    required String label,
+    required double value,
+    required Color color,
+  }) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       decoration: BoxDecoration(
-        color: AppColors.surfaceLight,
-        borderRadius: BorderRadius.circular(8),
+        color: color.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(10),
       ),
-      child: Text(text, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textMuted, fontSize: 11)),
+      child: Column(
+        children: [
+          Text(
+            '${value.toStringAsFixed(0)}g',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: color,
+                  fontWeight: FontWeight.bold,
+                ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: color.withOpacity(0.85),
+                ),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildGoalsSection() {
+  Widget _buildChip(BuildContext context, String text) {
+    return OmniInfoChip(label: text);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Quick actions
+  // ---------------------------------------------------------------------------
+
+  Widget _buildQuickActions(BuildContext context) {
     return Column(
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.adjust, color: AppColors.primary, size: 20),
-                const SizedBox(width: 8),
-                Text('Metas', style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
-              ],
-            ),
-            GestureDetector(
-              onTap: () => context.go(AppRoutes.goals),
-              child: Text('Ver todas',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.primary, fontWeight: FontWeight.w600)),
-            ),
-          ],
-        ),
+        OmniSectionHeader(title: 'Ações Rápidas'),
         const SizedBox(height: 12),
-        ...goals.where((g) => !g.completed).take(2).map((goal) {
-          return FadeInUp(
-            delay: const Duration(milliseconds: 200),
-            child: Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                border: Border.all(color: AppColors.border, width: 1),
-                borderRadius: BorderRadius.circular(12),
+        FadeInUp(
+          delay: const Duration(milliseconds: 300),
+          child: Row(
+            children: [
+              Expanded(
+                child: _buildQuickActionButton(
+                  context,
+                  icon: Icons.fitness_center_outlined,
+                  label: 'Treinar',
+                  color: AppColors.primary,
+                  onTap: () => context.go(AppRoutes.workouts),
+                ),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(goal.title,
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis),
-                      ),
-                      Text('${(goal.progress * 100).toStringAsFixed(0)}%',
-                          style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.primary, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: goal.progress,
-                      minHeight: 8,
-                      backgroundColor: AppColors.surfaceLight,
-                      valueColor: const AlwaysStoppedAnimation(AppColors.primary),
-                    ),
-                  ),
-                ],
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildQuickActionButton(
+                  context,
+                  icon: Icons.restaurant_outlined,
+                  label: 'Refeição',
+                  color: AppColors.accentWarning,
+                  onTap: () => context.go(AppRoutes.nutrition),
+                ),
               ),
-            ),
-          );
-        }),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildQuickActionButton(
+                  context,
+                  icon: Icons.chat_bubble_outline,
+                  label: 'Chat IA',
+                  color: AppColors.accentInfo,
+                  onTap: () => context.go(AppRoutes.chat),
+                ),
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
 
-  Widget _buildBottomNav() {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border(top: BorderSide(color: AppColors.border, width: 1)),
-      ),
-      child: BottomNavigationBar(
-        currentIndex: _selectedNavIndex,
-        onTap: (index) {
-          setState(() => _selectedNavIndex = index);
-          context.go(_navItems[index]['route']);
-        },
-        backgroundColor: AppColors.surface,
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: AppColors.primary,
-        unselectedItemColor: AppColors.textMuted,
-        items: _navItems
-            .map(
-              (item) => BottomNavigationBarItem(
-                icon: Icon(item['icon'] as IconData, size: 24),
-                label: item['label'] as String,
-              ),
-            )
-            .toList(),
+  Widget _buildQuickActionButton(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.10),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: color, size: 24),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+          ],
+        ),
       ),
     );
   }
+
+
 }

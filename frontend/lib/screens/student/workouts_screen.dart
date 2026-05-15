@@ -1,10 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:animate_do/animate_do.dart';
+import 'package:provider/provider.dart';
+
 import 'dart:async';
-import '../../theme/app_colors.dart';
-import '../../routes/app_routes.dart';
-import '../../models/mock_data.dart';
+
+import 'package:omniconnect_fitness/theme/app_colors.dart';
+import 'package:omniconnect_fitness/theme/theme_colors.dart';
+import 'package:omniconnect_fitness/models/workout_sheet_model.dart';
+import 'package:omniconnect_fitness/providers/auth_provider.dart';
+import 'package:omniconnect_fitness/providers/workout_sheet_provider.dart';
+import 'package:omniconnect_fitness/providers/logbook_provider.dart';
+import 'package:omniconnect_fitness/services/api_client.dart';
+import 'package:omniconnect_fitness/shared/widgets/index.dart';
+import 'package:omniconnect_fitness/screens/trainer/widgets/exercise_catalog_picker.dart';
+import 'package:omniconnect_fitness/widgets/progress_widgets.dart';
 
 class WorkoutsScreen extends StatefulWidget {
   const WorkoutsScreen({super.key});
@@ -13,19 +22,153 @@ class WorkoutsScreen extends StatefulWidget {
   State<WorkoutsScreen> createState() => _WorkoutsScreenState();
 }
 
-class _WorkoutsScreenState extends State<WorkoutsScreen> {
-  String? _selectedWorkoutId;
-  Set<String> _completedExercises = {};
+class _WorkoutsScreenState extends State<WorkoutsScreen> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+  
+  // Controle de Sessão de Treino Ativo (Hevy Style)
+  String? _activeSessionId;
+  WorkoutSheetResponse? _activeSheet;
+  Timer? _chronometerTimer;
+  int _elapsedSeconds = 0;
+  bool _isSessionPaused = false;
+  
+  // Mapas para salvar dados digitados em tempo real na sessão de treino
+  // exerciseId -> List de flags de conclusão de séries
+  final Map<String, List<bool>> _setsChecked = {};
+  // exerciseId -> List de cargas reais para cada série
+  final Map<String, List<double>> _setsLoads = {};
+  // exerciseId -> List de repetições reais para cada série
+  final Map<String, List<int>> _setsReps = {};
+
+  // Rest Timer State
   int? _restTimerSeconds;
   Timer? _restTimer;
-  int _selectedNavIndex = 1;
+
+  // Controladores de texto para evitar perda de foco ao digitar
+  final Map<String, TextEditingController> _loadControllers = {};
+  final Map<String, TextEditingController> _repsControllers = {};
+
+  TextEditingController _getLoadController(String exerciseId, int setIdx, double initialVal) {
+    final key = '${exerciseId}_$setIdx';
+    if (!_loadControllers.containsKey(key)) {
+      _loadControllers[key] = TextEditingController(text: initialVal.toStringAsFixed(1));
+    }
+    return _loadControllers[key]!;
+  }
+
+  TextEditingController _getRepsController(String exerciseId, int setIdx, dynamic initialVal) {
+    final key = '${exerciseId}_$setIdx';
+    if (!_repsControllers.containsKey(key)) {
+      _repsControllers[key] = TextEditingController(text: initialVal.toString());
+    }
+    return _repsControllers[key]!;
+  }
+  
+  String _getMuscleGroupName(String id) {
+    const map = {
+      'peito': 'Peito',
+      'costa': 'Costas',
+      'costas': 'Costas',
+      'ombro': 'Ombros',
+      'bíceps': 'Bíceps',
+      'tríceps': 'Tríceps',
+      'perna_anterior': 'Quadríceps',
+      'perna_posterior': 'Posterior de Coxa',
+      'panturrilha': 'Panturrilhas',
+      'abdômen': 'Abdômen',
+      'core': 'Core',
+    };
+    return map[id.toLowerCase()] ?? id;
+  }
+
+  // Filtros / Seleções para Aba Progresso
+  String _selectedPeriod = 'weekly';
+
+  // Estado para Confetes / Tela de Sucesso
+  bool _showSuccessOverlay = false;
+  bool _isSaving = false;
+  int _lastWorkoutDuration = 0;
+  double _lastWorkoutTotalLoad = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(_handleTabSelection);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadInitialData();
+    });
+  }
+
+  void _handleTabSelection() {
+    if (_tabController.index == 1) {
+      _loadProgressData();
+    }
+  }
+
+  Future<void> _loadInitialData() async {
+    final authProvider = context.read<AuthProvider>();
+    final userId = authProvider.user?.id;
+    if (userId == null) return;
+
+    try {
+      final sheetProvider = context.read<WorkoutSheetProvider>();
+      await sheetProvider.loadPrograms(userId: userId);
+      
+      if (sheetProvider.programs.isNotEmpty) {
+        // Seleciona o programa ativo como padrão
+        final activeProg = sheetProvider.programs.firstWhere(
+          (p) => p.isActive, 
+          orElse: () => sheetProvider.programs.first,
+        );
+        sheetProvider.selectProgram(activeProg);
+        await sheetProvider.loadSheets(workoutProgramId: activeProg.id);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _loadProgressData() async {
+    try {
+      final logbookProvider = context.read<LogbookProvider>();
+      await logbookProvider.loadFrequency(_selectedPeriod, limit: 12);
+      await logbookProvider.loadMuscleGroupDistribution(days: 30);
+      await logbookProvider.loadPersonalRecords(limit: 10);
+    } catch (_) {}
+  }
 
   @override
   void dispose() {
+    _tabController.removeListener(_handleTabSelection);
+    _tabController.dispose();
+    _chronometerTimer?.cancel();
     _restTimer?.cancel();
+    for (var c in _loadControllers.values) { c.dispose(); }
+    for (var c in _repsControllers.values) { c.dispose(); }
     super.dispose();
   }
 
+  // --- CRONÔMETRO ---
+  void _startChronometer() {
+    _chronometerTimer?.cancel();
+    _elapsedSeconds = 0;
+    _chronometerTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (mounted) {
+        setState(() {
+          _elapsedSeconds++;
+        });
+      }
+    });
+  }
+
+  String _formatDuration(int totalSeconds) {
+    final hours = totalSeconds ~/ 3600;
+    final minutes = (totalSeconds % 3600) ~/ 60;
+    final seconds = totalSeconds % 60;
+    return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  // --- TIMER DE DESCANSO ---
   void _startRestTimer(int seconds) {
     _restTimer?.cancel();
     setState(() => _restTimerSeconds = seconds);
@@ -37,365 +180,2360 @@ class _WorkoutsScreenState extends State<WorkoutsScreen> {
           } else {
             _restTimer?.cancel();
             _restTimerSeconds = null;
+            // Alerta sonoro / visual de conclusão de descanso
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('🕒 Descanso concluído! Volte para a próxima série! 🔥'),
+                duration: Duration(seconds: 3),
+                backgroundColor: AppColors.primary,
+              ),
+            );
           }
         });
       }
     });
   }
 
-  void _pauseRestTimer() {
-    _restTimer?.cancel();
+  // --- GERENCIAMENTO DE EXERCÍCIOS ATIVOS ---
+  void _initializeActiveSheetData(WorkoutSheetResponse sheet) {
+    _setsChecked.clear();
+    _setsLoads.clear();
+    _setsReps.clear();
+    for (var c in _loadControllers.values) { c.dispose(); }
+    for (var c in _repsControllers.values) { c.dispose(); }
+    _loadControllers.clear();
+    _repsControllers.clear();
+
+    for (var exercise in sheet.exercises) {
+      _setsChecked[exercise.id] = List.generate(exercise.series, (_) => false);
+      _setsLoads[exercise.id] = List.generate(exercise.series, (_) => exercise.loadKg);
+      _setsReps[exercise.id] = List.generate(exercise.series, (_) => exercise.repetitions);
+    }
   }
 
-  void _toggleExercise(String exerciseId) {
-    setState(() {
-      if (_completedExercises.contains(exerciseId)) {
-        _completedExercises.remove(exerciseId);
+  // Iniciar sessão de treino na API
+  Future<void> _startWorkoutSession(WorkoutSheetResponse sheet) async {
+    final logbookProvider = context.read<LogbookProvider>();
+    try {
+      final sessionData = await logbookProvider.startActiveSession(sheet.id);
+      setState(() {
+        _activeSessionId = sessionData['id'] as String;
+        _activeSheet = sheet;
+        _isSessionPaused = false;
+        _initializeActiveSheetData(sheet);
+        _startChronometer();
+      });
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('🔥 Treino "${sheet.name}" iniciado! Siga a sequência.'),
+          backgroundColor: AppColors.accentSuccess,
+        ),
+      );
+    } on ApiException catch (e) {
+      if (e.statusCode == 409) {
+        // Sessão já em andamento! Oferece para recuperar ou sobrescrever.
+        _showRecoveryDialog(sheet);
       } else {
-        _completedExercises.add(exerciseId);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao iniciar treino: ${e.message}'), backgroundColor: AppColors.accentError),
+        );
       }
-    });
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao conectar ao servidor: $e'), backgroundColor: AppColors.accentError),
+      );
+    }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final selectedWorkout = workouts.firstWhere(
-      (w) => w.id == _selectedWorkoutId,
-      orElse: () => workouts[0],
+  void _showRecoveryDialog(WorkoutSheetResponse sheet) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Treino em Andamento ⚠️'),
+        content: const Text(
+          'Você já possui uma sessão de treino ativa em progresso. Deseja substituí-la por esta nova sessão?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: AppColors.accentError),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              // Força o encerramento da sessão em progresso para iniciar uma nova
+              // Para simplificar, excluímos ou finalizamos a anterior de forma silenciosa e iniciamos
+              final logbookProvider = context.read<LogbookProvider>();
+              await logbookProvider.loadSessions(limit: 1);
+              if (logbookProvider.sessions.isNotEmpty) {
+                final lastSess = logbookProvider.sessions.first;
+                if (lastSess.status == 'in_progress' || lastSess.exercises.isEmpty) {
+                  await logbookProvider.deleteSession(lastSess.id);
+                }
+              }
+              _startWorkoutSession(sheet);
+            },
+            child: const Text('Substituir'),
+          ),
+        ],
+      ),
     );
+  }
 
-    if (_selectedWorkoutId != null) {
-      return _buildWorkoutDetail(selectedWorkout);
+  // Alterna o status do set/série
+  void _toggleSetCheck(String exerciseId, int setIndex, int restSeconds) {
+    final currentStatus = _setsChecked[exerciseId]![setIndex];
+    setState(() {
+      _setsChecked[exerciseId]![setIndex] = !currentStatus;
+    });
+
+    if (!currentStatus) {
+      // Ativou o set, dispara cronômetro de descanso
+      _startRestTimer(restSeconds);
+    }
+  }
+
+  // Salva alteração de carga em tempo real
+  void _onLoadChanged(String exerciseId, int setIndex, String value) {
+    final parsed = double.tryParse(value);
+    if (parsed != null) {
+      _setsLoads[exerciseId]![setIndex] = parsed;
+    }
+  }
+
+  // Salva alteração de repetição em tempo real
+  void _onRepsChanged(String exerciseId, int setIndex, String value) {
+    final parsed = int.tryParse(value);
+    if (parsed != null) {
+      _setsReps[exerciseId]![setIndex] = parsed;
+    }
+  }
+
+  // Finaliza a sessão salvando todos os dados reais
+  Future<void> _finishWorkout() async {
+    if (_activeSheet == null || _activeSessionId == null) return;
+
+    // Calcula volume total levantado para as estatísticas premium
+    double totalLoad = 0;
+    int completedSetsCount = 0;
+
+    for (var exercise in _activeSheet!.exercises) {
+      final checked = _setsChecked[exercise.id] ?? [];
+      final loads = _setsLoads[exercise.id] ?? [];
+      final reps = _setsReps[exercise.id] ?? [];
+
+      for (int i = 0; i < checked.length; i++) {
+        if (checked[i]) {
+          totalLoad += loads[i] * reps[i];
+          completedSetsCount++;
+        }
+      }
     }
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Text('Fichas de Treino',
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
-            ),
-            Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: workouts.length,
-                itemBuilder: (context, index) {
-                  final workout = workouts[index];
-                  return FadeInUp(
-                    delay: Duration(milliseconds: index * 100),
-                    child: GestureDetector(
-                      onTap: () => setState(() => _selectedWorkoutId = workout.id),
-                      child: Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: AppColors.surface,
-                          border: Border.all(color: AppColors.border, width: 1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 50,
-                              height: 50,
-                              decoration: BoxDecoration(
-                                color: AppColors.primary.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Center(
-                                child: Text(workout.emoji, style: const TextStyle(fontSize: 24)),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(workout.name,
-                                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
-                                  Text(workout.label,
-                                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
-                                  const SizedBox(height: 4),
-                                  Text('${workout.dayOfWeek} • ${workout.exercises.length} exercícios • ${workout.duration} min',
-                                      style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted)),
-                                ],
-                              ),
-                            ),
-                            const Icon(Icons.chevron_right, color: AppColors.textMuted),
-                          ],
-                        ),
+    if (completedSetsCount == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('⚠️ Por favor, conclua pelo menos uma série antes de finalizar o treino!'),
+          backgroundColor: AppColors.accentWarning,
+        ),
+      );
+      return;
+    }
+
+    // Mostra Dialog com RPE slider, Mood picker e notas
+    _showFinishSummaryDialog(totalLoad);
+  }
+
+  void _showFinishSummaryDialog(double totalLoad) {
+    double rpeValue = 7.0;
+    String selectedMood = '🙂';
+    final notesController = TextEditingController();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            Color rpeColor = Colors.green;
+            String rpeLabel = 'Leve';
+            if (rpeValue >= 4 && rpeValue <= 7) {
+              rpeColor = Colors.orange;
+              rpeLabel = 'Firme / Desafiador';
+            } else if (rpeValue > 7) {
+              rpeColor = Colors.red;
+              rpeLabel = 'Extremo / Limite';
+            }
+
+            return Container(
+              padding: EdgeInsets.only(
+                top: 20,
+                left: 20,
+                right: 20,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 30,
+              ),
+              decoration: BoxDecoration(
+                color: Theme.of(context).scaffoldBackgroundColor,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(24),
+                  topRight: Radius.circular(24),
+                ),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 50,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[400],
+                        borderRadius: BorderRadius.circular(10),
                       ),
                     ),
-                  );
-                },
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    '🏆 Finalizar Sessão de Treino',
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Parabéns! Defina os detalhes finais de evolução de sua sessão.',
+                    style: TextStyle(color: context.colors.textSecondary, fontSize: 13),
+                  ),
+                  const Divider(height: 24),
+
+                  // Seletor de Esforço RPE
+                  Text(
+                    'Esforço Percebido (RPE): ${rpeValue.toInt()}/10',
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Slider(
+                          value: rpeValue,
+                          min: 1,
+                          max: 10,
+                          divisions: 9,
+                          activeColor: rpeColor,
+                          inactiveColor: rpeColor.withOpacity(0.2),
+                          onChanged: (val) {
+                            setModalState(() {
+                              rpeValue = val;
+                            });
+                          },
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: rpeColor.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          rpeLabel,
+                          style: TextStyle(color: rpeColor, fontWeight: FontWeight.bold, fontSize: 11),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Seletor de Humor / Mood
+                  const Text(
+                    'Como se sentiu hoje?',
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _buildMoodIcon(setModalState, '😢', 'Fraco', selectedMood, (m) => selectedMood = m),
+                      _buildMoodIcon(setModalState, '😐', 'Ok', selectedMood, (m) => selectedMood = m),
+                      _buildMoodIcon(setModalState, '🙂', 'Forte', selectedMood, (m) => selectedMood = m),
+                      _buildMoodIcon(setModalState, '🔥', 'Monstro', selectedMood, (m) => selectedMood = m),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Campo de notas
+                  const Text(
+                    'Anotações do Treino',
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: notesController,
+                    maxLines: 3,
+                    decoration: InputDecoration(
+                      hintText: 'Escreva observações sobre dores, superações de carga ou cansaço...',
+                      hintStyle: TextStyle(color: context.colors.textMuted, fontSize: 12),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      contentPadding: const EdgeInsets.all(12),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Botão Confirmar
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: () async {
+                        Navigator.pop(ctx); // fecha modal
+                        _saveAndCompleteWorkout(rpeValue.toInt(), selectedMood, notesController.text, totalLoad);
+                      },
+                      child: const Text('Salvar e Registrar Treino', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildMoodIcon(StateSetter setModalState, String emoji, String label, String currentSelected, Function(String) onSelect) {
+    final isSelected = currentSelected == emoji;
+    return GestureDetector(
+      onTap: () {
+        setModalState(() {
+          onSelect(emoji);
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.primary.withOpacity(0.15) : Colors.transparent,
+          border: Border.all(color: isSelected ? AppColors.primary : Colors.grey[300]!, width: 1.5),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 26)),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 10, 
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                color: isSelected ? AppColors.primary : Colors.grey[600],
               ),
             ),
           ],
         ),
       ),
-      bottomNavigationBar: _buildBottomNav(),
     );
   }
 
-  Widget _buildWorkoutDetail(Workout workout) {
-    final progress = (_completedExercises.length / workout.exercises.length) * 100;
+  Future<void> _saveAndCompleteWorkout(int rpe, String mood, String notes, double totalLoad) async {
+    final logbookProvider = context.read<LogbookProvider>();
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.chevron_left, size: 28),
-          onPressed: () => setState(() {
-            _selectedWorkoutId = null;
-            _completedExercises.clear();
-          }),
-        ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(workout.name, style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
-            Text(workout.label,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textSecondary)),
-          ],
-        ),
-      ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    try {
+      setState(() {
+        _isSaving = true;
+      });
+
+      // 1. Logar cada um dos exercícios concluídos com suas respectivas séries
+      for (var exercise in _activeSheet!.exercises) {
+        final checked = _setsChecked[exercise.id] ?? [];
+        final loads = _setsLoads[exercise.id] ?? [];
+        final reps = _setsReps[exercise.id] ?? [];
+
+        // Verifica se completou pelo menos uma série
+        int checkedCount = checked.where((c) => c).length;
+        if (checkedCount == 0) continue;
+
+        // Constrói array de detalhes das séries para o histórico profundo
+        final List<Map<String, dynamic>> seriesDetails = [];
+        for (int i = 0; i < checked.length; i++) {
+          seriesDetails.add({
+            'set_number': i + 1,
+            'load_kg': loads[i],
+            'repetitions': reps[i],
+            'completed': checked[i],
+          });
+        }
+
+        // Encontra a primeira série completada para fins de carga principal do exercício
+        final firstCompletedIndex = checked.indexOf(true);
+        final finalLoad = loads[firstCompletedIndex];
+        final finalReps = reps[firstCompletedIndex];
+
+        await logbookProvider.logSessionExercise(
+          sessionId: _activeSessionId!,
+          exerciseId: exercise.id,
+          actualSeries: checkedCount,
+          actualRepetitions: finalReps,
+          actualLoadKg: finalLoad,
+          seriesDetails: seriesDetails,
+          exerciseNotes: 'Séries completadas com sucesso.',
+        );
+      }
+
+      // Mapeia o emoji selecionado no app para o valor aceito pelo backend (great, good, normal, bad, terrible)
+      String backendMood = 'good';
+      if (mood == '😢') {
+        backendMood = 'bad';
+      } else if (mood == '😐') {
+        backendMood = 'normal';
+      } else if (mood == '🙂') {
+        backendMood = 'good';
+      } else if (mood == '🔥') {
+        backendMood = 'great';
+      }
+
+      // 2. Finalizar e salvar os metadados da sessão (RPE, mood, etc)
+      await logbookProvider.completeActiveSession(
+        sessionId: _activeSessionId!,
+        notes: notes,
+        difficultyLevel: rpe,
+        mood: backendMood,
+      );
+
+      // Configura o overlay de sucesso premium!
+      setState(() {
+        _isSaving = false;
+        _lastWorkoutDuration = _elapsedSeconds ~/ 60;
+        if (_lastWorkoutDuration == 0) _lastWorkoutDuration = 1;
+        _lastWorkoutTotalLoad = totalLoad;
+        _showSuccessOverlay = true;
+        _activeSheet = null;
+        _activeSessionId = null;
+        _chronometerTimer?.cancel();
+        _restTimer?.cancel();
+        _restTimerSeconds = null;
+      });
+
+      // Recarrega todos os programas e sheets para atualizar os contadores de treinos efetuados
+      _loadInitialData();
+
+    } catch (e) {
+      setState(() {
+        _isSaving = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao salvar treino: $e'), backgroundColor: AppColors.accentError),
+      );
+    }
+  }
+
+  // --- CRIADOR DE ROTINA / FICHA CUSTOMIZADA ---
+  void _openCustomRoutineBuilder() {
+    final programNameController = TextEditingController(text: 'Minha Rotina Personalizada');
+    final programGoalController = TextEditingController(text: 'Hipertrofia');
+    
+    // Lista local de fichas neste programa
+    final List<Map<String, dynamic>> programSheets = [
+      {
+        'nameController': TextEditingController(text: 'Treino A'),
+        'day_of_week': 0, // Segunda-feira
+        'exercises': <Map<String, dynamic>>[],
+      }
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setStateBuilder) {
+            final double keyboardOffset = MediaQuery.of(context).viewInsets.bottom;
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.88,
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: 20 + keyboardOffset,
+              ),
+              decoration: BoxDecoration(
+                color: Theme.of(context).scaffoldBackgroundColor,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(24),
+                  topRight: Radius.circular(24),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Center(
+                    child: Container(
+                      width: 50,
+                      height: 5,
+                      decoration: BoxDecoration(color: Colors.grey[400], borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '➕ Criar Programa de Treino',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  
                   Expanded(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(6),
-                      child: LinearProgressIndicator(
-                        value: progress / 100,
-                        minHeight: 6,
-                        backgroundColor: AppColors.surfaceLight,
-                        valueColor: const AlwaysStoppedAnimation(AppColors.primary),
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Nome do Programa
+                          const Text('Nome do Programa / Foco Geral', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          const SizedBox(height: 6),
+                          TextField(
+                            controller: programNameController,
+                            decoration: InputDecoration(
+                              hintText: 'Ex: Meu Bloco de Força, Foco em Pernas...',
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Objetivo
+                          const Text('Objetivo', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          const SizedBox(height: 6),
+                          TextField(
+                            controller: programGoalController,
+                            decoration: InputDecoration(
+                              hintText: 'Ex: Hipertrofia, Força, Emagrecimento...',
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+
+                          // Divider e Cabeçalho de Fichas
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Fichas de Treino (${programSheets.length})',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.primary),
+                              ),
+                              ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.primary.withOpacity(0.15),
+                                  foregroundColor: AppColors.primary,
+                                  elevation: 0,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                ),
+                                icon: const Icon(Icons.add, size: 16),
+                                label: const Text('Nova Ficha', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                onPressed: () {
+                                  setStateBuilder(() {
+                                    final sheetLetter = String.fromCharCode(65 + programSheets.length);
+                                    programSheets.add({
+                                      'nameController': TextEditingController(text: 'Treino $sheetLetter'),
+                                      'day_of_week': programSheets.length % 7,
+                                      'exercises': <Map<String, dynamic>>[],
+                                    });
+                                  });
+                                },
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+
+                          // Listar Fichas
+                          ...programSheets.asMap().entries.map((entry) {
+                            final sheetIndex = entry.key;
+                            final sheet = entry.value;
+                            final List<Map<String, dynamic>> exercises = sheet['exercises'];
+                            final TextEditingController sheetNameCtrl = sheet['nameController'];
+                            final int sheetDay = sheet['day_of_week'];
+
+                            return Card(
+                              margin: const EdgeInsets.only(bottom: 16),
+                              elevation: 2,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                side: BorderSide(color: context.colors.border.withOpacity(0.5)),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // Linha do Título da Ficha e botão deletar
+                                    Row(
+                                      children: [
+                                        const Icon(Icons.fitness_center, color: AppColors.primary, size: 20),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: TextField(
+                                            controller: sheetNameCtrl,
+                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                            decoration: const InputDecoration(
+                                              hintText: 'Nome da Ficha',
+                                              isDense: true,
+                                              border: InputBorder.none,
+                                              contentPadding: EdgeInsets.zero,
+                                            ),
+                                          ),
+                                        ),
+                                        if (programSheets.length > 1)
+                                          IconButton(
+                                            icon: const Icon(Icons.delete_outline, color: AppColors.accentError, size: 18),
+                                            onPressed: () {
+                                              setStateBuilder(() {
+                                                programSheets.removeAt(sheetIndex);
+                                              });
+                                            },
+                                            padding: EdgeInsets.zero,
+                                            constraints: const BoxConstraints(),
+                                          ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    const Divider(height: 1),
+                                    const SizedBox(height: 10),
+
+                                    // Seletor de Dia
+                                    const Text('Dia de agendamento', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
+                                    const SizedBox(height: 6),
+                                    SingleChildScrollView(
+                                      scrollDirection: Axis.horizontal,
+                                      child: Row(
+                                        children: List.generate(7, (i) {
+                                          final isSel = sheetDay == i;
+                                          return Padding(
+                                            padding: const EdgeInsets.only(right: 6),
+                                            child: GestureDetector(
+                                              onTap: () {
+                                                setStateBuilder(() {
+                                                  sheet['day_of_week'] = i;
+                                                });
+                                              },
+                                              child: AnimatedContainer(
+                                                duration: const Duration(milliseconds: 200),
+                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                                decoration: BoxDecoration(
+                                                  color: isSel ? AppColors.primary : context.colors.surface,
+                                                  borderRadius: BorderRadius.circular(8),
+                                                  border: Border.all(color: isSel ? AppColors.primary : context.colors.border),
+                                                ),
+                                                child: Text(
+                                                  dayOfWeekLabels[i]!,
+                                                  style: TextStyle(
+                                                    color: isSel ? Colors.white : context.colors.textPrimary,
+                                                    fontSize: 11,
+                                                    fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          );
+                                        }),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+
+                                    // Exercícios desta Ficha
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text('Exercícios (${exercises.length})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                        TextButton.icon(
+                                          icon: const Icon(Icons.search, size: 14),
+                                          label: const Text('Buscar e Adicionar', style: TextStyle(fontSize: 11)),
+                                          onPressed: () {
+                                            _showExerciseSearchCatalogDialog(setStateBuilder, exercises);
+                                          },
+                                          style: TextButton.styleFrom(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                            minimumSize: Size.zero,
+                                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 6),
+                                    
+                                    if (exercises.isEmpty)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(vertical: 16),
+                                        width: double.infinity,
+                                        alignment: Alignment.center,
+                                        decoration: BoxDecoration(
+                                          color: context.colors.surfaceLight.withOpacity(0.5),
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          'Adicione movimentos para este treino! 🏋️',
+                                          style: TextStyle(color: context.colors.textMuted, fontSize: 11),
+                                        ),
+                                      )
+                                    else
+                                      ListView.builder(
+                                        shrinkWrap: true,
+                                        physics: const NeverScrollableScrollPhysics(),
+                                        itemCount: exercises.length,
+                                        itemBuilder: (context, index) {
+                                          final ex = exercises[index];
+                                          final name = ex['name'] as String;
+                                          return Card(
+                                            margin: const EdgeInsets.only(bottom: 6),
+                                            color: context.colors.surfaceLight,
+                                            child: ListTile(
+                                              dense: true,
+                                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                                              title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                              subtitle: Text(
+                                                'Séries: ${ex['series']} | Reps: ${ex['repetitions']} | Carga: ${ex['load_kg']}kg',
+                                                style: const TextStyle(fontSize: 10),
+                                              ),
+                                              trailing: IconButton(
+                                                icon: const Icon(Icons.delete_outline, color: AppColors.accentError, size: 16),
+                                                onPressed: () {
+                                                  setStateBuilder(() {
+                                                    exercises.removeAt(index);
+                                                  });
+                                                },
+                                                padding: EdgeInsets.zero,
+                                                constraints: const BoxConstraints(),
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ],
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Text('${_completedExercises.length}/${workout.exercises.length}',
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted)),
+                  
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: () {
+                        // Validar se todas as fichas possuem pelo menos um exercício
+                        bool isValid = true;
+                        for (final s in programSheets) {
+                          if ((s['exercises'] as List).isEmpty) {
+                            isValid = false;
+                            break;
+                          }
+                        }
+
+                        if (!isValid) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Por favor, adicione pelo menos um exercício em cada ficha de treino.'),
+                              backgroundColor: AppColors.accentWarning,
+                            ),
+                          );
+                          return;
+                        }
+
+                        Navigator.pop(ctx);
+                        _saveCustomProgram(
+                          programNameController.text,
+                          programGoalController.text,
+                          programSheets,
+                        );
+                      },
+                      child: const Text('Criar Meu Programa', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _saveCustomProgram(
+    String programName,
+    String programGoal,
+    List<Map<String, dynamic>> programSheets,
+  ) async {
+    final authProvider = context.read<AuthProvider>();
+    final userId = authProvider.user?.id;
+    if (userId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Usuário não autenticado.'), backgroundColor: AppColors.accentError),
+      );
+      return;
+    }
+
+    final sheetProvider = context.read<WorkoutSheetProvider>();
+
+    try {
+      setState(() {
+        _isSaving = true;
+      });
+
+      // Mapeia cada ficha local para CreateWorkoutSheetDTO
+      final List<CreateWorkoutSheetDTO> sheets = programSheets.map((s) {
+        final List<ExerciseCreateDTO> exercises = (s['exercises'] as List<Map<String, dynamic>>).map((ex) {
+          return ExerciseCreateDTO(
+            name: ex['name'] as String,
+            muscleGroup: ex['muscle_group'] as String,
+            series: ex['series'] as int,
+            repetitions: ex['repetitions'] as int,
+            loadKg: ex['load_kg'] as double,
+            restSeconds: ex['rest_seconds'] as int,
+            gifUrl: ex['gif_url'] as String?,
+            imageUrl: ex['image_url'] as String?,
+            order: ex['order'] as int,
+          );
+        }).toList();
+
+        final sheetNameController = s['nameController'] as TextEditingController;
+
+        return CreateWorkoutSheetDTO(
+          workoutProgramId: '', // O backend associa automaticamente no fluxo de criação de programa
+          name: sheetNameController.text.trim().isEmpty ? 'Sem Nome' : sheetNameController.text.trim(),
+          dayOfWeek: s['day_of_week'] as int,
+          order: 1,
+          exercises: exercises,
+        );
+      }).toList();
+
+      final programDTO = CreateWorkoutProgramDTO(
+        userId: userId,
+        name: programName.trim().isEmpty ? 'Meu Treino Personalizado' : programName.trim(),
+        description: 'Programa personalizado criado pelo usuário.',
+        goal: programGoal.trim().isEmpty ? 'Hipertrofia' : programGoal.trim(),
+        workoutSheets: sheets,
+      );
+
+      final newProgram = await sheetProvider.createProgram(programDTO);
+      sheetProvider.selectProgram(newProgram);
+      await sheetProvider.loadSheets(workoutProgramId: newProgram.id);
+
+      setState(() {
+        _isSaving = false;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.white),
+                SizedBox(width: 8),
+                Text('Rotina criada e ativada com sucesso! 🚀'),
+              ],
+            ),
+            backgroundColor: AppColors.accentSuccess,
+          ),
+        );
+      }
+    } on NetworkException catch (e) {
+      setState(() {
+        _isSaving = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro de conexão: ${e.message}'), backgroundColor: AppColors.accentError),
+      );
+    } on ApiException catch (e) {
+      setState(() {
+        _isSaving = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro na API: ${e.message}'), backgroundColor: AppColors.accentError),
+      );
+    } catch (e) {
+      setState(() {
+        _isSaving = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao criar rotina: $e'), backgroundColor: AppColors.accentError),
+      );
+    }
+  }
+
+  Future<void> _showExerciseSearchCatalogDialog(StateSetter parentSetState, List<Map<String, dynamic>> addedExercises) async {
+    final item = await showExerciseCatalogPicker(context);
+    if (item != null) {
+      _showSetsAndLoadSetupDialog(parentSetState, addedExercises, item);
+    }
+  }
+
+  void _showSetsAndLoadSetupDialog(StateSetter parentSetState, List<Map<String, dynamic>> addedExercises, ExerciseCatalogItem item) {
+    final seriesController = TextEditingController(text: '4');
+    final repsController = TextEditingController(text: '10');
+    final loadController = TextEditingController(text: '15');
+    final restController = TextEditingController(text: '60');
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: Text('Ajustes: ${item.name}'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: seriesController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Séries (Séries totais)'),
+                ),
+                TextField(
+                  controller: repsController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Repetições por série'),
+                ),
+                TextField(
+                  controller: loadController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Carga Alvo (kg)'),
+                ),
+                TextField(
+                  controller: restController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Tempo de Descanso (segundos)'),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+            TextButton(
+              onPressed: () {
+                final series = int.tryParse(seriesController.text) ?? 4;
+                final reps = int.tryParse(repsController.text) ?? 10;
+                final load = double.tryParse(loadController.text) ?? 15.0;
+                final rest = int.tryParse(restController.text) ?? 60;
+
+                parentSetState(() {
+                  addedExercises.add({
+                    'name': item.name,
+                    'muscle_group': item.muscleGroupMapped ?? 'peito',
+                    'series': series,
+                    'repetitions': reps,
+                    'load_kg': load,
+                    'rest_seconds': rest,
+                    'gif_url': item.gifUrl,
+                    'image_url': item.imageUrl,
+                    'order': addedExercises.length + 1,
+                  });
+                });
+                Navigator.pop(ctx);
+              },
+              child: const Text('Adicionar'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // --- RENDERS DE ABAS ---
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: context.colors.background,
+      body: Stack(
+        children: [
+          SafeArea(
+            child: (_activeSheet != null && !_isSessionPaused) ? _buildActiveSessionView() : _buildMainLayout(),
+          ),
+          if (_showSuccessOverlay) _buildPremiumSuccessOverlay(),
+          if (_isSaving) _buildSavingOverlay(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMainLayout() {
+    return Column(
+      children: [
+        _buildTabBar(),
+        Expanded(
+          child: TabBarView(
+            controller: _tabController,
+            children: [
+              _buildMyWorkoutsTab(),
+              _buildProgressTab(),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTabBar() {
+    return TabBar(
+      controller: _tabController,
+      labelColor: AppColors.primary,
+      unselectedLabelColor: context.colors.textMuted,
+      indicatorColor: AppColors.primary,
+      indicatorSize: TabBarIndicatorSize.tab,
+      tabs: const [
+        Tab(text: 'Meus Treinos', icon: Icon(Icons.fitness_center)),
+        Tab(text: 'Meu Progresso', icon: Icon(Icons.analytics_outlined)),
+      ],
+    );
+  }
+
+  // ==========================================
+  // ABA "MEUS TREINOS"
+  // ==========================================
+  Widget _buildMyWorkoutsTab() {
+    return Consumer<WorkoutSheetProvider>(
+      builder: (context, provider, _) {
+        if (provider.isLoading && provider.programs.isEmpty) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (provider.error != null && provider.programs.isEmpty) {
+          return OmniErrorState(
+            message: 'Erro: ${provider.error}',
+            onRetry: _loadInitialData,
+          );
+        }
+
+        if (provider.programs.isEmpty) {
+          return OmniEmptyState(
+            icon: Icons.fitness_center_outlined,
+            title: 'Nenhuma rotina disponível',
+            subtitle: 'Crie uma rotina customizada no botão + ou aguarde seu personal prescrever.',
+            actionLabel: 'Criar Rotina Personalizada',
+            onAction: _openCustomRoutineBuilder,
+          );
+        }
+
+        final activeProgram = provider.selectedProgram ?? provider.programs.first;
+        
+        // Verifica sugestão de treino para hoje
+        WorkoutSheetListItem? todaySuggestedSheet;
+        final todayWeekday = DateTime.now().weekday - 1; // 0 = Segunda, 6 = Domingo
+        for (var sheet in provider.sheets) {
+          if (sheet.dayOfWeek == todayWeekday) {
+            todaySuggestedSheet = sheet;
+            break;
+          }
+        }
+
+        return RefreshIndicator(
+          onRefresh: _loadInitialData,
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              // Banner de sessão pausada (se houver)
+              if (_activeSheet != null && _isSessionPaused)
+                _buildPausedSessionBanner(),
+
+              // 1. Ativo Program Selector
+              _buildActiveProgramSelector(provider),
+              const SizedBox(height: 16),
+
+              // 2. Sugestão de Hoje (Efeito de entrada elegante, sem pulsação infinita)
+              if (todaySuggestedSheet != null) ...[
+                FadeInDown(
+                  duration: const Duration(milliseconds: 500),
+                  child: _buildTodaySuggestionCard(todaySuggestedSheet),
+                ),
+                const SizedBox(height: 16),
+              ],
+
+              // 3. Cabeçalho de Fichas do Programa Selecionado
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Fichas de Treino (${provider.sheets.length})',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  if (activeProgram.personalTrainerId == null) // Permite deletar programas criados pelo próprio aluno
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, color: AppColors.accentError, size: 20),
+                      onPressed: () => _confirmDeleteProgram(activeProgram.id),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 10),
+
+              // 4. Lista de Fichas / Sheets
+              if (provider.sheets.isEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(vertical: 30),
+                  alignment: Alignment.center,
+                  child: Text(
+                    'Nenhuma ficha atribuída a este programa.',
+                    style: TextStyle(color: context.colors.textMuted),
+                  ),
+                )
+              else
+                ...provider.sheets.map((sheet) => _buildSheetCard(sheet)),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildPausedSessionBanner() {
+    if (_activeSheet == null) return const SizedBox.shrink();
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withOpacity(0.15),
+        border: Border.all(color: AppColors.primary, width: 1.5),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppColors.primary,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.pause_circle_filled, color: Colors.white, size: 28),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'TREINO PAUSADO',
+                  style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1.1),
+                ),
+                Text(
+                  _activeSheet!.name,
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Tempo corrido: ${_formatDuration(_elapsedSeconds)}',
+                  style: TextStyle(color: context.colors.textSecondary, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            ),
+            icon: const Icon(Icons.play_arrow, size: 18),
+            label: const Text('Continuar', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+            onPressed: () {
+              setState(() {
+                _isSessionPaused = false;
+              });
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showExitActiveSessionModal() {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: context.colors.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Sessão em Andamento', style: TextStyle(color: context.colors.textPrimary, fontWeight: FontWeight.bold, fontSize: 18)),
+              IconButton(
+                icon: Icon(Icons.close, color: context.colors.textSecondary),
+                onPressed: () => Navigator.pop(ctx),
+              ),
+            ],
+          ),
+          content: Text(
+            'Você deseja cancelar esta sessão atual e perder o progresso, ou terminar depois?',
+            style: TextStyle(color: context.colors.textSecondary, fontSize: 14),
+          ),
+          actionsAlignment: MainAxisAlignment.spaceBetween,
+          actions: [
+            TextButton(
+              style: TextButton.styleFrom(foregroundColor: AppColors.accentError),
+              onPressed: () async {
+                Navigator.pop(ctx);
+                if (_activeSessionId != null) {
+                  try {
+                    await context.read<LogbookProvider>().deleteSession(_activeSessionId!);
+                  } catch (_) {}
+                }
+                setState(() {
+                  _activeSheet = null;
+                  _activeSessionId = null;
+                  _isSessionPaused = false;
+                  _chronometerTimer?.cancel();
+                  _restTimer?.cancel();
+                  _restTimerSeconds = null;
+                });
+              },
+              child: const Text('Cancelar Sessão', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              onPressed: () {
+                Navigator.pop(ctx);
+                setState(() {
+                  _isSessionPaused = true;
+                });
+              },
+              child: const Text('Terminar Depois', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildActiveProgramSelector(WorkoutSheetProvider provider) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Programa Ativo',
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Colors.grey),
+            ),
+            IconButton(
+              icon: const Icon(Icons.add_circle_outline, color: AppColors.primary, size: 20),
+              onPressed: _openCustomRoutineBuilder,
+              tooltip: 'Criar Rotina Customizada',
+              constraints: const BoxConstraints(),
+              padding: EdgeInsets.zero,
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: provider.programs.map((prog) {
+              final isSelected = provider.selectedProgram?.id == prog.id;
+              final isOfficial = prog.personalTrainerId != null;
+
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: GestureDetector(
+                  onTap: () async {
+                    provider.selectProgram(prog);
+                    await provider.loadSheets(workoutProgramId: prog.id);
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: isSelected ? AppColors.primary.withOpacity(0.12) : context.colors.surface,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: isSelected ? AppColors.primary : context.colors.border,
+                        width: isSelected ? 1.5 : 1,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (isSelected) ...[
+                          const Icon(Icons.check, size: 14, color: AppColors.primary),
+                          const SizedBox(width: 4),
+                        ],
+                        Text(
+                          prog.name, 
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                            color: isSelected ? AppColors.primary : context.colors.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: isOfficial ? Colors.amber[800] : Colors.blue[800],
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            isOfficial ? 'Oficial' : 'Personalizado',
+                            style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTodaySuggestionCard(WorkoutSheetListItem sheet) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [AppColors.primary, AppColors.primary.withOpacity(0.8)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withOpacity(0.3),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'SUGESTÃO PARA HOJE',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1.1),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(4)),
+                child: Text(
+                  dayOfWeekLabels[DateTime.now().weekday - 1]!,
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 10),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Treino ${sheet.name}',
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Foco do dia: ${sheet.exerciseCount} exercícios catalogados prontos para evolução!',
+            style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 12),
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            height: 38,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: AppColors.primary,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                elevation: 0,
+              ),
+              onPressed: () async {
+                // Carrega exercícios do treino sugerido para iniciar sessão ativa
+                final provider = context.read<WorkoutSheetProvider>();
+                await provider.loadSheetDetail(sheet.id);
+                if (provider.selectedSheet != null) {
+                  _startWorkoutSession(provider.selectedSheet!);
+                }
+              },
+              child: const Text('🚀 Iniciar Treino Ativo', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSheetCard(WorkoutSheetListItem sheet) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: context.colors.surface,
+        border: Border.all(color: context.colors.border, width: 1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: AppColors.primary.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Center(
+              child: Icon(Icons.fitness_center_outlined, color: AppColors.primary, size: 22),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(sheet.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                Text(sheet.dayOfWeekLabel, style: TextStyle(color: context.colors.textSecondary, fontSize: 12)),
+                const SizedBox(height: 2),
+                Text('${sheet.exerciseCount} exercícios', style: TextStyle(color: context.colors.textMuted, fontSize: 11)),
+              ],
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary.withOpacity(0.12),
+              foregroundColor: AppColors.primary,
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+            ),
+            onPressed: () async {
+              // Carrega exercícios do treino sugerido para iniciar sessão ativa
+              final provider = context.read<WorkoutSheetProvider>();
+              await provider.loadSheetDetail(sheet.id);
+              if (provider.selectedSheet != null) {
+                _startWorkoutSession(provider.selectedSheet!);
+              }
+            },
+            child: const Text('Iniciar', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDeleteProgram(String programId) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Deletar Programa Customizado'),
+        content: const Text('Tem certeza de que deseja deletar este programa personalizado e todas as suas fichas?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: AppColors.accentError),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await context.read<WorkoutSheetProvider>().deleteProgram(programId);
+              _loadInitialData();
+            },
+            child: const Text('Deletar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ==========================================
+  // VIEW DO TREINO ATIVO (HEVY STYLE LIVE WORKOUT)
+  // ==========================================
+  Widget _buildActiveSessionView() {
+    if (_activeSheet == null) return const SizedBox.shrink();
+
+    return Scaffold(
+      backgroundColor: context.colors.background,
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leading: IconButton(
+          icon: const Icon(Icons.close),
+          onPressed: _showExitActiveSessionModal,
+        ),
+        title: Row(
+          children: [
+            const Icon(Icons.circle, color: AppColors.accentError, size: 10),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(_activeSheet!.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  Text(
+                    'Duração: ${_formatDuration(_elapsedSeconds)}', 
+                    style: const TextStyle(fontFamily: 'monospace', fontSize: 12, color: AppColors.accentError, fontWeight: FontWeight.bold),
+                  ),
                 ],
               ),
             ),
-            if (_restTimerSeconds != null && _restTimerSeconds! > 0)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Container(
-                  padding: const EdgeInsets.all(12),
+          ],
+        ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+              ),
+              onPressed: _finishWorkout,
+              child: const Text('Finalizar', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+            ),
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          // Barra de Progresso Real das Séries do Treino
+          _buildActiveWorkoutProgressBar(),
+
+          // Countdown do Rest Timer se ativo
+          if (_restTimerSeconds != null && _restTimerSeconds! > 0)
+            _buildActiveRestTimerIndicator(),
+
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: _activeSheet!.exercises.length,
+              itemBuilder: (context, index) {
+                final ex = _activeSheet!.exercises[index];
+                return _buildActiveExerciseCard(ex);
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActiveWorkoutProgressBar() {
+    // Calcula o percentual total de séries marcadas
+    int totalSets = 0;
+    int completedSets = 0;
+
+    _setsChecked.forEach((_, list) {
+      totalSets += list.length;
+      completedSets += list.where((c) => c).length;
+    });
+
+    final pct = totalSets > 0 ? completedSets / totalSets : 0.0;
+
+    return Container(
+      color: context.colors.surface,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Progresso da Sessão', 
+                style: TextStyle(fontSize: 11, color: context.colors.textSecondary, fontWeight: FontWeight.w600),
+              ),
+              Text(
+                '$completedSets/$totalSets séries concluídas (${(pct * 100).toStringAsFixed(0)}%)',
+                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: pct,
+              minHeight: 6,
+              color: AppColors.primary,
+              backgroundColor: context.colors.surfaceLight,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActiveRestTimerIndicator() {
+    return SlideInDown(
+      duration: const Duration(milliseconds: 300),
+      child: Container(
+        color: AppColors.primary.withOpacity(0.12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.alarm, color: AppColors.primary, size: 18),
+                const SizedBox(width: 8),
+                const Text(
+                  'Tempo de Descanso: ',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.primary),
+                ),
+                Text(
+                  '${_restTimerSeconds! ~/ 60}:${(_restTimerSeconds! % 60).toString().padLeft(2, '0')}',
+                  style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.primary),
+                ),
+              ],
+            ),
+            InkWell(
+              onTap: () {
+                setState(() => _restTimerSeconds = null);
+                _restTimer?.cancel();
+              },
+              child: const Icon(Icons.close, color: AppColors.primary, size: 18),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActiveExerciseCard(ExerciseResponse ex) {
+    final checkedList = _setsChecked[ex.id] ?? [];
+    final loadsList = _setsLoads[ex.id] ?? [];
+    final repsList = _setsReps[ex.id] ?? [];
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: context.colors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: context.colors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Exercício Super Header
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                // Thumbnail
+                Container(
+                  width: 44,
+                  height: 44,
+                  margin: const EdgeInsets.only(right: 12),
                   decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    border: Border.all(color: AppColors.primary, width: 1),
-                    borderRadius: BorderRadius.circular(12),
+                    color: AppColors.primary.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: ex.imageUrl != null && ex.imageUrl!.isNotEmpty
+                        ? Image.network(
+                            ex.imageUrl!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) => Center(
+                              child: Text(
+                                _getMuscleGroupEmoji(ex.muscleGroup),
+                                style: const TextStyle(fontSize: 20),
+                              ),
+                            ),
+                          )
+                        : Center(
+                            child: Text(
+                              _getMuscleGroupEmoji(ex.muscleGroup),
+                              style: const TextStyle(fontSize: 20),
+                            ),
+                          ),
+                  ),
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         children: [
-                          const Icon(Icons.schedule, color: AppColors.primary, size: 20),
-                          const SizedBox(width: 8),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Descanso',
-                                  style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted)),
-                              Text('${_restTimerSeconds! ~/ 60}:${(_restTimerSeconds! % 60).toString().padLeft(2, '0')}',
-                                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                      fontFamily: 'monospace', fontWeight: FontWeight.bold, color: AppColors.primary)),
-                            ],
+                          Expanded(
+                            child: Text(
+                              ex.name,
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          IconButton(
+                            icon: const Icon(Icons.info_outline, size: 18, color: AppColors.primary),
+                            onPressed: () => _showExerciseInstructions(ex),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
                           ),
                         ],
                       ),
-                      Row(
-                        children: [
-                          IconButton(
-                            icon: Icon(_restTimer?.isActive ?? false ? Icons.pause : Icons.play_arrow,
-                                color: AppColors.primary, size: 20),
-                            onPressed: _restTimer?.isActive ?? false ? _pauseRestTimer : () => _startRestTimer(_restTimerSeconds!),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.close, color: AppColors.textMuted, size: 20),
-                            onPressed: () {
-                              _restTimer?.cancel();
-                              setState(() => _restTimerSeconds = null);
+                      const SizedBox(height: 2),
+                      Text(
+                        _getMuscleGroupName(ex.muscleGroup).toUpperCase(),
+                        style: TextStyle(color: context.colors.textMuted, fontSize: 10, letterSpacing: 1.1),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(color: context.colors.surfaceLight, borderRadius: BorderRadius.circular(4)),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.timer_outlined, size: 12, color: Colors.grey),
+                      const SizedBox(width: 2),
+                      Text('${ex.restSeconds}s', style: const TextStyle(fontSize: 10)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          // Table of sets
+          const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              children: [
+                const SizedBox(width: 35, child: Text('SÉRIE', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.grey))),
+                const Expanded(child: Center(child: Text('PESO (KG)', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.grey)))),
+                const Expanded(child: Center(child: Text('REPS', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.grey)))),
+                const SizedBox(width: 45, child: Center(child: Text('STATUS', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.grey)))),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: ex.series,
+            itemBuilder: (ctx, setIdx) {
+              final isChecked = checkedList.isNotEmpty ? checkedList[setIdx] : false;
+              final loadVal = loadsList.isNotEmpty ? loadsList[setIdx] : ex.loadKg;
+              final repsVal = repsList.isNotEmpty ? repsList[setIdx] : ex.repetitions;
+
+              return Container(
+                color: isChecked ? Colors.green.withOpacity(0.08) : Colors.transparent,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                child: Row(
+                  children: [
+                    // Set Index
+                    SizedBox(
+                      width: 35,
+                      child: CircleAvatar(
+                        radius: 10,
+                        backgroundColor: isChecked ? Colors.green : context.colors.border,
+                        child: Text(
+                          '${setIdx + 1}',
+                          style: TextStyle(fontSize: 10, color: isChecked ? Colors.white : context.colors.textPrimary, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                    
+                    // Load Input
+                    Expanded(
+                      child: Center(
+                        child: SizedBox(
+                          width: 65,
+                          height: 32,
+                          child: TextField(
+                            keyboardType: TextInputType.number,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                            decoration: InputDecoration(
+                              contentPadding: const EdgeInsets.all(4),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                            ),
+                            controller: _getLoadController(ex.id, setIdx, loadVal),
+                            onChanged: (val) {
+                              if (double.tryParse(val) != null) _onLoadChanged(ex.id, setIdx, val);
                             },
                           ),
+                        ),
+                      ),
+                    ),
+
+                    // Reps Input
+                    Expanded(
+                      child: Center(
+                        child: SizedBox(
+                          width: 65,
+                          height: 32,
+                          child: TextField(
+                            keyboardType: TextInputType.number,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                            decoration: InputDecoration(
+                              contentPadding: const EdgeInsets.all(4),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                            ),
+                            controller: _getRepsController(ex.id, setIdx, repsVal),
+                            onChanged: (val) {
+                              if (int.tryParse(val) != null) _onRepsChanged(ex.id, setIdx, val);
+                            },
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Checkbox/Check Button
+                    SizedBox(
+                      width: 45,
+                      child: Center(
+                        child: InkWell(
+                          onTap: () => _toggleSetCheck(ex.id, setIdx, ex.restSeconds),
+                          child: Container(
+                            width: 26,
+                            height: 26,
+                            decoration: BoxDecoration(
+                              color: isChecked ? Colors.green : Colors.grey[200],
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Icon(
+                              isChecked ? Icons.check : Icons.add_task,
+                              size: 16,
+                              color: isChecked ? Colors.white : Colors.grey[700],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+
+  // ==========================================
+  // ABA "MEU PROGRESSO" — NOVA VERSÃO
+  // ==========================================
+  Widget _buildProgressTab() {
+    return Consumer<LogbookProvider>(
+      builder: (context, provider, _) {
+        final List<Map<String, String>> availableExercises = [];
+        final Set<String> addedIds = {};
+        final sheetProvider = context.read<WorkoutSheetProvider>();
+        for (var program in sheetProvider.programs) {
+          for (var sheet in program.workoutSheets) {
+            for (var ex in sheet.exercises) {
+              if (!addedIds.contains(ex.id)) {
+                addedIds.add(ex.id);
+                availableExercises.add({'id': ex.id, 'name': ex.name});
+              }
+            }
+          }
+        }
+        for (var sess in provider.sessions) {
+          for (var ex in sess.exercises) {
+            final exId = ex.exerciseId.isNotEmpty ? ex.exerciseId : ex.id;
+            if (exId.isNotEmpty && !addedIds.contains(exId)) {
+              addedIds.add(exId);
+              availableExercises.add({'id': exId, 'name': ex.exerciseName});
+            }
+          }
+        }
+
+        return RefreshIndicator(
+          onRefresh: _loadProgressData,
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              const ActivityHeatmap(),
+              const SizedBox(height: 16),
+              const WorkoutHistorySection(),
+              const SizedBox(height: 16),
+              const PersonalRecordsCard(),
+              const SizedBox(height: 16),
+              const MuscleFocusBars(),
+              const SizedBox(height: 16),
+              ExerciseEvolutionCard(
+                availableExercises: availableExercises,
+                initialExerciseId:
+                    availableExercises.isNotEmpty ? availableExercises.first['id'] : null,
+              ),
+              const SizedBox(height: 30),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+    // ==========================================
+  // OVERLAY PREMIUM DE SUCESSO (CONFETES E CONQUISTAS)
+  // ==========================================
+  Widget _buildPremiumSuccessOverlay() {
+    return Positioned.fill(
+      child: FadeIn(
+        duration: const Duration(milliseconds: 400),
+        child: Container(
+          color: Colors.black.withOpacity(0.92),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ElasticIn(
+                duration: const Duration(milliseconds: 1200),
+                child: Container(
+                  width: 90,
+                  height: 90,
+                  decoration: const BoxDecoration(
+                    color: AppColors.accentSuccess,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.emoji_events, size: 50, color: Colors.white),
+                ),
+              ),
+              const SizedBox(height: 24),
+              
+              FadeInDown(
+                delay: const Duration(milliseconds: 400),
+                child: const Text(
+                  'TREINO CONCLUÍDO!',
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 26, letterSpacing: 1.5),
+                ),
+              ),
+              const SizedBox(height: 6),
+              FadeInUp(
+                delay: const Duration(milliseconds: 500),
+                child: Text(
+                  'Mais um passo gigante na sua evolução consistente.',
+                  style: TextStyle(color: Colors.grey[400], fontSize: 13),
+                ),
+              ),
+              const SizedBox(height: 32),
+
+              // Card de Conquistas da Sessão
+              FadeInUp(
+                delay: const Duration(milliseconds: 700),
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 40),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[900],
+                    border: Border.all(color: Colors.grey[800]!),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      Column(
+                        children: [
+                          const Text('🕒 Duração', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                          const SizedBox(height: 4),
+                          Text('$_lastWorkoutDuration min', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                        ],
+                      ),
+                      Container(width: 1, height: 35, color: Colors.grey[800]),
+                      Column(
+                        children: [
+                          const Text('🏋️ Volume Total', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                          const SizedBox(height: 4),
+                          Text('${_lastWorkoutTotalLoad.toStringAsFixed(0)} kg', style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: 16)),
                         ],
                       ),
                     ],
                   ),
                 ),
               ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: workout.exercises.length,
-                itemBuilder: (context, index) {
-                  final exercise = workout.exercises[index];
-                  final isCompleted = _completedExercises.contains(exercise.id);
+              const SizedBox(height: 40),
 
-                  return FadeInUp(
-                    delay: Duration(milliseconds: index * 50),
-                    child: GestureDetector(
-                      onTap: () => _toggleExercise(exercise.id),
-                      child: Container(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: AppColors.surface,
-                          border: Border.all(
-                            color: isCompleted ? AppColors.primary : AppColors.border,
-                            width: isCompleted ? 1.5 : 1,
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(
-                                  isCompleted ? Icons.check_circle : Icons.radio_button_unchecked,
-                                  color: isCompleted ? AppColors.primary : AppColors.textMuted,
-                                  size: 24,
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(exercise.name,
-                                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                              fontWeight: FontWeight.w600,
-                                              decoration: isCompleted ? TextDecoration.lineThrough : null,
-                                              color: isCompleted ? AppColors.textMuted : AppColors.textPrimary)),
-                                      Text(exercise.muscle,
-                                          style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted)),
-                                    ],
-                                  ),
-                                ),
-                                GestureDetector(
-                                  onTap: () => _startRestTimer(exercise.rest),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.surface,
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        const Icon(Icons.schedule, color: AppColors.primary, size: 14),
-                                        const SizedBox(width: 4),
-                                        Text('${exercise.rest}s',
-                                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                                color: AppColors.primary, fontWeight: FontWeight.bold)),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 8,
-                              children: [
-                                _buildExerciseChip('${exercise.sets} séries'),
-                                _buildExerciseChip('${exercise.reps} reps'),
-                                _buildExerciseChip('${exercise.load}kg'),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-            if (_completedExercises.length == workout.exercises.length)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              FadeInUp(
+                delay: const Duration(milliseconds: 1000),
                 child: SizedBox(
-                  width: double.infinity,
+                  width: 200,
+                  height: 44,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
                     onPressed: () {
-                      setState(() => _selectedWorkoutId = null);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('✅ Treino ${workout.name} finalizado!')),
-                      );
+                      setState(() {
+                        _showSuccessOverlay = false;
+                      });
                     },
-                    child: Text('✅ Finalizar Treino',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Colors.white, fontWeight: FontWeight.w600)),
+                    child: const Text('Excelente!', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                   ),
                 ),
               ),
-          ],
+            ],
+          ),
         ),
       ),
-      bottomNavigationBar: _buildBottomNav(),
     );
   }
 
-  Widget _buildExerciseChip(String text) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceLight,
-        borderRadius: BorderRadius.circular(6),
+  Widget _buildSavingOverlay() {
+    return Positioned.fill(
+      child: Container(
+        color: Colors.black.withOpacity(0.6),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Salvando treino...',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
-      child: Text(text,
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: AppColors.textMuted, fontSize: 11, fontWeight: FontWeight.w500)),
     );
   }
 
-  Widget _buildBottomNav() {
+  String _getMuscleGroupEmoji(String? group) {
+    if (group == null) return '🏃';
+    const emojis = {
+      'peito': '💪',
+      'costas': '🔙',
+      'costa': '🔙',
+      'ombro': '🏋️',
+      'ombros': '🏋️',
+      'bíceps': '💪',
+      'biceps': '💪',
+      'tríceps': '💪',
+      'triceps': '💪',
+      'antebraço': '🦾',
+      'core': '🎯',
+      'perna_anterior': '🦵',
+      'perna_posterior': '🦵',
+      'panturrilha': '🦶',
+    };
+    return emojis[group.toLowerCase()] ?? '🏃';
+  }
+
+  void _showExerciseInstructions(ExerciseResponse ex) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return _ExerciseInstructionsSheet(exercise: ex);
+      },
+    );
+  }
+}
+
+class _ExerciseInstructionsSheet extends StatefulWidget {
+  final ExerciseResponse exercise;
+
+  const _ExerciseInstructionsSheet({required this.exercise});
+
+  @override
+  State<_ExerciseInstructionsSheet> createState() => _ExerciseInstructionsSheetState();
+}
+
+class _ExerciseInstructionsSheetState extends State<_ExerciseInstructionsSheet> {
+  bool _isLoading = true;
+  ExerciseCatalogItem? _catalogItem;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchCatalogItem();
+  }
+
+  Future<void> _fetchCatalogItem() async {
+    try {
+      final sheetProvider = context.read<WorkoutSheetProvider>();
+      // Busca no catálogo por termo exato
+      final result = await sheetProvider.service.searchExerciseCatalog(
+        search: widget.exercise.name,
+        limit: 1,
+      );
+      if (mounted) {
+        setState(() {
+          if (result.data.isNotEmpty) {
+            _catalogItem = result.data.first;
+          }
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Erro ao carregar detalhes do catálogo.';
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final mediaUrl = widget.exercise.gifUrl ?? widget.exercise.imageUrl ?? _catalogItem?.gifUrl ?? _catalogItem?.imageUrl;
+    final String muscle = widget.exercise.muscleGroup;
+    final String? description = widget.exercise.observations;
+
     return Container(
+      height: MediaQuery.of(context).size.height * 0.85,
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border(top: BorderSide(color: AppColors.border, width: 1)),
+        color: context.colors.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      child: BottomNavigationBar(
-        currentIndex: _selectedNavIndex,
-        onTap: (index) {
-          setState(() => _selectedNavIndex = index);
-          final routes = [
-            AppRoutes.home,
-            AppRoutes.workouts,
-            AppRoutes.nutrition,
-            AppRoutes.chat,
-            AppRoutes.profile,
-          ];
-          context.go(routes[index]);
-        },
-        backgroundColor: AppColors.surface,
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: AppColors.primary,
-        unselectedItemColor: AppColors.textMuted,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home_outlined), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.fitness_center_outlined), label: 'Treinos'),
-          BottomNavigationBarItem(icon: Icon(Icons.restaurant_outlined), label: 'Nutrição'),
-          BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_outline), label: 'Chat'),
-          BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: 'Perfil'),
+      child: Column(
+        children: [
+          // Handle bar
+          Container(
+            margin: const EdgeInsets.only(top: 10, bottom: 4),
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: context.colors.border,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+
+          // Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.exercise.name,
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        muscle.toUpperCase(),
+                        style: TextStyle(color: context.colors.textMuted, fontSize: 10, letterSpacing: 1.1, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, size: 20),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Imagem ou GIF de Demonstração
+                  if (mediaUrl != null && mediaUrl.isNotEmpty) ...[
+                    Container(
+                      height: 220,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.02),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Image.network(
+                          mediaUrl,
+                          fit: BoxFit.contain,
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) return child;
+                            return const Center(
+                              child: CircularProgressIndicator(color: AppColors.primary),
+                            );
+                          },
+                          errorBuilder: (context, error, stackTrace) => const Center(
+                            child: Icon(Icons.image_not_supported_outlined, size: 40, color: Colors.grey),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+
+                  // Observações do Professor/Aluno
+                  if (description != null && description.trim().isNotEmpty) ...[
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.08),
+                        border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(Icons.notes, size: 16, color: AppColors.primary),
+                              SizedBox(width: 6),
+                              Text('Observações Técnicas', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.primary)),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            description,
+                            style: TextStyle(fontSize: 12, color: context.colors.textPrimary),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+
+                  // Chips Extras de Mídia
+                  if (_catalogItem != null) ...[
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        if (_catalogItem!.category != null)
+                          _buildExtraChip('Categoria: ${_catalogItem!.category!}', AppColors.primary),
+                        if (_catalogItem!.equipment != null)
+                          _buildExtraChip('Equipamento: ${_catalogItem!.equipment!}', AppColors.accent),
+                        if (_catalogItem!.level != null)
+                          _buildExtraChip('Nível: ${_catalogItem!.level!}', Colors.orange),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+
+                  // Instruções de passo a passo
+                  const Text(
+                    'Como Executar o Movimento',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                  ),
+                  const SizedBox(height: 12),
+
+                  if (_isLoading)
+                    const Center(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 20),
+                        child: CircularProgressIndicator(color: AppColors.primary),
+                      ),
+                    )
+                  else if (_errorMessage != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(vertical: 20),
+                      alignment: Alignment.center,
+                      child: Text(
+                        _errorMessage!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: AppColors.accentError, fontSize: 12),
+                      ),
+                    )
+                  else if (_catalogItem == null || _catalogItem!.instructions == null || _catalogItem!.instructions!.isEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(vertical: 20),
+                      alignment: Alignment.center,
+                      child: Text(
+                        'Sem instruções detalhadas de passo a passo para este movimento.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: context.colors.textMuted, fontSize: 12),
+                      ),
+                    )
+                  else
+                    ..._catalogItem!.instructions!.asMap().entries.map((stepEntry) {
+                      final idx = stepEntry.key;
+                      final instruction = stepEntry.value;
+
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              width: 22,
+                              height: 22,
+                              alignment: Alignment.center,
+                              decoration: const BoxDecoration(
+                                color: AppColors.primary,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Text(
+                                '${idx + 1}',
+                                style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                instruction,
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  color: context.colors.textPrimary,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                ],
+              ),
+            ),
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildExtraChip(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.08),
+        border: Border.all(color: color.withOpacity(0.3)),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold),
       ),
     );
   }

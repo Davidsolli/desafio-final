@@ -34,9 +34,17 @@ env/
 !.env.example
 firebase-credentials.json
 firebase-*.json
+serviceAccountKey.json
+google-services.json
+GoogleService-Info.plist
+# Exceção: permite rastrear o google-services.json no path correto do Android
+!frontend/android/app/google-services.json
+# Ignora o arquivo temporário deixado na raiz do frontend
+frontend/google-services.json
 
 # Volumes Locais do Docker
 postgres_data/
+docker.log
 
 # Banco de Dados SQLite (Caso venham a usar para testes locas)
 *.db

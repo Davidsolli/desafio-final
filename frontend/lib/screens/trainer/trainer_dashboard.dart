@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:animate_do/animate_do.dart';
 import '../../theme/app_colors.dart';
-import '../../routes/app_routes.dart';
+import '../../theme/theme_colors.dart';
 import '../../models/mock_data.dart';
+import '../../routes/app_routes.dart';
 
 class TrainerDashboard extends StatefulWidget {
   const TrainerDashboard({super.key});
@@ -42,19 +43,30 @@ class _TrainerDashboardState extends State<TrainerDashboard> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.background,
       body: SafeArea(
         child: Column(
           children: [
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Olá, Personal',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
-                  Text('Painel Profissional 👨‍🏫',
-                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Olá, Personal',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.textSecondary)),
+                      Text('Painel Profissional 👨‍🏫',
+                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.card_giftcard_outlined),
+                    color: AppColors.primary,
+                    onPressed: () => context.push(AppRoutes.generateInvite),
+                    tooltip: 'Gerar Códigos',
+                  ),
                 ],
               ),
             ),
@@ -69,17 +81,17 @@ class _TrainerDashboardState extends State<TrainerDashboard> {
                 controller: _searchController,
                 decoration: InputDecoration(
                   hintText: 'Buscar aluno...',
-                  hintStyle: const TextStyle(color: AppColors.textMuted),
-                  prefixIcon: const Icon(Icons.search, color: AppColors.textMuted),
+                  hintStyle: TextStyle(color: context.colors.textMuted),
+                  prefixIcon: Icon(Icons.search, color: context.colors.textMuted),
                   filled: true,
-                  fillColor: AppColors.surface,
+                  fillColor: context.colors.surface,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppColors.border),
+                    borderSide: BorderSide(color: context.colors.border),
                   ),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                 ),
-                style: const TextStyle(color: AppColors.textPrimary),
+                style: TextStyle(color: context.colors.textPrimary),
               ),
             ),
             const SizedBox(height: 16),
@@ -97,7 +109,7 @@ class _TrainerDashboardState extends State<TrainerDashboard> {
               child: _filteredStudents.isEmpty
                   ? Center(
                       child: Text('Nenhum aluno encontrado',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textMuted)),
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.textMuted)),
                     )
                   : ListView.builder(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -112,8 +124,8 @@ class _TrainerDashboardState extends State<TrainerDashboard> {
                               margin: const EdgeInsets.only(bottom: 12),
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: AppColors.surface,
-                                border: Border.all(color: AppColors.border, width: 1),
+                                color: context.colors.surface,
+                                border: Border.all(color: context.colors.border, width: 1),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Row(
@@ -143,7 +155,7 @@ class _TrainerDashboardState extends State<TrainerDashboard> {
                                         Text(student.name,
                                             style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
                                         Text('${student.goal} • ${student.lastSession}',
-                                            style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted)),
+                                            style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.colors.textMuted)),
                                       ],
                                     ),
                                   ),
@@ -154,7 +166,7 @@ class _TrainerDashboardState extends State<TrainerDashboard> {
                                       height: 24,
                                       child: LinearProgressIndicator(
                                         value: student.progress / 100,
-                                        backgroundColor: AppColors.surfaceLight,
+                                        backgroundColor: context.colors.surfaceLight,
                                         valueColor: const AlwaysStoppedAnimation(AppColors.primary),
                                       ),
                                     ),
@@ -164,7 +176,7 @@ class _TrainerDashboardState extends State<TrainerDashboard> {
                                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
                                           color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 11)),
                                   const SizedBox(width: 8),
-                                  const Icon(Icons.chevron_right, color: AppColors.textMuted, size: 20),
+                                  Icon(Icons.chevron_right, color: context.colors.textMuted, size: 20),
                                 ],
                               ),
                             ),
@@ -189,8 +201,8 @@ class _TrainerDashboardState extends State<TrainerDashboard> {
             child: Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: AppColors.surface,
-                border: Border.all(color: AppColors.border, width: 1),
+                color: context.colors.surface,
+                border: Border.all(color: context.colors.border, width: 1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Column(
@@ -199,7 +211,7 @@ class _TrainerDashboardState extends State<TrainerDashboard> {
                   const SizedBox(height: 6),
                   Text('${students.length}', style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
                   Text('Alunos Ativos',
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted), textAlign: TextAlign.center),
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.colors.textMuted), textAlign: TextAlign.center),
                 ],
               ),
             ),
@@ -212,8 +224,8 @@ class _TrainerDashboardState extends State<TrainerDashboard> {
             child: Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: AppColors.surface,
-                border: Border.all(color: AppColors.border, width: 1),
+                color: context.colors.surface,
+                border: Border.all(color: context.colors.border, width: 1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Column(
@@ -222,7 +234,7 @@ class _TrainerDashboardState extends State<TrainerDashboard> {
                   const SizedBox(height: 6),
                   Text('3x', style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
                   Text('Freq. Média',
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppColors.textMuted), textAlign: TextAlign.center),
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.colors.textMuted), textAlign: TextAlign.center),
                 ],
               ),
             ),
@@ -242,8 +254,8 @@ class _TrainerDashboardState extends State<TrainerDashboard> {
 
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border(top: BorderSide(color: AppColors.border, width: 1)),
+        color: context.colors.surface,
+        border: Border(top: BorderSide(color: context.colors.border, width: 1)),
       ),
       child: BottomNavigationBar(
         currentIndex: _selectedNavIndex,
@@ -257,10 +269,10 @@ class _TrainerDashboardState extends State<TrainerDashboard> {
           ];
           context.go(routes[index]);
         },
-        backgroundColor: AppColors.surface,
+        backgroundColor: context.colors.surface,
         type: BottomNavigationBarType.fixed,
         selectedItemColor: AppColors.primary,
-        unselectedItemColor: AppColors.textMuted,
+        unselectedItemColor: context.colors.textMuted,
         items: trainerNavItems
             .map((item) => BottomNavigationBarItem(
                   icon: Icon(item['icon'] as IconData, size: 24),

@@ -1,21 +1,283 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_web_plugins/url_strategy.dart';
+import 'package:provider/provider.dart';
 import 'theme/app_theme.dart';
+import 'theme/theme_provider.dart';
 import 'routes/app_routes.dart';
+import 'services/api_client.dart';
+import 'services/auth_service.dart';
+import 'services/user_service.dart';
+import 'services/goal_service.dart';
+import 'services/logbook_service.dart';
+import 'services/nutrition_service.dart';
+import 'services/workout_sheet_service.dart';
+import 'services/invitation_service.dart';
+import 'services/admin_service.dart';
+import 'services/admin_metrics_service.dart';
+import 'services/chat_service.dart';
+import 'services/payment_service.dart';
+import 'providers/payment_provider.dart';
+import 'services/step_service.dart';
+import 'providers/auth_provider.dart';
+import 'providers/user_provider.dart';
+import 'providers/goal_provider.dart';
+import 'providers/logbook_provider.dart';
+import 'providers/nutrition_provider.dart';
+import 'providers/workout_sheet_provider.dart';
+import 'providers/invitation_provider.dart';
+import 'providers/admin_provider.dart';
+import 'providers/admin_metrics_provider.dart';
+import 'providers/step_provider.dart';
 
-void main() {
-  runApp(const OmniConnectApp());
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'services/notification_service.dart';
+
+void main() async {
+  usePathUrlStrategy();
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Inicializa API Client
+  final apiClient = ApiClient();
+  await apiClient.initialize();
+
+  // Inicializa ThemeProvider (carrega preferência salva)
+  final themeProvider = ThemeProvider();
+  await themeProvider.init();
+
+  // NotificationService é registrado em todas as plataformas para que telas
+  // de notificações/preferências consumam o Provider sem branching por plataforma.
+  // Em Web pulamos apenas initialize() (firebase_messaging v14 não suporta).
+  final notificationService = NotificationService(apiClient: apiClient);
+  if (!kIsWeb) {
+    try {
+      await notificationService.initialize();
+    } catch (e) {
+      debugPrint('Erro ao inicializar notificações: $e');
+    }
+  }
+
+  runApp(OmniConnectApp(
+    apiClient: apiClient,
+    themeProvider: themeProvider,
+    notificationService: notificationService,
+  ));
 }
 
 class OmniConnectApp extends StatelessWidget {
-  const OmniConnectApp({Key? key}) : super(key: key);
+  final ApiClient apiClient;
+  final ThemeProvider themeProvider;
+  final NotificationService notificationService;
+
+  const OmniConnectApp({
+    Key? key,
+    required this.apiClient,
+    required this.themeProvider,
+    required this.notificationService,
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp.router(
-      title: 'OmniConnect Fitness',
-      theme: AppTheme.darkTheme,
-      routerConfig: AppRoutes.router,
-      debugShowCheckedModeBanner: false,
+    return MultiProvider(
+      providers: [
+        // API Client (singleton)
+        Provider<ApiClient>.value(value: apiClient),
+
+        // Notification Service (registrado em todas as plataformas; Web usa stub)
+        Provider<NotificationService>.value(value: notificationService),
+
+        // Auth Service (depende de ApiClient)
+        ProxyProvider<ApiClient, AuthService>(
+          update: (_, apiClient, _) => AuthService(apiClient: apiClient),
+        ),
+
+        // User Service (depende de ApiClient)
+        ProxyProvider<ApiClient, UserService>(
+          update: (_, apiClient, _) => UserService(apiClient: apiClient),
+        ),
+
+        // Goal Service (depende de ApiClient)
+        ProxyProvider<ApiClient, GoalService>(
+          update: (_, apiClient, _) => GoalService(apiClient: apiClient),
+        ),
+
+        // Logbook Service (depende de ApiClient)
+        ProxyProvider<ApiClient, LogbookService>(
+          update: (_, apiClient, _) => LogbookService(apiClient: apiClient),
+        ),
+
+        // Nutrition Service (depende de ApiClient)
+        ProxyProvider<ApiClient, NutritionService>(
+          update: (_, apiClient, _) => NutritionService(apiClient: apiClient),
+        ),
+
+        // WorkoutSheet Service (depende de ApiClient)
+        ProxyProvider<ApiClient, WorkoutSheetService>(
+          update: (_, apiClient, _) => WorkoutSheetService(apiClient: apiClient),
+        ),
+
+        // Invitation Service (depende de ApiClient)
+        ProxyProvider<ApiClient, InvitationService>(
+          update: (_, apiClient, _) => InvitationService(apiClient: apiClient),
+        ),
+
+        // Admin Service (depende de ApiClient)
+        ProxyProvider<ApiClient, AdminService>(
+          update: (_, apiClient, _) => AdminService(apiClient: apiClient),
+        ),
+
+        // Chat Service (depende de ApiClient)
+        ProxyProvider<ApiClient, ChatService>(
+          update: (_, apiClient, _) => ChatService(apiClient: apiClient),
+        ),
+
+        // Step Service (depende de ApiClient)
+        ProxyProvider<ApiClient, StepService>(
+          update: (_, apiClient, _) => StepService(apiClient: apiClient),
+        ),
+
+        // Admin Metrics Service (depende de ApiClient)
+        ProxyProvider<ApiClient, AdminMetricsService>(
+          update: (_, apiClient, _) => AdminMetricsService(apiClient: apiClient),
+        ),
+
+        // Payment Service (depende de ApiClient)
+        ProxyProvider<ApiClient, PaymentService>(
+          update: (_, apiClient, __) => PaymentService(apiClient: apiClient),
+        ),
+
+        // Auth Provider (depende de AuthService)
+        ChangeNotifierProxyProvider<AuthService, AuthProvider>(
+          create: (context) => AuthProvider(
+            authService: context.read<AuthService>(),
+          ),
+          update: (_, authService, previous) {
+            return previous ?? AuthProvider(authService: authService);
+          },
+        ),
+
+        // User Provider (depende de UserService)
+        ChangeNotifierProxyProvider<UserService, UserProvider>(
+          create: (context) => UserProvider(
+            userService: context.read<UserService>(),
+          ),
+          update: (_, userService, previous) {
+            return previous ?? UserProvider(userService: userService);
+          },
+        ),
+
+        // Goal Provider (depende de GoalService)
+        ChangeNotifierProxyProvider<GoalService, GoalProvider>(
+          create: (context) => GoalProvider(
+            goalService: context.read<GoalService>(),
+          ),
+          update: (_, goalService, previous) {
+            return previous ?? GoalProvider(goalService: goalService);
+          },
+        ),
+
+        // Logbook Provider (depende de LogbookService)
+        ChangeNotifierProxyProvider<LogbookService, LogbookProvider>(
+          create: (context) => LogbookProvider(
+            logbookService: context.read<LogbookService>(),
+          ),
+          update: (_, logbookService, previous) {
+            return previous ?? LogbookProvider(logbookService: logbookService);
+          },
+        ),
+
+        // Nutrition Provider (depende de NutritionService)
+        ChangeNotifierProxyProvider<NutritionService, NutritionProvider>(
+          create: (context) => NutritionProvider(
+            nutritionService: context.read<NutritionService>(),
+          ),
+          update: (_, nutritionService, previous) {
+            return previous ?? NutritionProvider(nutritionService: nutritionService);
+          },
+        ),
+
+        // WorkoutSheet Provider (depende de WorkoutSheetService)
+        ChangeNotifierProxyProvider<WorkoutSheetService, WorkoutSheetProvider>(
+          create: (context) => WorkoutSheetProvider(
+            workoutSheetService: context.read<WorkoutSheetService>(),
+          ),
+          update: (_, workoutSheetService, previous) {
+            return previous ?? WorkoutSheetProvider(workoutSheetService: workoutSheetService);
+          },
+        ),
+
+        // Invitation Provider (depende de ApiClient)
+        ChangeNotifierProxyProvider<ApiClient, InvitationProvider>(
+          create: (context) => InvitationProvider(
+            apiClient: context.read<ApiClient>(),
+          ),
+          update: (_, apiClient, previous) {
+            return previous ?? InvitationProvider(apiClient: apiClient);
+          },
+        ),
+
+        // Admin Provider (depende de AdminService)
+        ChangeNotifierProxyProvider<AdminService, AdminProvider>(
+          create: (context) => AdminProvider(
+            service: context.read<AdminService>(),
+          ),
+          update: (_, adminService, previous) {
+            return previous ?? AdminProvider(service: adminService);
+          },
+        ),
+
+        // Step Provider (depende de StepService) — sensor de passos
+        ChangeNotifierProxyProvider<StepService, StepProvider>(
+          create: (context) => StepProvider(
+            stepService: context.read<StepService>(),
+          ),
+          update: (_, stepService, previous) {
+            return previous ?? StepProvider(stepService: stepService);
+          },
+        ),
+
+        // Payment Provider (depende de PaymentService)
+        ChangeNotifierProxyProvider<PaymentService, PaymentProvider>(
+          create: (context) => PaymentProvider(
+            paymentService: context.read<PaymentService>(),
+          ),
+          update: (_, paymentService, previous) {
+            return previous ?? PaymentProvider(paymentService: paymentService);
+          },
+        ),
+
+        // Admin Metrics Provider (depende de AdminMetricsService)
+        ChangeNotifierProxyProvider<AdminMetricsService, AdminMetricsProvider>(
+          create: (context) => AdminMetricsProvider(
+            service: context.read<AdminMetricsService>(),
+          ),
+          update: (_, metricsService, previous) {
+            return previous ?? AdminMetricsProvider(service: metricsService);
+          },
+        ),
+      ],
+      child: ChangeNotifierProvider.value(
+        value: themeProvider,
+        child: Consumer<ThemeProvider>(
+          builder: (_, provider, __) => MaterialApp.router(
+            title: 'FitLoop',
+            theme: AppTheme.lightTheme,
+            darkTheme: AppTheme.darkTheme,
+            themeMode: provider.themeMode,
+            routerConfig: AppRoutes.router,
+            debugShowCheckedModeBanner: false,
+            localizationsDelegates: const [
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            supportedLocales: const [
+              Locale('pt', 'BR'),
+              Locale('en', 'US'),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

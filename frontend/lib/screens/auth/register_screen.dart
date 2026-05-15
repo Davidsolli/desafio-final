@@ -1,10 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 import '../../theme/app_colors.dart';
+import '../../theme/theme_colors.dart';
 import '../../routes/app_routes.dart';
+import '../../providers/auth_provider.dart';
+import '../../providers/invitation_provider.dart';
+import '../../shared/widgets/index.dart';
 
 class RegisterScreen extends StatefulWidget {
-  const RegisterScreen({Key? key}) : super(key: key);
+  final String? invitationCode;
+
+  const RegisterScreen({
+    super.key,
+    this.invitationCode,
+  });
 
   @override
   State<RegisterScreen> createState() => _RegisterScreenState();
@@ -13,12 +23,36 @@ class RegisterScreen extends StatefulWidget {
 class _RegisterScreenState extends State<RegisterScreen> {
   int _currentStep = 0;
   bool _isLoading = false;
+  bool _prefillLoaded = false;
+  late String? _invitationCode;
 
   // Step 1
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  bool _obscurePassword = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _invitationCode = widget.invitationCode;
+    if (_invitationCode != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadPrefill());
+    }
+  }
+
+  Future<void> _loadPrefill() async {
+    final prefill = await context
+        .read<InvitationProvider>()
+        .fetchPrefill(_invitationCode!);
+
+    if (!mounted || prefill == null || !prefill.found) return;
+
+    setState(() {
+      _prefillLoaded = true;
+      if (prefill.name != null) _nameController.text = prefill.name!;
+      if (prefill.email != null) _emailController.text = prefill.email!;
+    });
+  }
 
   // Step 2
   final _weightController = TextEditingController();
@@ -50,9 +84,53 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (_currentStep < 2) {
       setState(() => _currentStep++);
     } else {
-      setState(() => _isLoading = true);
-      await Future.delayed(const Duration(milliseconds: 1200));
-      if (mounted) context.go(AppRoutes.home);
+      final name = _nameController.text.trim();
+      final email = _emailController.text.trim();
+      final password = _passwordController.text;
+
+      if (name.isEmpty || email.isEmpty || password.isEmpty) {
+        _showError('Nome, email e senha são obrigatórios');
+        return;
+      }
+
+      try {
+        setState(() => _isLoading = true);
+
+        final weight = double.tryParse(_weightController.text);
+        final height = double.tryParse(_heightController.text);
+        final userAge = int.tryParse(_ageController.text);
+
+        final authProvider = context.read<AuthProvider>();
+        await authProvider.register(
+          name: name,
+          email: email,
+          password: password,
+          role: 'client',
+          weightKg: weight,
+          heightCm: height,
+          age: userAge,
+          goalType: _selectedGoal,
+          invitationCode: _invitationCode,
+        );
+
+        // Faz login automático após registro
+        await authProvider.login(
+          email: email,
+          password: password,
+        );
+
+        if (mounted) {
+          context.go(AppRoutes.home);
+        }
+      } catch (e) {
+        if (mounted) {
+          _showError(e.toString());
+        }
+      } finally {
+        if (mounted) {
+          setState(() => _isLoading = false);
+        }
+      }
     }
   }
 
@@ -60,14 +138,24 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (_currentStep > 0) {
       setState(() => _currentStep--);
     } else {
-      context.pop();
+      context.go(AppRoutes.login);
     }
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 3),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.background,
       body: SafeArea(
         child: Column(
           children: [
@@ -96,7 +184,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         children: [
           GestureDetector(
             onTap: _back,
-            child: const Icon(Icons.chevron_left, color: AppColors.textSecondary, size: 28),
+            child: Icon(Icons.chevron_left, color: context.colors.textSecondary, size: 28),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -108,7 +196,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     margin: EdgeInsets.only(right: i < 2 ? 6 : 0),
                     height: 4,
                     decoration: BoxDecoration(
-                      color: active ? AppColors.primary : AppColors.surfaceLighter,
+                      color: active ? AppColors.primary : context.colors.surfaceLighter,
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -119,7 +207,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           const SizedBox(width: 12),
           Text(
             '${_currentStep + 1}/3',
-            style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+            style: TextStyle(color: context.colors.textSecondary, fontSize: 13),
           ),
         ],
       ),
@@ -130,22 +218,64 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: 24),
-        const Text('Dados Pessoais',
-            style: TextStyle(color: AppColors.textPrimary, fontSize: 22, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 6),
+        const SizedBox(height: 4),
+        Text('Dados Pessoais',
+            style: TextStyle(color: context.colors.textPrimary, fontSize: 22, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 2),
         const Text('Vamos começar com o básico',
             style: TextStyle(color: AppColors.primary, fontSize: 14)),
-        const SizedBox(height: 28),
-        _label('Nome completo'),
-        _input(_nameController, 'Seu nome'),
+        if (_prefillLoaded) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.green.withValues(alpha: 0.1),
+              border: Border.all(color: Colors.green.withValues(alpha: 0.4)),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Row(
+              children: [
+                Text('✅', style: TextStyle(fontSize: 14)),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Dados preenchidos do seu pré-cadastro via WhatsApp',
+                    style: TextStyle(color: Colors.green, fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
         const SizedBox(height: 16),
-        _label('Email'),
-        _input(_emailController, 'seu@email.com', keyboardType: TextInputType.emailAddress),
-        const SizedBox(height: 16),
-        _label('Senha'),
-        _inputPassword(),
-        const SizedBox(height: 32),
+        OmniTextField(
+          controller: _nameController,
+          labelText: 'Nome completo',
+          hintText: 'Seu nome',
+          prefixIcon: Icons.person_outline,
+        ),
+        const SizedBox(height: 12),
+        OmniTextField(
+          controller: _emailController,
+          labelText: 'Email',
+          hintText: 'seu@email.com',
+          keyboardType: TextInputType.emailAddress,
+          prefixIcon: Icons.email_outlined,
+        ),
+        const SizedBox(height: 12),
+        OmniTextField(
+          controller: _passwordController,
+          labelText: 'Senha',
+          hintText: '••••••••',
+          obscureText: true,
+          prefixIcon: Icons.lock_outlined,
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Mín. 8 caracteres: maiúscula, minúscula, número e caractere especial',
+          style: TextStyle(color: context.colors.textSecondary, fontSize: 11),
+        ),
+        const SizedBox(height: 8),
       ],
     );
   }
@@ -154,22 +284,37 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: 24),
-        const Text('Dados Corporais',
-            style: TextStyle(color: AppColors.textPrimary, fontSize: 22, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 6),
+        const SizedBox(height: 4),
+        Text('Dados Corporais',
+            style: TextStyle(color: context.colors.textPrimary, fontSize: 22, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 2),
         const Text('Para cálculos personalizados',
             style: TextStyle(color: AppColors.primary, fontSize: 14)),
-        const SizedBox(height: 28),
-        _label('Peso (kg)'),
-        _input(_weightController, '78', keyboardType: TextInputType.number),
         const SizedBox(height: 16),
-        _label('Altura (cm)'),
-        _input(_heightController, '175', keyboardType: TextInputType.number),
-        const SizedBox(height: 16),
-        _label('Idade'),
-        _input(_ageController, '27', keyboardType: TextInputType.number),
-        const SizedBox(height: 32),
+        OmniTextField(
+          controller: _weightController,
+          labelText: 'Peso (kg)',
+          hintText: '78',
+          keyboardType: TextInputType.number,
+          prefixIcon: Icons.fitness_center_outlined,
+        ),
+        const SizedBox(height: 12),
+        OmniTextField(
+          controller: _heightController,
+          labelText: 'Altura (cm)',
+          hintText: '175',
+          keyboardType: TextInputType.number,
+          prefixIcon: Icons.straighten_outlined,
+        ),
+        const SizedBox(height: 12),
+        OmniTextField(
+          controller: _ageController,
+          labelText: 'Idade',
+          hintText: '27',
+          keyboardType: TextInputType.number,
+          prefixIcon: Icons.cake_outlined,
+        ),
+        const SizedBox(height: 8),
       ],
     );
   }
@@ -178,15 +323,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: 24),
-        const Text('Seu Objetivo',
-            style: TextStyle(color: AppColors.textPrimary, fontSize: 22, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 6),
+        const SizedBox(height: 4),
+        Text('Seu Objetivo',
+            style: TextStyle(color: context.colors.textPrimary, fontSize: 22, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 2),
         const Text('Escolha seu foco principal',
             style: TextStyle(color: AppColors.primary, fontSize: 14)),
-        const SizedBox(height: 24),
+        const SizedBox(height: 8),
         ...(_goals.map((g) => _buildGoalOption(g)).toList()),
-        const SizedBox(height: 32),
+        const SizedBox(height: 8),
       ],
     );
   }
@@ -199,9 +344,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          color: selected ? AppColors.primary.withValues(alpha: 0.12) : AppColors.surface,
+          color: selected ? AppColors.primary.withValues(alpha: 0.12) : context.colors.surface,
           border: Border.all(
-            color: selected ? AppColors.primary : AppColors.border,
+            color: selected ? AppColors.primary : context.colors.border,
           ),
           borderRadius: BorderRadius.circular(12),
         ),
@@ -214,11 +359,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
               children: [
                 Text(goal['title']!,
                     style: TextStyle(
-                        color: selected ? AppColors.primary : AppColors.textPrimary,
+                        color: selected ? AppColors.primary : context.colors.textPrimary,
                         fontWeight: FontWeight.bold,
                         fontSize: 15)),
                 Text(goal['subtitle']!,
-                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                    style: TextStyle(color: context.colors.textSecondary, fontSize: 12)),
               ],
             ),
           ],
@@ -233,88 +378,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-      child: SizedBox(
+      child: OmniButton(
+        text: isLast ? 'Criar Conta' : 'Próximo',
+        onPressed: (canProceed && !_isLoading) ? _next : null,
+        isLoading: _isLoading,
         width: double.infinity,
         height: 52,
-        child: ElevatedButton(
-          onPressed: (canProceed && !_isLoading) ? _next : null,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.primary,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          ),
-          child: _isLoading
-              ? const SizedBox(
-                  height: 20,
-                  width: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                )
-              : Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(isLast ? 'Criar Conta' : 'Próximo',
-                        style: const TextStyle(
-                            color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
-                    if (!isLast) ...[
-                      const SizedBox(width: 6),
-                      const Icon(Icons.chevron_right, color: Colors.white, size: 20),
-                    ],
-                  ],
-                ),
-        ),
       ),
     );
   }
 
-  Widget _label(String text) => Padding(
-        padding: const EdgeInsets.only(bottom: 6),
-        child: Text(text,
-            style: const TextStyle(
-                color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w500)),
-      );
-
-  Widget _input(
-    TextEditingController controller,
-    String hint, {
-    TextInputType? keyboardType,
-  }) =>
-      TextField(
-        controller: controller,
-        keyboardType: keyboardType,
-        style: const TextStyle(color: AppColors.textPrimary),
-        decoration: InputDecoration(
-          hintText: hint,
-          hintStyle: const TextStyle(color: AppColors.textMuted),
-          filled: true,
-          fillColor: AppColors.surfaceLight,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
-          ),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        ),
-      );
-
-  Widget _inputPassword() => TextField(
-        controller: _passwordController,
-        obscureText: _obscurePassword,
-        style: const TextStyle(color: AppColors.textPrimary),
-        decoration: InputDecoration(
-          hintText: '••••••••',
-          hintStyle: const TextStyle(color: AppColors.textMuted),
-          filled: true,
-          fillColor: AppColors.surfaceLight,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
-          ),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          suffixIcon: IconButton(
-            icon: Icon(
-              _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-              color: AppColors.textMuted,
-            ),
-            onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-          ),
-        ),
-      );
 }

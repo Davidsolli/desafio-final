@@ -10,6 +10,7 @@ Endpoints:
 """
 
 from uuid import UUID
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,10 +20,16 @@ from app.dtos.user_dto import (
     UpdateUserDTO,
     UserResponseDTO,
     PaginatedUsersResponseDTO,
+    UpdateThemePreferenceDTO,
+    UpdateTimezoneDTO,
 )
+from app.dtos.auth_dto import ChangePasswordDTO
 from app.controllers.user_controller import UserController
-from app.services.user_service import UserAlreadyExistsError, UserNotFoundError
+from app.services.user_service import UserAlreadyExistsError, UserNotFoundError, InvalidInvitationError, InvalidCredentialsError
 from app.config.database import get_db
+from app.dependencies.auth import get_current_user
+from app.models.user import User
+from app.utils.role_utils import is_professional
 
 router = APIRouter(
     prefix="/api/v1/users",
@@ -57,11 +64,15 @@ async def create_user(
     - email: Email válido e único
     - password: Senha forte (8+ chars, maiúscula, minúscula, número, caractere especial)
     - role: admin, personal_trainer ou client
-    - phone_whatsapp: +55 XX XXXXX-XXXX
+    - weight_kg: Peso em kg (opcional)
+    - height_cm: Altura em cm (opcional)
+    - age: Idade em anos (opcional)
+    - goal_type: Objetivo de treino (opcional)
+    - invitation_code: Código de convite (obrigatório para clientes, opcional para personal trainers e admins)
 
     **Responses:**
     - 201: Usuário criado
-    - 400: Validação falhou
+    - 400: Validação falhou ou código de convite inválido
     - 409: Email duplicado
     """
     controller = UserController(session)
@@ -73,11 +84,106 @@ async def create_user(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(e),
         )
+    except InvalidInvitationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Erro ao criar usuário",
         )
+
+
+@router.get(
+    "/students",
+    response_model=PaginatedUsersResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Listar alunos do personal trainer ou todos (admin)",
+    responses={
+        200: {"description": "Lista de alunos retornada"},
+        401: {"description": "Não autenticado"},
+        403: {"description": "Acesso negado (requer personal_trainer ou admin)"},
+    },
+)
+async def list_students(
+    trainer_id: UUID = Query(None, description="UUID do trainer (admin only)"),
+    page: int = Query(1, ge=1, description="Número da página"),
+    limit: int = Query(10, ge=1, le=100, description="Itens por página"),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> PaginatedUsersResponseDTO:
+    """
+    Listar alunos (clientes).
+
+    **Requer autenticação:** Apenas personal_trainer e admin.
+
+    **Query parameters:**
+    - trainer_id: UUID do trainer (apenas admin, para filtrar alunos de um trainer específico)
+    - page: Página (padrão: 1)
+    - limit: Itens por página (padrão: 10, máximo: 100)
+
+    **Comportamento:**
+    - Personal trainer: Lista seus próprios alunos (ignora trainer_id)
+    - Admin: Lista alunos do trainer_id especificado, ou TODOS se trainer_id not provided
+
+    **Response:**
+    - total: Total de alunos
+    - page: Página atual
+    - limit: Itens por página
+    - data: Lista de alunos (clientes)
+
+    **Segurança:**
+    - Personal trainer só vê seus próprios alunos
+    - Admin pode filtrar por trainer_id ou ver todos
+    - Trainer_id ignorado para personal_trainer (sempre vê seus alunos)
+    """
+    if is_professional(current_user.role):
+        # Qualquer profissional (personal, nutricionista, ou dual) vê seus próprios alunos
+        target_trainer_id = current_user.id
+    elif current_user.role == "admin":
+        # Admin pode filtrar por trainer_id ou ver todos
+        target_trainer_id = trainer_id  # None = todos os alunos
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Apenas profissionais ou admin podem listar alunos",
+        )
+
+    controller = UserController(session)
+
+    try:
+        return await controller.get_students(target_trainer_id, page=page, limit=limit)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro ao listar alunos",
+        )
+
+
+@router.get(
+    "/me",
+    response_model=UserResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Obter perfil do usuário autenticado",
+    responses={
+        200: {"description": "Perfil do usuário retornado"},
+        401: {"description": "Não autenticado"},
+    },
+)
+async def get_current_user_profile(
+    current_user: User = Depends(get_current_user),
+) -> UserResponseDTO:
+    """
+    Obter dados do perfil do usuário autenticado.
+
+    **Requer autenticação:** Usuário deve estar logado.
+
+    **Response:**
+    - Dados completos do usuário autenticado (sem senha)
+    """
+    return UserResponseDTO.model_validate(current_user)
 
 
 @router.get(
@@ -87,19 +193,30 @@ async def create_user(
     summary="Listar usuários com paginação",
     responses={
         200: {"description": "Lista de usuários retornada"},
+        401: {"description": "Não autenticado"},
+        403: {"description": "Acesso negado (requer admin ou personal_trainer)"},
     },
 )
 async def list_users(
     page: int = Query(1, ge=1, description="Número da página"),
     limit: int = Query(10, ge=1, le=100, description="Itens por página"),
+    role: Optional[str] = Query(None, description="Filtrar por role (admin, personal_trainer, client)"),
+    trainer_id: Optional[UUID] = Query(None, description="Filtrar alunos de um trainer específico"),
+    include_inactive: bool = Query(False, description="Incluir usuários inativos"),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ) -> PaginatedUsersResponseDTO:
     """
-    Listar todos os usuários com suporte a paginação.
+    Listar todos os usuários com suporte a paginação e filtros.
+
+    **Requer autenticação:** Apenas admin ou personal_trainer.
 
     **Query parameters:**
     - page: Página (padrão: 1)
     - limit: Itens por página (padrão: 10, máximo: 100)
+    - role: Filtrar por role (admin, personal_trainer, client)
+    - trainer_id: Filtrar alunos vinculados a um trainer específico
+    - include_inactive: Se true, inclui usuários inativos (padrão: false)
 
     **Response:**
     - total: Total de usuários no banco
@@ -107,10 +224,16 @@ async def list_users(
     - limit: Itens por página
     - data: Lista de usuários
     """
+    if current_user.role != "admin" and not is_professional(current_user.role):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Apenas admin ou profissionais podem listar usuários",
+        )
+
     controller = UserController(session)
 
     try:
-        return await controller.list_users(page=page, limit=limit)
+        return await controller.list_users(page=page, limit=limit, role=role, trainer_id=trainer_id, include_inactive=include_inactive)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -125,15 +248,23 @@ async def list_users(
     summary="Buscar usuário por ID",
     responses={
         200: {"description": "Usuário encontrado"},
+        401: {"description": "Não autenticado"},
+        403: {"description": "Acesso negado"},
         404: {"description": "Usuário não encontrado"},
     },
 )
 async def get_user(
     user_id: UUID,
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ) -> UserResponseDTO:
     """
     Buscar dados de um usuário específico.
+
+    **Requer autenticação:**
+    - Usuário autenticado vê apenas seus próprios dados
+    - Personal trainer vê dados de seus alunos (role=client com trainer_id correspondente)
+    - Admin vê dados de qualquer usuário
 
     **Path parameters:**
     - user_id: UUID do usuário
@@ -141,20 +272,62 @@ async def get_user(
     **Response:**
     - Dados completos do usuário (sem senha)
     """
-    controller = UserController(session)
+    is_owner = user_id == current_user.id
+    is_admin = current_user.role == "admin"
 
-    try:
-        return await controller.get_user_by_id(user_id)
-    except UserNotFoundError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Erro ao buscar usuário",
-        )
+    if is_owner or is_admin:
+        controller = UserController(session)
+        try:
+            return await controller.get_user_by_id(user_id)
+        except UserNotFoundError as e:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(e),
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Erro ao buscar usuário",
+            )
+
+    # Profissional (personal, nutricionista, ou dual): validar se é seu aluno
+    if is_professional(current_user.role):
+        controller = UserController(session)
+        try:
+            target_user = await controller.get_user_by_id(user_id)
+            # Verificar se é aluno (client) e se belongs ao profissional
+            if target_user.role != "client":
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Você só pode visualizar dados de seus alunos",
+                )
+            # Verificar trainer_id no banco (não disponível em DTO)
+            from app.repositories.user_repository import UserRepository
+            repo = UserRepository(session)
+            target_db_user = await repo.get_by_id(user_id)
+            if not target_db_user or target_db_user.trainer_id != current_user.id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Este aluno não está vinculado a você",
+                )
+            return target_user
+        except HTTPException:
+            raise
+        except UserNotFoundError as e:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(e),
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Erro ao buscar usuário",
+            )
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Você só pode visualizar seus próprios dados",
+    )
 
 
 @router.put(
@@ -165,16 +338,23 @@ async def get_user(
     responses={
         200: {"description": "Usuário atualizado"},
         400: {"description": "Validação falhou"},
+        401: {"description": "Não autenticado"},
+        403: {"description": "Acesso negado"},
         404: {"description": "Usuário não encontrado"},
     },
 )
 async def update_user(
     user_id: UUID,
     dto: UpdateUserDTO,
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ) -> UserResponseDTO:
     """
     Atualizar dados de um usuário (campos opcionais).
+
+    **Requer autenticação:**
+    - Usuário autenticado pode editar apenas sua própria conta
+    - Admin pode editar qualquer usuário
 
     **Path parameters:**
     - user_id: UUID do usuário
@@ -187,9 +367,18 @@ async def update_user(
 
     **NÃO é possível atualizar:**
     - email (requer verificação de propriedade)
-    - password (endpoint separado no futuro)
+    - password (use PUT /{user_id}/password)
     - created_at (imutável)
     """
+    is_owner = user_id == current_user.id
+    is_admin = current_user.role == "admin"
+
+    if not (is_owner or is_admin):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Você só pode editar sua própria conta",
+        )
+
     controller = UserController(session)
 
     try:
@@ -206,21 +395,182 @@ async def update_user(
         )
 
 
+@router.put(
+    "/me/theme-preference",
+    response_model=UserResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Atualizar preferência de tema do usuário autenticado",
+    responses={
+        200: {"description": "Preferência de tema atualizada"},
+        400: {"description": "Validação falhou (tema inválido)"},
+        401: {"description": "Não autenticado"},
+    },
+)
+async def update_theme_preference(
+    dto: UpdateThemePreferenceDTO,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> UserResponseDTO:
+    """
+    Atualizar preferência de tema do usuário autenticado.
+
+    **Requer autenticação:** Usuário deve estar logado.
+
+    **Request body:**
+    - theme_preference: 'light', 'dark' ou 'system'
+
+    **Response:**
+    - Dados completos do usuário com tema atualizado
+    """
+    controller = UserController(session)
+
+    try:
+        update_dto = UpdateUserDTO(theme_preference=dto.theme_preference)
+        return await controller.update_user(current_user.id, update_dto)
+    except UserNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuário não encontrado",
+        )
+    except Exception as e:
+        import logging
+        logging.error(f"Erro inesperado ao atualizar preferência de tema: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro ao atualizar preferência de tema",
+        )
+
+
+@router.put(
+    "/me/timezone",
+    response_model=UserResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Atualizar fuso horário do usuário autenticado",
+    responses={
+        200: {"description": "Fuso horário atualizado"},
+        400: {"description": "Validação falhou (timezone inválido)"},
+        401: {"description": "Não autenticado"},
+    },
+)
+async def update_timezone(
+    dto: UpdateTimezoneDTO,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> UserResponseDTO:
+    """
+    Atualizar o fuso horário IANA do usuário autenticado.
+
+    Usado pelos guards de notificação (quiet hours, silent days) e pelo
+    scheduler de meal reminders para interpretar horários no fuso do usuário.
+
+    **Request body:**
+    - `timezone`: identificador IANA (ex: `America/Sao_Paulo`, `America/Manaus`).
+    """
+    controller = UserController(session)
+
+    try:
+        update_dto = UpdateUserDTO(timezone=dto.timezone)
+        return await controller.update_user(current_user.id, update_dto)
+    except UserNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuário não encontrado",
+        )
+    except Exception as e:
+        import logging
+        logging.error(f"Erro inesperado ao atualizar timezone: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro ao atualizar fuso horário",
+        )
+
+
+@router.put(
+    "/{user_id}/password",
+    response_model=UserResponseDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Trocar senha do usuário",
+    responses={
+        200: {"description": "Senha alterada com sucesso"},
+        400: {"description": "Validação falhou"},
+        401: {"description": "Senha atual incorreta ou não autenticado"},
+        403: {"description": "Acesso negado"},
+        404: {"description": "Usuário não encontrado"},
+    },
+)
+async def change_password(
+    user_id: UUID,
+    dto: ChangePasswordDTO,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> UserResponseDTO:
+    """
+    Trocar senha do usuário.
+
+    **Requer autenticação:**
+    - Usuário autenticado pode trocar apenas sua própria senha
+    - Admin pode trocar senha de qualquer usuário
+
+    **Request body:**
+    - current_password: Senha atual (obrigatória)
+    - new_password: Nova senha (8+ chars, maiúscula, minúscula, número, caractere especial)
+    - confirm_password: Confirmação da nova senha
+    """
+    is_owner = user_id == current_user.id
+    is_admin = current_user.role == "admin"
+
+    if not (is_owner or is_admin):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Você só pode alterar sua própria senha",
+        )
+
+    # Admin alterando a senha de outro usuário não precisa da senha atual
+    skip_current_check = is_admin and not is_owner
+
+    controller = UserController(session)
+
+    try:
+        return await controller.change_password(user_id, dto, skip_current_check=skip_current_check)
+    except InvalidCredentialsError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e),
+        )
+    except UserNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro ao alterar senha",
+        )
+
+
 @router.delete(
     "/{user_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Deletar usuário",
     responses={
         204: {"description": "Usuário deletado com sucesso"},
+        401: {"description": "Não autenticado"},
+        403: {"description": "Acesso negado"},
         404: {"description": "Usuário não encontrado"},
     },
 )
 async def delete_user(
     user_id: UUID,
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ) -> None:
     """
     Deletar um usuário (soft delete - marcar como inativo).
+
+    **Requer autenticação:**
+    - Usuário autenticado pode deletar apenas sua própria conta
+    - Admin pode deletar qualquer usuário
 
     **Path parameters:**
     - user_id: UUID do usuário
@@ -228,6 +578,15 @@ async def delete_user(
     **Note:** Usa soft delete. O usuário é marcado como inativo,
     mas não é permanentemente removido do banco.
     """
+    is_owner = user_id == current_user.id
+    is_admin = current_user.role == "admin"
+
+    if not (is_owner or is_admin):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Você só pode deletar sua própria conta",
+        )
+
     controller = UserController(session)
 
     try:

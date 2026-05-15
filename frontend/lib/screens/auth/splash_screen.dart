@@ -1,8 +1,12 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:animate_do/animate_do.dart';
-import '../../theme/app_colors.dart';
+import 'package:provider/provider.dart';
+
+import '../../theme/theme_colors.dart';
 import '../../routes/app_routes.dart';
+import '../../providers/auth_provider.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({Key? key}) : super(key: key);
@@ -15,58 +19,73 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) {
-        context.go(AppRoutes.login);
+    _initializeApp();
+  }
+
+  Future<void> _initializeApp() async {
+    final authProvider = context.read<AuthProvider>();
+
+    // Dispara a verificação de sessão e um timer mínimo de 3s (para a animação)
+    // O Future.wait aguardará a tarefa que for mais demorada.
+    await Future.wait([
+      authProvider.checkAuthState(),
+      Future.delayed(const Duration(seconds: 3)),
+    ]);
+
+    if (!mounted) return;
+
+    if (authProvider.isAuthenticated && authProvider.user != null) {
+      _navigateByRole(authProvider.user!.role);
+    } else {
+      // Em web, verificar se o usuário acessou uma rota pública via deep link
+      // e navegar para ela em vez de redirecionar para login
+      if (kIsWeb) {
+        final path = Uri.base.path;
+        final publicPaths = [
+          AppRoutes.resetPassword,
+          AppRoutes.forgotPassword,
+          AppRoutes.register,
+          AppRoutes.inviteCode,
+        ];
+        for (final publicPath in publicPaths) {
+          if (path.contains(publicPath)) {
+            final query = Uri.base.hasQuery ? '?${Uri.base.query}' : '';
+            context.go('$publicPath$query');
+            return;
+          }
+        }
       }
-    });
+      context.go(AppRoutes.login);
+    }
+  }
+
+  void _navigateByRole(String role) {
+    if (!mounted) return;
+
+    if (role == 'admin') {
+      context.go(AppRoutes.adminDashboard);
+    } else if (role != 'client') {
+      // personal_trainer, nutritionist, ou combinação (ex: "nutritionist,personal_trainer")
+      context.go(AppRoutes.trainerStudents);
+    } else {
+      context.go(AppRoutes.home);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.background,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             BounceInDown(
               duration: const Duration(milliseconds: 600),
-              child: Container(
-                width: 100,
-                height: 100,
-                decoration: BoxDecoration(
-                  gradient: AppColors.gradientPrimary,
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                child: const Icon(
-                  Icons.fitness_center,
-                  size: 50,
-                  color: Colors.white,
-                ),
-              ),
+              child: Image.asset('assets/images/logo-2.png'),
             ),
             const SizedBox(height: 32),
-            FadeInDown(
-              delay: const Duration(milliseconds: 200),
-              child: Column(
-                children: [
-                  Text(
-                    'OmniConnect',
-                    style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.bold,
-                        ),
-                  ),
-                  Text(
-                    'Fitness',
-                    style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                          color: AppColors.textPrimary,
-                        ),
-                  ),
-                ],
-              ),
-            ),
+
             const SizedBox(height: 16),
             FadeInUp(
               delay: const Duration(milliseconds: 400),
@@ -74,7 +93,7 @@ class _SplashScreenState extends State<SplashScreen> {
                 'Seu treino, nutrição e evolução em um só lugar.',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppColors.textSecondary,
+                      color: context.colors.textSecondary,
                     ),
               ),
             ),

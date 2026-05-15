@@ -3,7 +3,7 @@
 **Versão:** 1.0  
 **Data:** 2026-04-19  
 **Status:** 📋 Em Revisão  
-**Responsável:** David Oliveira
+**Responsável:** José Henrique.
 
 ---
 
@@ -92,8 +92,27 @@ class Exercise(Base):
     updated_at: datetime
 ```
 
-#### Tabela: ChecklistItem (Registro de Execução)
+#### Tabela: ExerciseCatalog (Catálogo Base)
 ```python
+class ExerciseCatalog(Base):
+    """Catálogo de exercícios pré-carregados (somente leitura)"""
+    
+    __tablename__ = "exercise_catalog"
+    
+    id: str                       # Identificador original do dataset
+    name: str                     # Nome do exercício em português
+    category: str                 # Categoria (força, cardio, etc)
+    level: str                    # Nível (iniciante, intermediário, avançado)
+    equipment: str                # Equipamento necessário
+    primary_muscles: List[str]    # Músculos primários
+    secondary_muscles: List[str]  # Músculos secundários
+    instructions: List[str]       # Instruções passo a passo
+    image_url: str                # Imagem estática
+    gif_url: str                  # GIF demonstrativo
+    muscle_group_mapped: str      # Mapeamento para VALID_MUSCLE_GROUPS
+```
+
+#### Tabela: ChecklistItem (Registro de Execução)
 class ChecklistItem(Base):
     """Registro de execução de um exercício (opcional para MVP)"""
     
@@ -188,6 +207,30 @@ class ChecklistItem(Base):
       "order": 1
     },
     ...
+  ]
+}
+```
+
+#### PaginatedCatalogDTO
+```json
+{
+  "total": 850,
+  "page": 1,
+  "limit": 20,
+  "data": [
+    {
+      "id": "3_4_Sit-Up",
+      "name": "Abdominal clássico",
+      "category": "força",
+      "level": "iniciante",
+      "equipment": "body only",
+      "primary_muscles": ["abdominals"],
+      "secondary_muscles": [],
+      "instructions": ["Deite de costas...", "Levante o tronco..."],
+      "image_url": "https://...",
+      "gif_url": "https://...",
+      "muscle_group_mapped": "core"
+    }
   ]
 }
 ```
@@ -407,6 +450,42 @@ Authorization: Bearer {token}
   "id": "550e8400-e29b-41d4-a716-446655440099",
   "name": "Treino A - Peito (Cópia)",
   "exercises": [ ... ]  # Mesmos exercícios
+}
+```
+
+---
+
+### 3.7 GET /api/v1/exercise-catalog (Buscar no catálogo)
+
+**Descrição:** Busca exercícios pré-carregados no sistema para montar fichas.
+
+**Request:**
+```http
+GET /api/v1/exercise-catalog?search=supino&muscle_group=peito&page=1&limit=20 HTTP/1.1
+Authorization: Bearer {token}
+```
+
+**Response 200:**
+```json
+{
+  "total": 5,
+  "page": 1,
+  "limit": 20,
+  "data": [
+    {
+      "id": "1_2_Bench-Press",
+      "name": "Supino Reto",
+      "category": "força",
+      "level": "intermediário",
+      "equipment": "barbell",
+      "primary_muscles": ["chest"],
+      "secondary_muscles": ["triceps", "shoulders"],
+      "instructions": ["Deite no banco...", "Empurre a barra..."],
+      "image_url": "https://...",
+      "gif_url": "https://...",
+      "muscle_group_mapped": "peito"
+    }
+  ]
 }
 ```
 

@@ -1,0 +1,180 @@
+import 'package:flutter/material.dart';
+import '../services/invitation_service.dart';
+import '../services/api_client.dart';
+
+/// Provider para gerenciar estado de convites de acesso
+class InvitationProvider extends ChangeNotifier {
+  final InvitationService _invitationService;
+
+  // Estado de validação de código
+  String? _validatedCode;
+  bool _isValidatingCode = false;
+  String? _validationError;
+
+  // Estado de geração de código
+  GenerateInvitationResponse? _generatedInvitation;
+  bool _isGeneratingCode = false;
+  String? _generationError;
+
+  // Estado de listagem de códigos
+  ListInvitationsResponse? _myInvitations;
+  bool _isLoadingInvitations = false;
+  String? _loadingError;
+
+  InvitationProvider({required ApiClient apiClient})
+      : _invitationService = InvitationService(apiClient: apiClient);
+
+  // Getters para validação
+  String? get validatedCode => _validatedCode;
+  bool get isValidatingCode => _isValidatingCode;
+  String? get validationError => _validationError;
+
+  // Getters para geração
+  GenerateInvitationResponse? get generatedInvitation => _generatedInvitation;
+  bool get isGeneratingCode => _isGeneratingCode;
+  String? get generationError => _generationError;
+
+  // Getters para listagem
+  ListInvitationsResponse? get myInvitations => _myInvitations;
+  bool get isLoadingInvitations => _isLoadingInvitations;
+  String? get loadingError => _loadingError;
+
+  /// Valida um código de convite
+  Future<bool> validateCode(String code) async {
+    _isValidatingCode = true;
+    _validationError = null;
+    _validatedCode = null;
+    notifyListeners();
+
+    try {
+      final response = await _invitationService.validateCode(code: code);
+
+      if (response.valid) {
+        _validatedCode = code;
+        return true;
+      } else {
+        _validationError = response.message;
+        return false;
+      }
+    } catch (e) {
+      _validationError = e.toString();
+      return false;
+    } finally {
+      _isValidatingCode = false;
+      notifyListeners();
+    }
+  }
+
+  /// Gera um novo código de convite (apenas PT)
+  Future<bool> generateNewCode() async {
+    _isGeneratingCode = true;
+    _generationError = null;
+    _generatedInvitation = null;
+    notifyListeners();
+
+    try {
+      final response = await _invitationService.generateCode();
+      _generatedInvitation = response;
+      return true;
+    } catch (e) {
+      _generationError = e.toString();
+      return false;
+    } finally {
+      _isGeneratingCode = false;
+      notifyListeners();
+    }
+  }
+
+  /// Carrega lista de convites do PT (apenas PT)
+  Future<bool> loadMyInvitations() async {
+    _isLoadingInvitations = true;
+    _loadingError = null;
+    notifyListeners();
+
+    try {
+      final response = await _invitationService.listMyInvitations();
+      _myInvitations = response;
+      return true;
+    } catch (e) {
+      _loadingError = e.toString();
+      return false;
+    } finally {
+      _isLoadingInvitations = false;
+      notifyListeners();
+    }
+  }
+
+  // ── Estado de pré-cadastros WhatsApp pendentes ──────────────────────────
+  WhatsAppPendingList? _whatsappPending;
+  bool _isLoadingWhatsapp = false;
+  String? _whatsappError;
+
+  WhatsAppPendingList? get whatsappPending => _whatsappPending;
+  bool get isLoadingWhatsapp => _isLoadingWhatsapp;
+  String? get whatsappError => _whatsappError;
+
+  /// Carrega a lista de pré-cadastros WhatsApp pendentes (admin)
+  Future<void> loadWhatsAppPending() async {
+    _isLoadingWhatsapp = true;
+    _whatsappError = null;
+    notifyListeners();
+    try {
+      _whatsappPending = await _invitationService.fetchWhatsAppPending();
+    } catch (e) {
+      _whatsappError = e.toString();
+    } finally {
+      _isLoadingWhatsapp = false;
+      notifyListeners();
+    }
+  }
+
+  /// Aprova um pré-cadastro WhatsApp (admin)
+  Future<bool> approveWhatsApp(String phone, {String? trainerId}) async {
+    try {
+      await _invitationService.approveWhatsApp(phone: phone, trainerId: trainerId);
+      // Remove da lista local imediatamente
+      if (_whatsappPending != null) {
+        final updated = _whatsappPending!.items
+            .where((i) => i.phone != phone)
+            .toList();
+        _whatsappPending = WhatsAppPendingList(
+          total: updated.length,
+          items: updated,
+        );
+        notifyListeners();
+      }
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Busca dados do pré-cadastro WhatsApp para preencher o formulário
+  Future<WhatsAppPrefillResponse?> fetchPrefill(String code) async {
+    try {
+      return await _invitationService.fetchPrefill(code: code);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Limpa o código validado
+  void clearValidatedCode() {
+    _validatedCode = null;
+    _validationError = null;
+    notifyListeners();
+  }
+
+  /// Limpa o código gerado
+  void clearGeneratedInvitation() {
+    _generatedInvitation = null;
+    _generationError = null;
+    notifyListeners();
+  }
+
+  /// Limpa erros de validação
+  void clearValidationError() {
+    _validationError = null;
+    notifyListeners();
+  }
+}

@@ -66,10 +66,27 @@ class UserRepository:
         Returns:
             User ou None se não encontrado
         """
+        from sqlalchemy import func
         query = select(User).where(
-            User.email == email,
+            func.lower(User.email) == email.lower(),
             User.is_active == True,
         )
+        result = await self.session.execute(query)
+        return result.scalars().first()
+
+    async def get_by_id_all_states(self, user_id: UUID) -> Optional[User]:
+        """
+        Buscar usuário por ID (ativo ou inativo).
+
+        Útil para atualizar usuários inativos (ex: reativar).
+
+        Args:
+            user_id: UUID do usuário
+
+        Returns:
+            User ou None se não encontrado
+        """
+        query = select(User).where(User.id == user_id)
         result = await self.session.execute(query)
         return result.scalars().first()
 
@@ -85,7 +102,8 @@ class UserRepository:
         Returns:
             User ou None se não encontrado
         """
-        query = select(User).where(User.email == email)
+        from sqlalchemy import func
+        query = select(User).where(func.lower(User.email) == email.lower())
         result = await self.session.execute(query)
         return result.scalars().first()
 
@@ -93,13 +111,19 @@ class UserRepository:
         self,
         page: int = 1,
         limit: int = 10,
+        role: Optional[str] = None,
+        trainer_id: Optional[UUID] = None,
+        include_inactive: bool = False,
     ) -> Tuple[List[User], int]:
         """
-        Listar usuários com paginação (apenas ativos).
+        Listar usuários com paginação.
 
         Args:
             page: Número da página (começa em 1)
             limit: Itens por página
+            role: Filtrar por role (admin, personal_trainer, client)
+            trainer_id: Filtrar alunos de um trainer específico
+            include_inactive: Se True, inclui usuários inativos (padrão: False, apenas ativos)
 
         Returns:
             Tuple[List[User], int]: Lista de usuários e total de registros
@@ -112,15 +136,25 @@ class UserRepository:
 
         offset = (page - 1) * limit
 
+        # Construir where clause com filtros opcionais
+        where_conditions = []
+        if not include_inactive:
+            where_conditions.append(User.is_active == True)
+        if role:
+            # Suporte a roles compostas: usa contains para capturar "nutritionist,personal_trainer" ao filtrar por "personal_trainer"
+            where_conditions.append(User.role.contains(role))
+        if trainer_id:
+            where_conditions.append(User.trainer_id == trainer_id)
+
         # Query para contar total
-        count_query = select(func.count(User.id)).where(User.is_active == True)
+        count_query = select(func.count(User.id)).where(*where_conditions)
         count_result = await self.session.execute(count_query)
         total = count_result.scalar()
 
         # Query para buscar registros
         query = (
             select(User)
-            .where(User.is_active == True)
+            .where(*where_conditions)
             .order_by(User.created_at.desc())
             .offset(offset)
             .limit(limit)
@@ -186,6 +220,56 @@ class UserRepository:
         await self.session.delete(user)
         await self.session.flush()
         return True
+
+    async def list_by_trainer(
+        self,
+        trainer_id: UUID = None,
+        page: int = 1,
+        limit: int = 10,
+    ) -> Tuple[List[User], int]:
+        """
+        Listar usuários (alunos) de um personal trainer específico ou todos.
+
+        Args:
+            trainer_id: UUID do personal trainer. Se None, retorna todos os alunos
+            page: Número da página (começa em 1)
+            limit: Itens por página
+
+        Returns:
+            Tuple[List[User], int]: Lista de alunos e total de registros
+        """
+        if limit > 100:
+            limit = 100
+        if page < 1:
+            page = 1
+
+        offset = (page - 1) * limit
+
+        # Construir condição dinamicamente
+        conditions = [
+            User.role == "client",
+            User.is_active == True,
+        ]
+        if trainer_id is not None:
+            conditions.append(User.trainer_id == trainer_id)
+
+        # Query para contar total
+        count_query = select(func.count(User.id)).where(*conditions)
+        count_result = await self.session.execute(count_query)
+        total = count_result.scalar()
+
+        # Query para buscar registros
+        query = (
+            select(User)
+            .where(*conditions)
+            .order_by(User.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        result = await self.session.execute(query)
+        users = result.scalars().all()
+
+        return users, total
 
     async def commit(self) -> None:
         """Commitar transação."""
