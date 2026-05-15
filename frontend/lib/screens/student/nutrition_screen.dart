@@ -186,7 +186,7 @@ class _NutritionScreenState extends State<NutritionScreen> {
             _buildEmptyState('Nenhum alimento registrado hoje.\nClique no + para adicionar.')
           else
             ...provider.entriesByMeal.entries.map((entry) {
-              return _buildMealGroup(entry.key, entry.value);
+              return _buildMealGroup(entry.key, entry.value, provider);
             }).toList(),
           const SizedBox(height: 32),
         ],
@@ -659,12 +659,45 @@ class _NutritionScreenState extends State<NutritionScreen> {
     );
   }
 
-  Widget _buildMealGroup(String mealName, List<DietLogbookEntry> entries) {
+  Widget _buildMealGroup(String mealName, List<DietLogbookEntry> entries, NutritionProvider provider) {
     final mealKcal = entries.fold<double>(0, (sum, e) => sum + e.kcal);
     final mealProtein = entries.fold<double>(0, (sum, e) => sum + e.protein);
     final mealCarbs = entries.fold<double>(0, (sum, e) => sum + e.carbs);
     final mealFats = entries.fold<double>(0, (sum, e) => sum + e.fats);
     
+    String mealTime = '--:--';
+    final activeDiet = provider.activeDiet;
+    if (activeDiet != null) {
+      try {
+        final dietMeal = activeDiet.meals.firstWhere((m) {
+          final mName = m.name.split(' || ').first.trim().toLowerCase();
+          return mName == mealName.trim().toLowerCase();
+        });
+        if (dietMeal.time != null && dietMeal.time!.isNotEmpty) {
+          mealTime = dietMeal.time!;
+        }
+      } catch (_) {}
+    }
+
+    if (mealTime == '--:--') {
+      final nameLower = mealName.trim().toLowerCase();
+      if (nameLower.contains('café') || nameLower.contains('cafe')) {
+        mealTime = '08:00';
+      } else if (nameLower.contains('lanche da manhã') || nameLower.contains('lanche da manha')) {
+        mealTime = '10:30';
+      } else if (nameLower.contains('almoço') || nameLower.contains('almoco')) {
+        mealTime = '12:30';
+      } else if (nameLower.contains('lanche da tarde')) {
+        mealTime = '16:00';
+      } else if (nameLower.contains('lanche')) {
+        mealTime = '16:30';
+      } else if (nameLower.contains('jantar')) {
+        mealTime = '19:30';
+      } else if (nameLower.contains('ceia')) {
+        mealTime = '22:00';
+      }
+    }
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
@@ -686,10 +719,24 @@ class _NutritionScreenState extends State<NutritionScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      mealName,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Icon(Icons.access_time, size: 16, color: context.colors.textMuted),
+                          const SizedBox(width: 6),
+                          Text(mealTime, style: TextStyle(color: context.colors.textMuted)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              mealName,
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
+                    const SizedBox(width: 8),
                     Text(
                       '${mealKcal.toStringAsFixed(0)} kcal',
                       style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),

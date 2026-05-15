@@ -7,7 +7,12 @@ class ThemeProvider extends ChangeNotifier {
   bool _isInitialized = false;
 
   ThemeMode get themeMode => _themeMode;
-  bool get isDark => _themeMode == ThemeMode.dark;
+  bool get isDark {
+    if (_themeMode == ThemeMode.system) {
+      return WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark;
+    }
+    return _themeMode == ThemeMode.dark;
+  }
   bool get isInitialized => _isInitialized;
 
   Future<void> init() async {
@@ -43,7 +48,8 @@ class ThemeProvider extends ChangeNotifier {
   }
 
   Future<void> toggleTheme() async {
-    _themeMode = (_themeMode == ThemeMode.dark) ? ThemeMode.light : ThemeMode.dark;
+    final currentIsDark = isDark;
+    _themeMode = currentIsDark ? ThemeMode.light : ThemeMode.dark;
     await _saveThemePreference();
     notifyListeners();
   }
